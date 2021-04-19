@@ -33,6 +33,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 [dependencies]
 cw20 = "0.2"
 terraswap = "1.2.0"
+moneymarket = { git = "https://github.com/anchor-protocol/money-market-contracts" }
 cosmwasm-std = { version = "0.10.1", features = ["iterator"] }
 cosmwasm-storage = { version = "0.10.1", features = ["iterator"] }
 cosmwasm-bignumber = "1.0"

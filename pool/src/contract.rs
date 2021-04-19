@@ -15,6 +15,8 @@ use cw20::{Cw20CoinHuman, Cw20ReceiveMsg, Cw20HandleMsg, MinterResponse};
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 
+use moneymarket::market::HandleMsg as AnchorMsg;
+
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 1000000;
@@ -216,6 +218,8 @@ pub fn deposit_stable<S: Storage, A: Api, Q: Querier>(
 
     store_state(&mut deps.storage, &state)?;
 
+    // Mint bUST for the sender and deposit UST to Anchor Money market
+
     Ok(HandleResponse {
         messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.human_address(&config.b_terra_contract)?,
@@ -224,7 +228,18 @@ pub fn deposit_stable<S: Storage, A: Api, Q: Querier>(
                 recipient: env.message.sender.clone(),
                 amount: mint_amount.into(),
             })?,
-        })],
+        }),
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            send: vec![
+                Coin {
+                    denom: config.stable_denom,
+                    amount: Uint128::from(deposit_amount),
+                }
+            ],
+            msg: to_binary(&AnchorMsg::DepositStable {})?
+        })
+        ],
         log: vec![
             log("action", "deposit_stable"),
             log("depositor", env.message.sender),

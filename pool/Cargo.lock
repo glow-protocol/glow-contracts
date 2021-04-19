@@ -172,6 +172,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "moneymarket"
+version = "0.1.0"
+source = "git+https://github.com/anchor-protocol/money-market-contracts#66935c754e4d07ac3a8f57c2c7d3db3ee81d3ccf"
+dependencies = [
+ "cosmwasm-bignumber",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw20",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+]
+
+[[package]]
 name = "object"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -186,6 +200,7 @@ dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw20",
+ "moneymarket",
  "schemars",
  "serde",
  "snafu",

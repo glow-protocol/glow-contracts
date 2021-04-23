@@ -5,7 +5,9 @@ use cosmwasm_std::{
 };
 
 use crate::msg::{HandleMsg, InitMsg, QueryMsg, Cw20HookMsg, ConfigResponse, StateResponse};
-use crate::state::{read_config, read_state, store_config, store_state, Config, State};
+use crate::state::{read_config, read_state, store_config, store_state,
+                   Config, State, read_sequence_info, store_sequence_info};
+use crate::prize_strategy::{is_valid_sequence};
 use cosmwasm_bignumber::{Uint256,Decimal256};
 use serde::__private::de::IdentifierDeserializer;
 use snafu::guide::examples::backtrace::Error::UsedInTightLoop;
@@ -19,7 +21,8 @@ use moneymarket::market::HandleMsg as AnchorMsg;
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
-pub const INITIAL_DEPOSIT_AMOUNT: u128 = 1000000;
+pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000_000; // fund reserve with 10k
+pub const SEQUENCE_DIGITS: u8 = 5;
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -50,7 +53,11 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             b_terra_contract: CanonicalAddr::default(),
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.canonical_address(&msg.anchor_contract)?,
-            period_prize: msg.period_prize,
+            lottery_interval: msg.lottery_interval,
+            block_time: msg.block_time,
+            ticket_prize: msg.ticket_prize,
+            reserve_factor: msg.reserve_factor,
+            split_factor: msg.split_factor,
             ticket_exchange_rate: msg.ticket_exchange_rate,
         },
     )?;
@@ -58,11 +65,14 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     store_state(
         &mut deps.storage,
         &State {
-            total_tickets: Decimal256::zero(),
-            total_reserves: Decimal256::from_uint256(initial_deposit),
+            total_tickets: Uint256::zero(),
+            total_reserve: Decimal256::from_uint256(initial_deposit),
             last_interest: Decimal256::zero(),
             total_accrued_interest: Decimal256::zero(),
             award_available: Decimal256::zero(),
+            next_lottery_time: msg.lottery_interval,
+            spendable_balance: Decimal256::zero(),
+            total_deposits: Decimal256::zero(),
             total_assets: Decimal256::from_uint256(initial_deposit),
         },
     )?;
@@ -108,6 +118,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     match msg {
         HandleMsg::Receive(msg) => receive_cw20(deps, env, msg),
         HandleMsg::DepositStable {} => deposit_stable(deps, env),
+        HandleMsg::SingleDeposit {combination} => single_deposit(deps, env, combination),
         HandleMsg::RegisterSTerra {} => register_b_terra(deps, env),
         HandleMsg::UpdateConfig {
             owner,
@@ -214,7 +225,6 @@ pub fn deposit_stable<S: Storage, A: Api, Q: Querier>(
     let mut state = read_state(&deps.storage)?;
 
     state.total_assets +=  Decimal256::from_uint256(deposit_amount);
-    state.total_tickets += Decimal256::from_uint256(mint_amount);
 
     store_state(&mut deps.storage, &state)?;
 
@@ -248,7 +258,94 @@ pub fn deposit_stable<S: Storage, A: Api, Q: Querier>(
         ],
         data: None,
     })
+}
 
+// Single Deposit buys one ticket
+pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    combination: String
+) -> HandleResult {
+
+    let config = read_config(&deps.storage)?;
+    let mut state = read_state(&deps.storage)?;
+
+    // Check deposit is in base stable denom
+    let deposit_amount = env
+        .message
+        .sent_funds
+        .iter()
+        .find(|c| c.denom == config.stable_denom)
+        .map(|c| Uint256::from(c.amount))
+        .unwrap_or_else(Uint256::zero);
+
+    if deposit_amount.is_zero() {
+        return Err(StdError::generic_err(format!(
+            "Deposit amount must be greater than 0 {}",
+            config.stable_denom
+        )));
+    }
+
+    //TODO: consider accepting any amount and moving the rest to spendable balance
+    if deposit_amount != config.ticket_prize {
+        return Err(StdError::generic_err(format!(
+            "Deposit amount must be equal to a ticket prize {} {}",
+            config.ticket_prize,
+            config.stable_denom
+        )));
+    }
+
+    //TODO: add a time buffer here with block_time
+    if env.block.time > state.next_lottery_time {
+        return Err(StdError::generic_err(
+            "Current lottery is about to start, wait until the next one begins"
+        ))
+    }
+
+
+    if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
+        return Err(StdError::generic_err(format!(
+            "Ticket sequence must be {} characters between 0-9",
+            SEQUENCE_DIGITS
+        )));
+    }
+
+    // TODO: query anchor to check how much aUST we will get from this deposit, also is this possible?
+    // multiply aUST amount by the split factor, and store the amount of aUST will
+    // get direct interest for the user and the amount of aUST that's going to go
+    // to the lottery pool
+
+
+    let depositor = deps.api.canonical_address(&env.message.sender)?;
+    store_sequence_info(&mut deps.storage, depositor, &combination)?;
+
+    state.total_tickets += Uint256::from(1); //TODO: check if there is a cleaner way to do this
+    state.total_deposits += Decimal256::from_uint256(deposit_amount);
+    state.total_assets += Decimal256::from_uint256(deposit_amount);
+
+    store_state(&mut deps.storage, &state)?;
+
+
+    Ok(HandleResponse {
+        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            send: vec![
+                Coin {
+                    denom: config.stable_denom,
+                    amount: Uint128::from(deposit_amount),
+                }
+            ],
+            msg: to_binary(&AnchorMsg::DepositStable {})?
+        })
+        ],
+        log: vec![
+            log("action", "deposit_stable"),
+            log("depositor", env.message.sender),
+            log("mint_amount", mint_amount),
+            log("deposit_amount", deposit_amount),
+        ],
+        data: None,
+    })
 }
 
 // Register b_terra_contract in the core_pool config.
@@ -274,7 +371,7 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     owner: Option<HumanAddr>,
-    period_prize: Option<u64>
+    ticket_price: Option<u64>
 )-> HandleResult {
 
     let mut config: Config = read_config(&deps.storage)?;
@@ -288,8 +385,8 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
         config.owner = deps.api.canonical_address(&owner)?;
     }
     // TODO: period prize is not doing anything, just for demo purposes
-    if let Some(period_prize) = period_prize {
-        config.period_prize = period_prize;
+    if let Some(ticket_prize) = ticket_price {
+        config.ticket_prize = ticket_prize;
     }
 
     store_config(&mut deps.storage, &config)?;

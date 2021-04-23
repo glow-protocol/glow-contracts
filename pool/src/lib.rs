@@ -4,6 +4,7 @@ pub mod state;
 
 #[cfg(test)]
 mod test;
+mod prize_strategy;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {

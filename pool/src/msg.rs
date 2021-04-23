@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_bignumber::{Decimal256};
+use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{HumanAddr};
 
 use cw20::Cw20ReceiveMsg;
@@ -12,6 +12,11 @@ pub struct InitMsg {
     pub stable_denom: String,
     pub anchor_contract: HumanAddr,
     pub b_terra_code_id: u64,
+    pub lottery_interval: u64,
+    pub block_time: u64,
+    pub ticket_prize: u64,
+    pub reserve_factor: Decimal256,
+    pub split_factor: Decimal256,
     pub period_prize: u64, // not sure what am i doing with this one
     pub ticket_exchange_rate: Decimal256,
 }
@@ -21,6 +26,9 @@ pub struct InitMsg {
 pub enum HandleMsg {
     Receive (Cw20ReceiveMsg),
     DepositStable {},
+    SingleDeposit {
+        combination: String
+    },
     RegisterSTerra {},
     UpdateConfig {
         owner: Option<HumanAddr>,
@@ -60,7 +68,7 @@ pub struct ConfigResponse {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StateResponse {
-    pub total_tickets: Decimal256,
+    pub total_tickets: Uint256,
     pub total_reserves: Decimal256,
     pub last_interest: Decimal256,
     pub total_accrued_interest: Decimal256,

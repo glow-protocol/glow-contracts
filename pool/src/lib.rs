@@ -2,9 +2,9 @@ pub mod contract;
 pub mod msg;
 pub mod state;
 
+mod prize_strategy;
 #[cfg(test)]
 mod test;
-mod prize_strategy;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {

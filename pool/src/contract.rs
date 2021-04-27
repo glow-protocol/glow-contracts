@@ -1,18 +1,20 @@
 use cosmwasm_std::{
-    from_binary, log, to_binary, Api, Binary, CanonicalAddr, HumanAddr, CosmosMsg, Env, Extern,
-    HandleResponse, HandleResult, InitResponse, InitResult, Querier, StdError, StdResult, Storage,
-    Uint128, WasmMsg, BankMsg, Coin
+    from_binary, log, to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
+    HandleResponse, HandleResult, HumanAddr, InitResponse, InitResult, Querier, StdError,
+    StdResult, Storage, Uint128, WasmMsg,
 };
 
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, Cw20HookMsg, ConfigResponse, StateResponse};
-use crate::state::{read_config, read_state, store_config, store_state,
-                   Config, State, read_sequence_info, store_sequence_info};
-use crate::prize_strategy::{is_valid_sequence};
-use cosmwasm_bignumber::{Uint256,Decimal256};
+use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
+use crate::prize_strategy::is_valid_sequence;
+use crate::state::{
+    read_config, read_sequence_info, read_state, store_config, store_sequence_info, store_state,
+    Config, State,
+};
+use cosmwasm_bignumber::{Decimal256, Uint256};
 use serde::__private::de::IdentifierDeserializer;
 use snafu::guide::examples::backtrace::Error::UsedInTightLoop;
 
-use cw20::{Cw20CoinHuman, Cw20ReceiveMsg, Cw20HandleMsg, MinterResponse};
+use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
@@ -56,6 +58,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             lottery_interval: msg.lottery_interval,
             block_time: msg.block_time,
             ticket_prize: msg.ticket_prize,
+            prize_distribution: msg.prize_distribution,
             reserve_factor: msg.reserve_factor,
             split_factor: msg.split_factor,
             ticket_exchange_rate: msg.ticket_exchange_rate,
@@ -83,10 +86,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             send: vec![],
             label: None,
             msg: to_binary(&TokenInitMsg {
-                name: format!(
-                    "Barbell Terra {}",
-                    msg.stable_denom[1..].to_uppercase()
-                ),
+                name: format!("Barbell Terra {}", msg.stable_denom[1..].to_uppercase()),
                 symbol: format!(
                     "b{}T",
                     msg.stable_denom[1..(msg.stable_denom.len() - 1)].to_uppercase()
@@ -118,12 +118,12 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     match msg {
         HandleMsg::Receive(msg) => receive_cw20(deps, env, msg),
         HandleMsg::DepositStable {} => deposit_stable(deps, env),
-        HandleMsg::SingleDeposit {combination} => single_deposit(deps, env, combination),
+        HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::RegisterSTerra {} => register_b_terra(deps, env),
         HandleMsg::UpdateConfig {
             owner,
-            period_prize
-        } => update_config(deps, env, owner, period_prize)
+            period_prize,
+        } => update_config(deps, env, owner, period_prize),
     }
 }
 
@@ -157,7 +157,7 @@ pub fn redeem_stable<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     sender: HumanAddr,
-    burn_amount: Uint128
+    burn_amount: Uint128,
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
@@ -181,12 +181,10 @@ pub fn redeem_stable<S: Storage, A: Api, Q: Querier>(
             CosmosMsg::Bank(BankMsg::Send {
                 from_address: env.contract.address,
                 to_address: sender,
-                amount: vec![
-                    Coin {
-                        denom: config.stable_denom,
-                        amount: redeem_amount.into(),
-                    },
-                ],
+                amount: vec![Coin {
+                    denom: config.stable_denom,
+                    amount: redeem_amount.into(),
+                }],
             }),
         ],
         log: vec![
@@ -220,35 +218,34 @@ pub fn deposit_stable<S: Storage, A: Api, Q: Querier>(
             config.stable_denom
         )));
     }
-    let mint_amount =  deposit_amount * config.ticket_exchange_rate;
+    let mint_amount = deposit_amount * config.ticket_exchange_rate;
 
     let mut state = read_state(&deps.storage)?;
 
-    state.total_assets +=  Decimal256::from_uint256(deposit_amount);
+    state.total_assets += Decimal256::from_uint256(deposit_amount);
 
     store_state(&mut deps.storage, &state)?;
 
     // Mint bUST for the sender and deposit UST to Anchor Money market
 
     Ok(HandleResponse {
-        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.human_address(&config.b_terra_contract)?,
-            send: vec![],
-            msg: to_binary(&Cw20HandleMsg::Mint {
-                recipient: env.message.sender.clone(),
-                amount: mint_amount.into(),
-            })?,
-        }),
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.human_address(&config.anchor_contract)?,
-            send: vec![
-                Coin {
+        messages: vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: deps.api.human_address(&config.b_terra_contract)?,
+                send: vec![],
+                msg: to_binary(&Cw20HandleMsg::Mint {
+                    recipient: env.message.sender.clone(),
+                    amount: mint_amount.into(),
+                })?,
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: deps.api.human_address(&config.anchor_contract)?,
+                send: vec![Coin {
                     denom: config.stable_denom,
                     amount: Uint128::from(deposit_amount),
-                }
-            ],
-            msg: to_binary(&AnchorMsg::DepositStable {})?
-        })
+                }],
+                msg: to_binary(&AnchorMsg::DepositStable {})?,
+            }),
         ],
         log: vec![
             log("action", "deposit_stable"),
@@ -264,9 +261,8 @@ pub fn deposit_stable<S: Storage, A: Api, Q: Querier>(
 pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    combination: String
+    combination: String,
 ) -> HandleResult {
-
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
 
@@ -290,18 +286,16 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     if deposit_amount != config.ticket_prize {
         return Err(StdError::generic_err(format!(
             "Deposit amount must be equal to a ticket prize {} {}",
-            config.ticket_prize,
-            config.stable_denom
+            config.ticket_prize, config.stable_denom
         )));
     }
 
     //TODO: add a time buffer here with block_time
     if env.block.time > state.next_lottery_time {
         return Err(StdError::generic_err(
-            "Current lottery is about to start, wait until the next one begins"
-        ))
+            "Current lottery is about to start, wait until the next one begins",
+        ));
     }
-
 
     if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
         return Err(StdError::generic_err(format!(
@@ -315,7 +309,6 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     // get direct interest for the user and the amount of aUST that's going to go
     // to the lottery pool
 
-
     let depositor = deps.api.canonical_address(&env.message.sender)?;
     store_sequence_info(&mut deps.storage, depositor, &combination)?;
 
@@ -325,19 +318,15 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
 
     store_state(&mut deps.storage, &state)?;
 
-
     Ok(HandleResponse {
         messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
-            send: vec![
-                Coin {
-                    denom: config.stable_denom,
-                    amount: Uint128::from(deposit_amount),
-                }
-            ],
-            msg: to_binary(&AnchorMsg::DepositStable {})?
-        })
-        ],
+            send: vec![Coin {
+                denom: config.stable_denom,
+                amount: Uint128::from(deposit_amount),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {})?,
+        })],
         log: vec![
             log("action", "deposit_stable"),
             log("depositor", env.message.sender),
@@ -371,9 +360,8 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     owner: Option<HumanAddr>,
-    ticket_price: Option<u64>
-)-> HandleResult {
-
+    ticket_price: Option<u64>,
+) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
 
     // check permission
@@ -397,19 +385,19 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-
-
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     msg: QueryMsg,
 ) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::State { block_height} => to_binary(&query_state(deps, block_height)?)
+        QueryMsg::State { block_height } => to_binary(&query_state(deps, block_height)?),
     }
 }
 
-pub fn query_config<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<ConfigResponse> {
+pub fn query_config<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+) -> StdResult<ConfigResponse> {
     let config: Config = read_config(&deps.storage)?;
 
     Ok(ConfigResponse {
@@ -417,11 +405,14 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> S
         stable_denom: config.stable_denom,
         anchor_contract: deps.api.human_address(&config.anchor_contract)?,
         period_prize: config.period_prize,
-        ticket_exchange_rate: config.ticket_exchange_rate
+        ticket_exchange_rate: config.ticket_exchange_rate,
     })
 }
 
-pub fn query_state<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, block_height: Option<u64>) -> StdResult<StateResponse> {
+pub fn query_state<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    block_height: Option<u64>,
+) -> StdResult<StateResponse> {
     let state: State = read_state(&deps.storage)?;
 
     //Todo: add block_height logic

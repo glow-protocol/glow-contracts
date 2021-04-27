@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use pool::msg::{HandleMsg, InitMsg, QueryMsg, Cw20HookMsg, ConfigResponse, StateResponse};
+use pool::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use pool::state::State;
 
 fn main() {
@@ -19,5 +19,4 @@ fn main() {
     export_schema(&schema_for!(ConfigResponse), &out_dir);
     export_schema(&schema_for!(StateResponse), &out_dir);
     export_schema(&schema_for!(State), &out_dir);
-
 }

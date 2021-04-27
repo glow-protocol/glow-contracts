@@ -8,10 +8,10 @@ use cosmwasm_std::{
     Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery,
 };
 use cosmwasm_storage::to_length_prefixed;
-use std::collections::HashMap;
 use cw20::TokenInfoResponse;
+use std::collections::HashMap;
 
-use terra_cosmwasm::{TerraQuery, TerraQueryWrapper, TerraRoute, TaxCapResponse, TaxRateResponse};
+use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 //TODO: remember to check TaxCapResponse and TaxRateResponse logic
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
@@ -234,5 +234,4 @@ impl WasmMockQuerier {
     pub fn with_token_balances(&mut self, balances: &[(&HumanAddr, &[(&HumanAddr, &Uint128)])]) {
         self.token_querier = TokenQuerier::new(balances);
     }
-
 }

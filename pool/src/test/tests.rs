@@ -1,19 +1,22 @@
-use crate::contract::{handle, init, query, INITIAL_DEPOSIT_AMOUNT, query_config};
-use crate::state::{read_state, store_state, State, store_config, read_config, Config};
+use crate::contract::{handle, init, query, query_config, INITIAL_DEPOSIT_AMOUNT};
+use crate::state::{read_config, read_state, store_config, store_state, Config, State};
 
-use cosmwasm_bignumber::{Decimal256, Uint256};
+use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::test::mock_querier::mock_dependencies;
+use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{from_binary, log, to_binary, BankMsg, Coin, CosmosMsg, Decimal, HumanAddr, StdError, Uint128, WasmMsg, HandleResponse};
+use cosmwasm_std::{
+    from_binary, log, to_binary, BankMsg, Coin, CosmosMsg, Decimal, HandleResponse, HumanAddr,
+    StdError, Uint128, WasmMsg,
+};
 use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
-use crate::msg::{ ConfigResponse, StateResponse, HandleMsg, InitMsg, QueryMsg, Cw20HookMsg};
 
 use std::str::FromStr;
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 
 #[test]
-fn proper_initialization(){
+fn proper_initialization() {
     let mut deps = mock_dependencies(
         20,
         &[Coin {
@@ -28,15 +31,15 @@ fn proper_initialization(){
         anchor_contract: HumanAddr::from("anchor"),
         b_terra_code_id: 123u64,
         period_prize: 69u64,
-        ticket_exchange_rate: Decimal256::one()
+        ticket_exchange_rate: Decimal256::one(),
     };
 
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT)
-        }]
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
     );
 
     let res = init(&mut deps, env.clone(), msg).unwrap();
@@ -63,7 +66,8 @@ fn proper_initialization(){
                     contract_addr: HumanAddr::from(MOCK_CONTRACT_ADDR),
                     msg: to_binary(&HandleMsg::RegisterSTerra {}).unwrap(),
                 }),
-            }).unwrap(),
+            })
+            .unwrap(),
         })]
     );
 
@@ -87,15 +91,20 @@ fn proper_initialization(){
     assert_eq!(Decimal256::one(), config_res.ticket_exchange_rate);
 
     // Test query state
-    let query_res = query(&deps, QueryMsg::State {block_height: None}).unwrap();
+    let query_res = query(&deps, QueryMsg::State { block_height: None }).unwrap();
     let state_res: StateResponse = from_binary(&query_res).unwrap();
     assert_eq!(state_res.total_tickets, Decimal256::zero());
-    assert_eq!(state_res.total_reserves, Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT));
+    assert_eq!(
+        state_res.total_reserves,
+        Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
+    );
     assert_eq!(state_res.last_interest, Decimal256::zero());
     assert_eq!(state_res.total_accrued_interest, Decimal256::zero());
     assert_eq!(state_res.award_available, Decimal256::zero());
-    assert_eq!(state_res.total_assets, Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT));
-
+    assert_eq!(
+        state_res.total_assets,
+        Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
+    );
 }
 
 #[test]
@@ -104,8 +113,8 @@ fn update_config() {
         20,
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT)
-        }]
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
     );
 
     let msg = InitMsg {
@@ -114,15 +123,15 @@ fn update_config() {
         anchor_contract: HumanAddr::from("anchor"),
         b_terra_code_id: 123u64,
         period_prize: 69u64,
-        ticket_exchange_rate: Decimal256::one()
+        ticket_exchange_rate: Decimal256::one(),
     };
 
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT)
-        }]
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
     );
 
     let _res = init(&mut deps, env.clone(), msg).unwrap();
@@ -136,24 +145,22 @@ fn update_config() {
     let env = mock_env("owner", &[]);
     let msg = HandleMsg::UpdateConfig {
         owner: Some(HumanAddr::from("owner1".to_string())),
-        period_prize: None
+        period_prize: None,
     };
     let res = handle(&mut deps, env, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // Check owner has changed
     let res = query(&deps, QueryMsg::Config {}).unwrap();
-    let config_response : ConfigResponse = from_binary(&res).unwrap();
-
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
 
     assert_eq!(HumanAddr::from("owner1"), config_response.owner);
-
 
     // update period_prize
     let env = mock_env("owner1", &[]);
     let msg = HandleMsg::UpdateConfig {
         owner: None,
-        period_prize: Some(23u64)
+        period_prize: Some(23u64),
     };
 
     let res = handle(&mut deps, env, msg).unwrap();
@@ -168,7 +175,7 @@ fn update_config() {
     let env = mock_env("owner", &[]);
     let msg = HandleMsg::UpdateConfig {
         owner: None,
-        period_prize: Some(24u64)
+        period_prize: Some(24u64),
     };
 
     let res = handle(&mut deps, env, msg);
@@ -193,15 +200,15 @@ fn deposit_stable() {
         anchor_contract: HumanAddr::from("anchor"),
         b_terra_code_id: 123u64,
         period_prize: 69u64,
-        ticket_exchange_rate: Decimal256::one()
+        ticket_exchange_rate: Decimal256::one(),
     };
 
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT)
-        }]
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
     );
 
     let _res = init(&mut deps, env.clone(), msg).unwrap();
@@ -257,9 +264,9 @@ fn deposit_stable() {
         &HumanAddr::from("BT-uusd"),
         &[(
             &HumanAddr::from(MOCK_CONTRACT_ADDR),
-            &Uint128::from(INITIAL_DEPOSIT_AMOUNT)
-            )],
-        )]);
+            &Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        )],
+    )]);
 
     deps.querier.update_balance(
         HumanAddr::from(MOCK_CONTRACT_ADDR),
@@ -298,7 +305,7 @@ fn deposit_stable() {
 
     // Change ticket_exchange_rate to 2 tickets per UST deposited
     config.ticket_exchange_rate = Decimal256::one() + Decimal256::one(); //TODO:lol
-    store_config(&mut deps.storage,& config).unwrap();
+    store_config(&mut deps.storage, &config).unwrap();
 
     let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
 
@@ -343,15 +350,15 @@ fn redeem_stable() {
         anchor_contract: HumanAddr::from("anchor"),
         b_terra_code_id: 123u64,
         period_prize: 69u64,
-        ticket_exchange_rate: Decimal256::one()
+        ticket_exchange_rate: Decimal256::one(),
     };
 
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT)
-        }]
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
     );
 
     let _res = init(&mut deps, env.clone(), msg).unwrap();
@@ -374,9 +381,9 @@ fn redeem_stable() {
         &HumanAddr::from("BT-uusd"),
         &[(
             &HumanAddr::from(MOCK_CONTRACT_ADDR),
-            &Uint128::from(INITIAL_DEPOSIT_AMOUNT)
-            )],
-        )]);
+            &Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        )],
+    )]);
 
     deps.querier.update_balance(
         HumanAddr::from(MOCK_CONTRACT_ADDR),
@@ -428,16 +435,13 @@ fn redeem_stable() {
             CosmosMsg::Bank(BankMsg::Send {
                 from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
                 to_address: HumanAddr::from("addr0000"),
-                amount: vec![
-                    Coin {
-                        denom: "uusd".to_string(),
-                        amount: Uint128::from(1000000u128),
-                    }
-                ]
+                amount: vec![Coin {
+                    denom: "uusd".to_string(),
+                    amount: Uint128::from(1000000u128),
+                }]
             })
         ]
     );
 
     // TODO: Test with changes in ticket_exchange_rate
-
 }

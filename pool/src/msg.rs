@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{HumanAddr};
+use cosmwasm_std::HumanAddr;
 
 use cw20::Cw20ReceiveMsg;
 
@@ -15,6 +15,7 @@ pub struct InitMsg {
     pub lottery_interval: u64,
     pub block_time: u64,
     pub ticket_prize: u64,
+    pub prize_distribution: Vec<Decimal256>,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
     pub period_prize: u64, // not sure what am i doing with this one
@@ -24,17 +25,16 @@ pub struct InitMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
-    Receive (Cw20ReceiveMsg),
+    Receive(Cw20ReceiveMsg),
     DepositStable {},
     SingleDeposit {
-        combination: String
+        combination: String,
     },
     RegisterSTerra {},
     UpdateConfig {
         owner: Option<HumanAddr>,
-        period_prize: Option<u64>
-
-    }
+        period_prize: Option<u64>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -44,15 +44,12 @@ pub enum Cw20HookMsg {
     RedeemStable {},
 }
 
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     // GetCount returns the current count as a json-encoded number
     Config {},
-    State {
-        block_height: Option<u64>
-    },
+    State { block_height: Option<u64> },
 }
 
 // We define a custom struct for each query response
@@ -75,4 +72,3 @@ pub struct StateResponse {
     pub award_available: Decimal256,
     pub total_assets: Decimal256,
 }
-

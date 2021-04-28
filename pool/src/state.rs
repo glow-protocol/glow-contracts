@@ -29,7 +29,7 @@ pub struct Config {
     pub lottery_interval: u64, // number of blocks (or time) between lotteries
     pub block_time: u64,       // number of blocks (or time) lottery is blocked while is executed
     pub ticket_prize: u64,     // prize of a ticket in stable_denom
-    pub prize_distribution: Vec<Decimal256>, // [0,0, 2.5, 15, 30, 50]
+    pub prize_distribution: Vec<Decimal256>, // [0, 0, 0.05, 0.15, 0.3, 0.5]
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
     pub ticket_exchange_rate: Decimal256, //pub mock_anchor_rate // to simulate interest rate accrued

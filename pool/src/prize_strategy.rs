@@ -39,6 +39,9 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     let winning_sequence = String::from("34280");
 
     // TODO: Get how much interest do we have available in anchor
+    let mut current_award = state.award_available;
+    let lottery_deposits = state.total_deposits * config.split_factor;
+
     // totalAnchorDeposit = aUST_lottery_balance * exchangeRate
     // awardable_prize = totalAnchorDeposit - totalLotteryDeposits
     let outstanding_interest = 10_000_000_000.0; // let's do it 10k
@@ -66,6 +69,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
 
             let assigned = assign_prize(prize, number_winners, config.prize_distribution[matches]);
 
+            // TODO: apply reserve factor to the prizes, not to the awardable_prize
             depositor.redeemable_amount += assigned;
             total_awarded_prize += assigned;
 

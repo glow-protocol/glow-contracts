@@ -6,10 +6,12 @@ use cosmwasm_std::{
 
 use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::prize_strategy::is_valid_sequence;
+use crate::querier::query_exchange_rate;
 use crate::state::{
-    read_config, read_sequence_info, read_state, store_config, store_sequence_info, store_state,
-    Config, State,
+    read_config, read_depositor_info, read_sequence_info, read_state, store_config,
+    store_depositor_info, store_sequence_info, store_state, Config, DepositorInfo, State,
 };
+
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use serde::__private::de::IdentifierDeserializer;
 use snafu::guide::examples::backtrace::Error::UsedInTightLoop;
@@ -73,6 +75,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             last_interest: Decimal256::zero(),
             total_accrued_interest: Decimal256::zero(),
             award_available: Decimal256::zero(),
+            current_lottery: Uint256::zero(),
             next_lottery_time: msg.lottery_interval,
             spendable_balance: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
@@ -136,7 +139,6 @@ pub fn receive_cw20<S: Storage, A: Api, Q: Querier>(
     if let Some(msg) = cw20_msg.msg {
         match from_binary(&msg)? {
             Cw20HookMsg::RedeemStable {} => {
-                // only core-pool contract can execute this message
                 let config: Config = read_config(&deps.storage)?;
                 if deps.api.canonical_address(&contract_addr)? != config.b_terra_contract {
                     return Err(StdError::unauthorized());
@@ -304,17 +306,24 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    // TODO: query anchor to check how much aUST we will get from this deposit, also is this possible?
-    // multiply aUST amount by the split factor, and store the amount of aUST will
-    // get direct interest for the user and the amount of aUST that's going to go
-    // to the lottery pool
-
-    let depositor = deps.api.canonical_address(&env.message.sender)?;
+    // Store ticket sequence in bucket
     store_sequence_info(&mut deps.storage, depositor, &combination)?;
 
-    state.total_tickets += Uint256::from(1); //TODO: check if there is a cleaner way to do this
-    state.total_deposits += Decimal256::from_uint256(deposit_amount);
-    state.total_assets += Decimal256::from_uint256(deposit_amount);
+    let depositor = deps.api.canonical_address(&env.message.sender)?;
+    let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor)?;
+
+    let anchor_exchange_rate =
+        query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
+    // add amount of aUST entitled from the deposit
+    let minted_amount = Decimal256::from_uint256(deposit_amount) / anchor_exchange_rate;
+    depositor_info.deposit_amount += minted_amount;
+    depositor_info.tickets.push(combination);
+
+    store_depositor_info(&mut deps.storage, &depositor, &depositor_info);
+
+    state.total_tickets += Uint256::one();
+    state.total_deposits += minted_amount;
+    state.total_assets += Decimal256::from_uint256(deposit_amount); //TODO: not doing anything yet
 
     store_state(&mut deps.storage, &state)?;
 
@@ -372,7 +381,7 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     if let Some(owner) = owner {
         config.owner = deps.api.canonical_address(&owner)?;
     }
-    // TODO: period prize is not doing anything, just for demo purposes
+
     if let Some(ticket_prize) = ticket_price {
         config.ticket_prize = ticket_prize;
     }

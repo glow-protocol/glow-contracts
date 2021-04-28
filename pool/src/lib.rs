@@ -3,6 +3,7 @@ pub mod msg;
 pub mod state;
 
 mod prize_strategy;
+mod querier;
 #[cfg(test)]
 mod test;
 

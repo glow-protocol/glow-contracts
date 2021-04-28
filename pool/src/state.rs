@@ -23,7 +23,7 @@ const PREFIX_DEPOSIT: &[u8] = b"depositor";
 pub struct Config {
     pub contract_addr: CanonicalAddr,
     pub owner: CanonicalAddr,
-    pub b_terra_contract: CanonicalAddr,
+    pub a_terra_contract: CanonicalAddr,
     pub stable_denom: String,
     pub anchor_contract: CanonicalAddr,
     pub lottery_interval: u64, // number of blocks (or time) between lotteries
@@ -46,6 +46,7 @@ pub struct State {
     pub next_lottery_time: u64,
     pub spendable_balance: Decimal256,
     pub total_deposits: Decimal256,
+    pub total_lottery_deposits: Decimal256,
     pub total_assets: Decimal256, // deposits+spendable balance
 }
 

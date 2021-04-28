@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 
 use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
-use crate::prize_strategy::is_valid_sequence;
+use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
 use crate::querier::query_exchange_rate;
 use crate::state::{
     read_config, read_depositor_info, read_sequence_info, read_state, store_config,
@@ -54,7 +54,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         &Config {
             contract_addr: deps.api.canonical_address(&env.contract.address)?,
             owner: deps.api.canonical_address(&msg.owner)?,
-            b_terra_contract: CanonicalAddr::default(),
+            a_terra_contract: CanonicalAddr::default(),
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.canonical_address(&msg.anchor_contract)?,
             lottery_interval: msg.lottery_interval,
@@ -79,6 +79,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             next_lottery_time: msg.lottery_interval,
             spendable_balance: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
+            total_lottery_deposits: Decimal256::zero(),
             total_assets: Decimal256::from_uint256(initial_deposit),
         },
     )?;
@@ -122,6 +123,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Receive(msg) => receive_cw20(deps, env, msg),
         HandleMsg::DepositStable {} => deposit_stable(deps, env),
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
+        HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
+        HandleMsg::HandlePrize {} => _handle_prize(deps, env, info),
         HandleMsg::RegisterSTerra {} => register_b_terra(deps, env),
         HandleMsg::UpdateConfig {
             owner,
@@ -323,6 +326,7 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
 
     state.total_tickets += Uint256::one();
     state.total_deposits += minted_amount;
+    state.total_lottery_deposits += minted_amount * config.split_factor;
     state.total_assets += Decimal256::from_uint256(deposit_amount); //TODO: not doing anything yet
 
     store_state(&mut deps.storage, &state)?;

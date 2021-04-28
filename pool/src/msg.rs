@@ -30,6 +30,8 @@ pub enum HandleMsg {
     SingleDeposit {
         combination: String,
     },
+    ExecuteLottery {},
+    HandlePrize {},
     RegisterSTerra {},
     UpdateConfig {
         owner: Option<HumanAddr>,

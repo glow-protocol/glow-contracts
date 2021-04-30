@@ -45,6 +45,7 @@ pub struct State {
     pub current_lottery: Uint256,
     pub next_lottery_time: u64,
     pub spendable_balance: Decimal256,
+    pub current_balance: Uint256,
     pub total_deposits: Decimal256,
     pub total_lottery_deposits: Decimal256,
     pub total_assets: Decimal256, // deposits+spendable balance

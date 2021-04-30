@@ -78,6 +78,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             current_lottery: Uint256::zero(),
             next_lottery_time: msg.lottery_interval,
             spendable_balance: Decimal256::zero(),
+            current_balance: Uint256::from(initial_deposit),
             total_deposits: Decimal256::zero(),
             total_lottery_deposits: Decimal256::zero(),
             total_assets: Decimal256::from_uint256(initial_deposit),
@@ -349,6 +350,9 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
         data: None,
     })
 }
+
+// TODO: pub fn claim() - receive depositor redeemable amount
+// TODO: pub fn withdraw() - burn tickets and place funds in the unbonding period
 
 // Register b_terra_contract in the core_pool config.
 pub fn register_b_terra<S: Storage, A: Api, Q: Querier>(

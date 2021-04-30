@@ -1,5 +1,7 @@
 use itertools::Itertools;
 
+use crate::msg::HandleMsg;
+use crate::querier::query_balance;
 use crate::state::{
     read_all_sequences, read_config, read_depositor_info, read_matching_sequences,
     read_sequence_info, read_state, store_config, store_depositor_info, store_lottery_info,
@@ -11,8 +13,6 @@ use cosmwasm_std::{
     HandleResponse, HandleResult, HumanAddr, InitResponse, InitResult, MessageInfo, Querier,
     StdError, StdResult, Storage, Uint128, WasmMsg,
 };
-
-use crate::msg::HandleMsg;
 use cw20::Cw20HandleMsg::Send as Cw20Send;
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 
@@ -21,7 +21,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     env: Env,
 ) -> HandleResult {
     let mut state = read_state(&deps.storage)?;
-    let mut config = read_config(&deps.storage)?;
+    let config = read_config(&deps.storage)?;
 
     // No sent funds allowed when executing the lottery
     if !env.message.sent_funds.is_empty() {
@@ -39,14 +39,16 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    // TODO: Get how much interest do we have available in anchor
-    let mut current_award = state.award_available;
-    let lottery_deposits = state.total_deposits * config.split_factor;
+    // Get contract current uusd balance
+    state.current_balance = query_balance(
+        &deps,
+        &deps.api.human_address(&config.contract_addr)?,
+        String::from("uusd"),
+    )?;
 
-    // totalAnchorDeposit = aUST_lottery_balance * exchangeRate
-    // awardable_prize = totalAnchorDeposit - totalLotteryDeposits
-    let outstanding_interest = 10_000_000_000.0; // let's do it 10k
-    let awardable_prize: Decimal256 = outstanding_interest - state.total_deposits;
+    // Get lottery deposits of aUST
+    // TODO: is it better to query_token_balance instead of track it with state variables??
+    let lottery_deposits = state.total_deposits * config.split_factor;
 
     // Store state
     store_state(&mut deps.storage, &state)?;
@@ -86,12 +88,30 @@ pub fn _handle_prize(
         return Err(StdError::unauthorized());
     }
 
+    let mut state = read_state(&deps.storage)?;
+    let config = read_config(&deps.storage)?;
+
     // TODO: Get random sequence here
+    // TODO: deduct terra taxes and oracle fees
     let winning_sequence = String::from("34280");
 
-    let prize = state.award_available;
+    // Get contract current uusd balance
+    let curr_balance = query_balance(
+        &deps,
+        &deps.api.human_address(&config.contract_addr)?,
+        String::from("uusd"),
+    )?;
 
-    // TODO: deduct terra taxes and oracle fees
+    // Get delta after aUST redeem operation
+    let balance_delta = (curr_balance - state.current_balance)?;
+
+    // Minus total_lottery_deposits and we get outstanding_interest
+    let outstanding_interest = (balance_delta - state.total_lottery_deposits)?;
+
+    // Add outstanding_interest to previous available award
+    state.award_available += outstanding_interest;
+
+    let prize = state.award_available;
 
     // Get winners and respective sequences
     let lucky_holders: Vec<(u8, CanonicalAddr)> =
@@ -101,6 +121,7 @@ pub fn _handle_prize(
 
     // assign prizes
     let mut total_awarded_prize = Decimal256::zero();
+    let mut total_reserve_commission = Decimal256::zero();
 
     for (matches, winners) in map_winners.iter() {
         let number_winners = winners.len() as u8;
@@ -109,9 +130,10 @@ pub fn _handle_prize(
 
             let assigned = assign_prize(prize, number_winners, config.prize_distribution[matches]);
 
-            // TODO: apply reserve factor to the prizes, not to the awardable_prize
-            depositor.redeemable_amount += assigned;
             total_awarded_prize += assigned;
+            let reserve_commission = apply_reserve_factor(assigned, config.reserve_factor)?;
+            total_reserve_commission += reserve_commission;
+            depositor.redeemable_amount += (assigned - reserve_commission)?;
 
             store_depositor_info(&mut deps.storage, winner, &depositor)?;
         }
@@ -128,18 +150,27 @@ pub fn _handle_prize(
 
     state.next_lottery_time += config.lottery_interval;
     state.current_lottery += Uint256::one();
+    state.total_reserve += total_reserve_commission;
+    state.award_available -= total_awarded_prize;
+    //TODO: update total_assets and spendable_balance??
     store_state(&mut deps.storage, &state)?;
 
-    // TODO: update assets and deposits related state
-    // award_available, spendable...
-
-    //TODO: deposit back in Anchor the outstanding lottery deposits
-
     Ok(HandleResponse {
-        messages: vec![],
+        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            send: vec![Coin {
+                denom: config.stable_denom,
+                amount: Uint128::from(state.total_lottery_deposits),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {})?,
+        })],
         log: vec![log("action", "execute_lottery")],
         data: None,
     })
+}
+
+fn apply_reserve_factor(awarded_amount: Decimal256, reserve_factor: Decimal256) -> Decimal256 {
+    awarded_amount * reserve_factor
 }
 
 // distribution is a vector [0, 0, 0.025, 0.15, 0.3, 0.5]

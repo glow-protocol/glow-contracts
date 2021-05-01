@@ -11,6 +11,8 @@ use cw20::TokenInfoResponse;
 use terra_cosmwasm::TerraQuerier;
 
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
+use crate::claims::Claim;
+use crate::state::read_depositor_info;
 
 pub fn query_exchange_rate<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
@@ -70,6 +72,15 @@ pub fn query_token_balance<S: Storage, A: Api, Q: Querier>(
 
     let balance: Uint128 = from_binary(&res)?;
     Ok(balance.into())
+}
+
+pub fn query_depositor_claims<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    addr: &HumanAddr,
+) -> StdResult<Vec<Claim>> {
+    let address_raw = deps.api.canonical_address(&addr)?;
+    let claims = read_depositor_info(&deps.storage, &address_raw).unbonding_info?;
+    Ok(claims)
 }
 
 pub fn query_supply<S: Storage, A: Api, Q: Querier>(

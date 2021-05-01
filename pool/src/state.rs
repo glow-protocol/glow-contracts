@@ -11,6 +11,7 @@ use cosmwasm_storage::{
 };
 
 use crate::prize_strategy::count_seq_matches;
+use crate::claims::Claim;
 
 const KEY_CONFIG: &[u8] = b"config";
 const KEY_STATE: &[u8] = b"state";
@@ -56,7 +57,7 @@ pub struct DepositorInfo {
     pub deposit_amount: Decimal256,
     pub redeemable_amount: Decimal256,
     pub tickets: Vec<String>,
-    pub unbonding_info: Vec<(Decimal256, u128)>, // [(amount, unbondingRequestTimestamp)]
+    pub unbonding_info: Vec<Claim>, // TODO: rename to claims? should this be decoupled?
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

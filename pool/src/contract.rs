@@ -124,6 +124,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Receive(msg) => receive_cw20(deps, env, msg),
         HandleMsg::DepositStable {} => deposit_stable(deps, env),
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
+        HandleMsg::Withdraw { amount } => withdraw(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
         HandleMsg::HandlePrize {} => _handle_prize(deps, env, info),
         HandleMsg::RegisterSTerra {} => register_b_terra(deps, env),
@@ -351,8 +352,20 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-// TODO: pub fn claim() - receive depositor redeemable amount
 // TODO: pub fn withdraw() - burn tickets and place funds in the unbonding period
+pub fn withdraw<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    amount: Option<u64>
+) -> HandleResult {
+
+    StdResult
+}
+
+
+
+// TODO: pub fn claim() - receive depositor redeemable amount
+
 
 // Register b_terra_contract in the core_pool config.
 pub fn register_b_terra<S: Storage, A: Api, Q: Querier>(

@@ -6,6 +6,7 @@ mod prize_strategy;
 mod querier;
 #[cfg(test)]
 mod test;
+mod claims;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {

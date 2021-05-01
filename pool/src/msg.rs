@@ -30,6 +30,9 @@ pub enum HandleMsg {
     SingleDeposit {
         combination: String,
     },
+    Withdraw {
+        amount: Option<u64>,
+    },
     ExecuteLottery {},
     HandlePrize {},
     RegisterSTerra {},

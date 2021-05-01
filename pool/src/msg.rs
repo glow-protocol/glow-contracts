@@ -34,7 +34,7 @@ pub enum HandleMsg {
         amount: Option<u64>,
     },
     ExecuteLottery {},
-    HandlePrize {},
+    _HandlePrize {},
     RegisterSTerra {},
     UpdateConfig {
         owner: Option<HumanAddr>,

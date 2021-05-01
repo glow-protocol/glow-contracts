@@ -126,7 +126,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::Withdraw { amount } => withdraw(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
-        HandleMsg::HandlePrize {} => _handle_prize(deps, env, info),
+        HandleMsg::_HandlePrize {} => _handle_prize(deps, env, info),
         HandleMsg::RegisterSTerra {} => register_b_terra(deps, env),
         HandleMsg::UpdateConfig {
             owner,

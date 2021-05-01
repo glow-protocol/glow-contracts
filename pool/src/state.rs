@@ -55,7 +55,7 @@ pub struct State {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
     pub deposit_amount: Decimal256,
-    pub redeemable_amount: Decimal256,
+    pub redeemable_amount: Uint128,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>, // TODO: rename to claims? should this be decoupled?
 }
@@ -102,7 +102,7 @@ pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -
         Ok(v) => v,
         _ => DepositorInfo {
             deposit_amount: Decimal256::zero(),
-            redeemable_amount: Decimal256::zero(),
+            redeemable_amount: Uint128::zero(),
             tickets: vec![],
             unbonding_info: vec![],
         },

@@ -22,6 +22,7 @@ use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 
 use moneymarket::market::HandleMsg as AnchorMsg;
+use crate::claims::claim_deposits;
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
@@ -352,7 +353,7 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-// TODO: pub fn withdraw() - burn tickets and place funds in the unbonding period
+// TODO: pub fn withdraw() - burn tickets and place funds in the unbonding_info as claims
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -363,8 +364,59 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
 }
 
 
-
 // TODO: pub fn claim() - receive depositor redeemable amount
+pub fn claim<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    amount: Option<Uint128>
+) -> HandleResult {
+
+    if amount.unwrap() == 0 {
+        return Err(StdError::generic_err("Claim amount must be greater than zero"));
+    }
+
+    // TODO: check balance of the contract is sufficient
+
+    let mut state = read_state(&deps.storage)?;
+    let config = read_config(&deps.storage)?;
+
+    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
+    let mut to_send =
+        claim_deposits(&mut deps.storage, &sender_raw, &env.block, amount)?;
+    //TODO: doing two consecutive reads here, need to refactor
+    let mut depositor :DepositorInfo = read_depositor_info(&deps.storage, &sender_raw)?;
+    to_send += depositor.redeemable_amount;
+    if to_send == Uint128(0) {
+        return Err(StdError::generic_err("Depositor does not have any amount to claim"));
+    }
+    //TODO: double-check if there is enough balance to send in the contract
+    //TODO: need to redeem amount of aUST to UST
+
+    //TODO: update total assets and other global variables
+
+    //TODO: we may deduct some tax in redemptions
+
+    depositor.redeemable_amount = Uint128::zero();
+    store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
+
+    Ok(HandleResponse {
+        messages: vec![
+            CosmosMsg::Bank(BankMsg::Send {
+                from_address: env.contract.address,
+                to_address: env.message.sender,
+                amount: vec![Coin {
+                    denom: config.stable_denom,
+                    amount: to_send.into(),
+                }],
+            }),
+        ],
+        log: vec![
+            log("action", "claim"),
+            log("redeemed_amount", to_send),
+        ],
+        data: None,
+    })
+}
 
 
 // Register b_terra_contract in the core_pool config.

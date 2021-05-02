@@ -2,8 +2,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::HumanAddr;
+use cosmwasm_std::{HumanAddr, Uint128};
 
+use cw0::Duration;
 use cw20::Cw20ReceiveMsg;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -20,6 +21,7 @@ pub struct InitMsg {
     pub split_factor: Decimal256,
     pub period_prize: u64, // not sure what am i doing with this one
     pub ticket_exchange_rate: Decimal256,
+    pub unbonding_period: Duration,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -31,7 +33,7 @@ pub enum HandleMsg {
         combination: String,
     },
     Withdraw {
-        amount: Option<u64>,
+        amount: Uint128,
     },
     ExecuteLottery {},
     _HandlePrize {},

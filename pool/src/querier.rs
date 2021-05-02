@@ -10,9 +10,9 @@ use cosmwasm_storage::to_length_prefixed;
 use cw20::TokenInfoResponse;
 use terra_cosmwasm::TerraQuerier;
 
-use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 use crate::claims::Claim;
 use crate::state::read_depositor_info;
+use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 
 pub fn query_exchange_rate<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,

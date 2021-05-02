@@ -10,8 +10,9 @@ use cosmwasm_storage::{
     Singleton,
 };
 
-use crate::prize_strategy::count_seq_matches;
 use crate::claims::Claim;
+use crate::prize_strategy::count_seq_matches;
+use cw0::Duration;
 
 const KEY_CONFIG: &[u8] = b"config";
 const KEY_STATE: &[u8] = b"state";
@@ -34,6 +35,7 @@ pub struct Config {
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
     pub ticket_exchange_rate: Decimal256, //pub mock_anchor_rate // to simulate interest rate accrued
+    pub unbonding_period: Duration,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -121,7 +123,7 @@ pub fn read_lottery_info<S: Storage>(storage: &S, lottery_id: u128) -> Option<Lo
     bucket_read(PREFIX_LOTTERY, storage).may_load(&lottery_id.to_be_bytes())?
 }
 
-fn sequence_bucket<T: Storage>(storage: &mut S) -> Bucket<T, Vec<CanonicalAddr>> {
+pub fn sequence_bucket<T: Storage>(storage: &mut S) -> Bucket<T, Vec<CanonicalAddr>> {
     bucket(PREFIX_SEQUENCE, storage)
 }
 

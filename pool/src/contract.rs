@@ -8,8 +8,9 @@ use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, Stat
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
 use crate::querier::query_exchange_rate;
 use crate::state::{
-    read_config, read_depositor_info, read_sequence_info, read_state, store_config,
-    store_depositor_info, store_sequence_info, store_state, Config, DepositorInfo, State,
+    read_config, read_depositor_info, read_sequence_info, read_state, sequence_bucket,
+    store_config, store_depositor_info, store_sequence_info, store_state, Config, DepositorInfo,
+    State,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -21,8 +22,8 @@ use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 
+use crate::claims::{claim_deposits, Claim};
 use moneymarket::market::HandleMsg as AnchorMsg;
-use crate::claims::claim_deposits;
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
@@ -65,6 +66,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             reserve_factor: msg.reserve_factor,
             split_factor: msg.split_factor,
             ticket_exchange_rate: msg.ticket_exchange_rate,
+            unbonding_period: msg.unbonding_period,
         },
     )?;
 
@@ -354,25 +356,73 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
 }
 
 // TODO: pub fn withdraw() - burn tickets and place funds in the unbonding_info as claims
+// TODO: burn specific tickets - combinations: Option<Vec<String>>
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    amount: Option<u64>
+    amount: Uint128, //amount of tickets
 ) -> HandleResult {
+    let config = read_config(&deps.storage)?;
+    let mut state = read_state(&deps.storage)?;
 
-    StdResult
+    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
+    let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw)?;
+
+    if amount == Uint128::zero() {
+        return Err(StdError::generic_err(
+            "Amount of tickets must be greater than zero",
+        ));
+    }
+
+    if amount > depositor.tickets.len() as Uint128 {
+        return Err(StdError::generic_err(format!(
+            "User has {} tickets but {} tickets were requested to be withdrawn",
+            amount,
+            depositor.tickets.len()
+        )));
+    }
+
+    let mut tickets = depositor.tickets.clone();
+    let ticket_removed: Vec<String> = tickets.drain(0..amount).collect();
+    depositor.tickets = tickets;
+    let unbonding_amount = config.ticket_prize * amount;
+    depositor.deposit_amount -= unbonding_amount;
+
+    depositor.unbonding_info.push(Claim {
+        amount: unbonding_amount,
+        release_at: config.unbonding_period.after(&env.block),
+    })?;
+
+    // Remove depositor's address from holders Sequence
+    ticket_removed.iter().map(|seq| {
+        let mut holders: Vec<CanonicalAddr> = read_sequence_info(&mut deps.storage, seq)?;
+        let index = holders.iter().position(|x| *x == sender_raw).unwrap();
+        holders.remove(index)?;
+        sequence_bucket(&mut deps.storage).save(seq.as_bytes(), &holders)?;
+    });
+
+    // TODO: update global variables
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![
+            log("action", "withdraw_ticket")
+            log("tickets_amount", amount)
+        ],
+        data: None,
+    })
 }
 
-
-// TODO: pub fn claim() - receive depositor redeemable amount
+// Send available UST to user from current redeemable balance and unbonded deposits
 pub fn claim<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    amount: Option<Uint128>
+    amount: Option<Uint128>,
 ) -> HandleResult {
-
     if amount.unwrap() == 0 {
-        return Err(StdError::generic_err("Claim amount must be greater than zero"));
+        return Err(StdError::generic_err(
+            "Claim amount must be greater than zero",
+        ));
     }
 
     // TODO: check balance of the contract is sufficient
@@ -381,13 +431,14 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     let config = read_config(&deps.storage)?;
 
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let mut to_send =
-        claim_deposits(&mut deps.storage, &sender_raw, &env.block, amount)?;
+    let mut to_send = claim_deposits(&mut deps.storage, &sender_raw, &env.block, amount)?;
     //TODO: doing two consecutive reads here, need to refactor
-    let mut depositor :DepositorInfo = read_depositor_info(&deps.storage, &sender_raw)?;
+    let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw)?;
     to_send += depositor.redeemable_amount;
     if to_send == Uint128(0) {
-        return Err(StdError::generic_err("Depositor does not have any amount to claim"));
+        return Err(StdError::generic_err(
+            "Depositor does not have any amount to claim",
+        ));
     }
     //TODO: double-check if there is enough balance to send in the contract
     //TODO: need to redeem amount of aUST to UST
@@ -400,24 +451,18 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     Ok(HandleResponse {
-        messages: vec![
-            CosmosMsg::Bank(BankMsg::Send {
-                from_address: env.contract.address,
-                to_address: env.message.sender,
-                amount: vec![Coin {
-                    denom: config.stable_denom,
-                    amount: to_send.into(),
-                }],
-            }),
-        ],
-        log: vec![
-            log("action", "claim"),
-            log("redeemed_amount", to_send),
-        ],
+        messages: vec![CosmosMsg::Bank(BankMsg::Send {
+            from_address: env.contract.address,
+            to_address: env.message.sender,
+            amount: vec![Coin {
+                denom: config.stable_denom,
+                amount: to_send.into(),
+            }],
+        })],
+        log: vec![log("action", "claim"), log("redeemed_amount", to_send)],
         data: None,
     })
 }
-
 
 // Register b_terra_contract in the core_pool config.
 pub fn register_b_terra<S: Storage, A: Api, Q: Querier>(

@@ -88,34 +88,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         },
     )?;
 
-    Ok(InitResponse {
-        messages: vec![CosmosMsg::Wasm(WasmMsg::Instantiate {
-            code_id: msg.b_terra_code_id,
-            send: vec![],
-            label: None,
-            msg: to_binary(&TokenInitMsg {
-                name: format!("Barbell Terra {}", msg.stable_denom[1..].to_uppercase()),
-                symbol: format!(
-                    "b{}T",
-                    msg.stable_denom[1..(msg.stable_denom.len() - 1)].to_uppercase()
-                ),
-                decimals: 6u8,
-                initial_balances: vec![Cw20CoinHuman {
-                    address: env.contract.address.clone(),
-                    amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-                }],
-                mint: Some(MinterResponse {
-                    minter: env.contract.address.clone(),
-                    cap: None,
-                }),
-                init_hook: Some(InitHook {
-                    contract_addr: env.contract.address,
-                    msg: to_binary(&HandleMsg::RegisterSTerra {})?,
-                }),
-            })?,
-        })],
-        log: vec![],
-    })
+    Ok(InitResponse::default())
 }
 
 pub fn handle<S: Storage, A: Api, Q: Querier>(
@@ -124,147 +97,15 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> HandleResult {
     match msg {
-        HandleMsg::Receive(msg) => receive_cw20(deps, env, msg),
-        HandleMsg::DepositStable {} => deposit_stable(deps, env),
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::Withdraw { amount } => withdraw(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
         HandleMsg::_HandlePrize {} => _handle_prize(deps, env, info),
-        HandleMsg::RegisterSTerra {} => register_b_terra(deps, env),
         HandleMsg::UpdateConfig {
             owner,
             period_prize,
-        } => update_config(deps, env, owner, period_prize),
+        } => update_config(deps, env, owner, ticket_prize),
     }
-}
-
-pub fn receive_cw20<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    cw20_msg: Cw20ReceiveMsg,
-) -> HandleResult {
-    let contract_addr = env.message.sender.clone();
-    if let Some(msg) = cw20_msg.msg {
-        match from_binary(&msg)? {
-            Cw20HookMsg::RedeemStable {} => {
-                let config: Config = read_config(&deps.storage)?;
-                if deps.api.canonical_address(&contract_addr)? != config.b_terra_contract {
-                    return Err(StdError::unauthorized());
-                }
-
-                redeem_stable(deps, env, cw20_msg.sender, cw20_msg.amount)
-            }
-        }
-    } else {
-        Err(StdError::generic_err(
-            "Invalid request: \"redeem stable\" message not included in request",
-        ))
-    }
-}
-
-// Return stablecoins to user and burn b_terra
-pub fn redeem_stable<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    sender: HumanAddr,
-    burn_amount: Uint128,
-) -> HandleResult {
-    let config = read_config(&deps.storage)?;
-    let mut state = read_state(&deps.storage)?;
-
-    let redeem_amount = Uint256::from(burn_amount) / config.ticket_exchange_rate; //TODO: create a proper exchange rate function
-
-    //TODO: assert redeem amount fn here
-    //TODO: update internal balances such as total_assets and total_tickets
-
-    store_state(&mut deps.storage, &state)?; //TODO: check where the state has been modified
-
-    Ok(HandleResponse {
-        messages: vec![
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: deps.api.human_address(&config.b_terra_contract)?,
-                send: vec![],
-                msg: to_binary(&Cw20HandleMsg::Burn {
-                    amount: burn_amount,
-                })?,
-            }),
-            CosmosMsg::Bank(BankMsg::Send {
-                from_address: env.contract.address,
-                to_address: sender,
-                amount: vec![Coin {
-                    denom: config.stable_denom,
-                    amount: redeem_amount.into(),
-                }],
-            }),
-        ],
-        log: vec![
-            log("action", "redeem_stable"),
-            log("burn_amount", burn_amount),
-            log("redeem_amount", redeem_amount),
-        ],
-        data: None,
-    })
-}
-
-// Deposit UST into the pool contract.
-pub fn deposit_stable<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-) -> StdResult<HandleResponse> {
-    let config = read_config(&deps.storage)?;
-
-    // Check deposit is in base stable denom
-    let deposit_amount = env
-        .message
-        .sent_funds
-        .iter()
-        .find(|c| c.denom == config.stable_denom)
-        .map(|c| Uint256::from(c.amount))
-        .unwrap_or_else(Uint256::zero);
-
-    if deposit_amount.is_zero() {
-        return Err(StdError::generic_err(format!(
-            "Deposit amount must be greater than 0 {}",
-            config.stable_denom
-        )));
-    }
-    let mint_amount = deposit_amount * config.ticket_exchange_rate;
-
-    let mut state = read_state(&deps.storage)?;
-
-    state.total_assets += Decimal256::from_uint256(deposit_amount);
-
-    store_state(&mut deps.storage, &state)?;
-
-    // Mint bUST for the sender and deposit UST to Anchor Money market
-
-    Ok(HandleResponse {
-        messages: vec![
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: deps.api.human_address(&config.b_terra_contract)?,
-                send: vec![],
-                msg: to_binary(&Cw20HandleMsg::Mint {
-                    recipient: env.message.sender.clone(),
-                    amount: mint_amount.into(),
-                })?,
-            }),
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: deps.api.human_address(&config.anchor_contract)?,
-                send: vec![Coin {
-                    denom: config.stable_denom,
-                    amount: Uint128::from(deposit_amount),
-                }],
-                msg: to_binary(&AnchorMsg::DepositStable {})?,
-            }),
-        ],
-        log: vec![
-            log("action", "deposit_stable"),
-            log("depositor", env.message.sender),
-            log("mint_amount", mint_amount),
-            log("deposit_amount", deposit_amount),
-        ],
-        data: None,
-    })
 }
 
 // Single Deposit buys one ticket
@@ -460,25 +301,6 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
             }],
         })],
         log: vec![log("action", "claim"), log("redeemed_amount", to_send)],
-        data: None,
-    })
-}
-
-// Register b_terra_contract in the core_pool config.
-pub fn register_b_terra<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-) -> HandleResult {
-    let mut config: Config = read_config(&deps.storage)?;
-    if config.b_terra_contract != CanonicalAddr::default() {
-        return Err(StdError::unauthorized());
-    }
-    config.b_terra_contract = deps.api.canonical_address(&env.message.sender)?;
-    store_config(&mut deps.storage, &config)?;
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![log("bterra", env.message.sender)],
         data: None,
     })
 }

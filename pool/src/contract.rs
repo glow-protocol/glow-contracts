@@ -6,7 +6,7 @@ use cosmwasm_std::{
 
 use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
-use crate::querier::query_exchange_rate;
+use crate::querier::{query_exchange_rate, query_token_balance};
 use crate::state::{
     read_config, read_depositor_info, read_sequence_info, read_state, sequence_bucket,
     store_config, store_depositor_info, store_sequence_info, store_state, Config, DepositorInfo,
@@ -23,7 +23,7 @@ use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 
 use crate::claims::{claim_deposits, Claim};
-use moneymarket::market::HandleMsg as AnchorMsg;
+use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
@@ -75,16 +75,14 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         &State {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::from_uint256(initial_deposit),
-            last_interest: Decimal256::zero(),
-            total_accrued_interest: Decimal256::zero(),
+            total_deposits: Uint256::zero(),
+            lottery_deposits: Decimal256::zero(),
+            shares_supply: Decimal256::zero(),
             award_available: Decimal256::zero(),
-            current_lottery: Uint256::zero(),
-            next_lottery_time: msg.lottery_interval,
             spendable_balance: Decimal256::zero(),
             current_balance: Uint256::from(initial_deposit),
-            total_deposits: Decimal256::zero(),
-            total_lottery_deposits: Decimal256::zero(),
-            total_assets: Decimal256::from_uint256(initial_deposit),
+            current_lottery: Uint256::zero(),
+            next_lottery_time: msg.lottery_interval,
         },
     )?;
 
@@ -155,26 +153,29 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    // Store ticket sequence in bucket
-    store_sequence_info(&mut deps.storage, depositor, &combination)?;
-
     let depositor = deps.api.canonical_address(&env.message.sender)?;
     let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor)?;
 
+    // query exchange_rate from anchor money market
     let anchor_exchange_rate =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
+
     // add amount of aUST entitled from the deposit
     let minted_amount = Decimal256::from_uint256(deposit_amount) / anchor_exchange_rate;
-    depositor_info.deposit_amount += minted_amount;
+    depositor_info.deposit_amount += deposit_amount;
+    depositor_info.shares += minted_amount;
     depositor_info.tickets.push(combination);
 
-    store_depositor_info(&mut deps.storage, &depositor, &depositor_info);
+    // Update depositor information
+    store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
+    // Store ticket sequence in bucket
+    store_sequence_info(&mut deps.storage, depositor, &combination)?;
 
+    // Update global state
     state.total_tickets += Uint256::one();
-    state.total_deposits += minted_amount;
-    state.total_lottery_deposits += minted_amount * config.split_factor;
-    state.total_assets += Decimal256::from_uint256(deposit_amount); //TODO: not doing anything yet
-
+    state.total_deposits += deposit_amount;
+    state.shares_supply += minted_amount;
+    state.lottery_deposits += Decimal256::from_uint256(deposit_amount) * config.split_factor;
     store_state(&mut deps.storage, &state)?;
 
     Ok(HandleResponse {
@@ -196,12 +197,11 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-// TODO: pub fn withdraw() - burn tickets and place funds in the unbonding_info as claims
-// TODO: burn specific tickets - combinations: Option<Vec<String>>
+// TODO: burn specific tickets paramater - combinations: Option<Vec<String>>
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    amount: Uint128, //amount of tickets
+    amount: Uint128, // amount of tickets
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
@@ -224,15 +224,11 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     }
 
     let mut tickets = depositor.tickets.clone();
+
+    // Remove amount of tickets randomly from user's vector of sequences
     let ticket_removed: Vec<String> = tickets.drain(0..amount).collect();
     depositor.tickets = tickets;
-    let unbonding_amount = config.ticket_prize * amount;
-    depositor.deposit_amount -= unbonding_amount;
 
-    depositor.unbonding_info.push(Claim {
-        amount: unbonding_amount,
-        release_at: config.unbonding_period.after(&env.block),
-    })?;
 
     // Remove depositor's address from holders Sequence
     ticket_removed.iter().map(|seq| {
@@ -242,13 +238,64 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         sequence_bucket(&mut deps.storage).save(seq.as_bytes(), &holders)?;
     });
 
-    // TODO: update global variables
+    let unbonding_amount = config.ticket_prize * amount;
+
+    // Place amount in unbonding state as a claim
+    depositor.unbonding_info.push(Claim {
+        amount: unbonding_amount,
+        release_at: config.unbonding_period.after(&env.block),
+    })?;
+
+    // Withdraw from Anchor the proportional amount of total user deposits
+    let unbonding_ratio: Uint256 = unbonding_amount / depositor.deposit_amount;
+    depositor.deposit_amount -= unbonding_amount;
+
+    // Calculate amount of pool shares to be redeemed
+    let redeem_amount_shares = unbonding_ratio * depositor.shares;
+    depositor.shares -= redeem_amount_shares;
+
+    store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
+
+
+    // Calculate fraction of shares to be redeemed out of the global pool
+    let withdraw_ratio =
+        Decimal256::from_uint256(redeem_amount_shares) / state.shares_supply;
+    // Get contract's total balance of aUST
+    let contract_a_balance =
+        query_token_balance(
+            deps,
+            &deps.api.human_address(&config.a_terra_contract)?,
+            &deps.api.human_address(&config.contract_addr)?
+        )?;
+
+    // Calculate amount of aUST to be redeemed
+    // TODO: deduct anchor redemption taxes
+    let redeem_amount = withdraw_ratio * contract_a_balance;
+
+    // Update global state
+    state.total_tickets -= amount;
+    state.shares_supply -= redeem_amount_shares;
+    state.total_deposits -= unbonding_amount;
+    state.lottery_deposits -= unbonding_amount * config.split_factor; // feels unnecessary
+    store_state(&mut deps.storage, &state)?;
+
+    // Message for redeem amount operation of aUST
+    let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: deps.api.human_address(&config.a_terra_contract)?,
+        send: vec![],
+        msg: to_binary(&Cw20Send {
+            contract: deps.api.human_address(&config.a_terra_contract)?,
+            amount: Uint128::from(redeem_amount),
+            msg: Some(to_binary(&Cw20HookMsg::RedeemStable {})?),
+        })?,
+    });
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages: vec![redeem_msg],
         log: vec![
             log("action", "withdraw_ticket")
             log("tickets_amount", amount)
+            log("redeem_amount_anchor", redeem_amount)
         ],
         data: None,
     })

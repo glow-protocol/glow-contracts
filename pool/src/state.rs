@@ -42,21 +42,21 @@ pub struct Config {
 pub struct State {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
-    pub last_interest: Decimal256,
-    pub total_accrued_interest: Decimal256,
+    pub total_deposits: Uint256,
+    pub lottery_deposits: Decimal256,
+    pub shares_supply: Decimal256,
     pub award_available: Decimal256,
-    pub current_lottery: Uint256,
-    pub next_lottery_time: u64,
     pub spendable_balance: Decimal256,
     pub current_balance: Uint256,
-    pub total_deposits: Decimal256,
-    pub total_lottery_deposits: Decimal256,
-    pub total_assets: Decimal256, // deposits+spendable balance
+    pub current_lottery: Uint256,
+    pub next_lottery_time: u64,
+
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    pub deposit_amount: Decimal256,
+    pub deposit_amount: Uint256,
+    pub shares: Decimal256,
     pub redeemable_amount: Uint128,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>, // TODO: rename to claims? should this be decoupled?
@@ -103,7 +103,8 @@ pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -
     match bucket_read(PREFIX_DEPOSIT, storage).load(depositor.as_slice()) {
         Ok(v) => v,
         _ => DepositorInfo {
-            deposit_amount: Decimal256::zero(),
+            deposit_amount: Uint256::zero(),
+            shares: Decimal256::zero(),
             redeemable_amount: Uint128::zero(),
             tickets: vec![],
             unbonding_info: vec![],

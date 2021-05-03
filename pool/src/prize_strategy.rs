@@ -106,7 +106,7 @@ pub fn _handle_prize(
     let balance_delta = (curr_balance - state.current_balance)?;
 
     // Minus total_lottery_deposits and we get outstanding_interest
-    let outstanding_interest = (balance_delta - state.total_lottery_deposits)?;
+    let outstanding_interest = (balance_delta - state.lottery_deposits)?;
 
     // Add outstanding_interest to previous available award
     state.award_available += outstanding_interest;
@@ -160,7 +160,7 @@ pub fn _handle_prize(
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![Coin {
                 denom: config.stable_denom,
-                amount: Uint128::from(state.total_lottery_deposits),
+                amount: Uint128::from(state.lottery_deposits),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],

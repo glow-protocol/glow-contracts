@@ -6,7 +6,7 @@ use cosmwasm_std::{
 
 use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
-use crate::querier::{query_exchange_rate, query_token_balance};
+use crate::querier::{query_exchange_rate, query_token_balance, query_balance};
 use crate::state::{
     read_config, read_depositor_info, read_sequence_info, read_state, sequence_bucket,
     store_config, store_depositor_info, store_sequence_info, store_state, Config, DepositorInfo,
@@ -307,19 +307,18 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     env: Env,
     amount: Option<Uint128>,
 ) -> HandleResult {
+
     if amount.unwrap() == 0 {
         return Err(StdError::generic_err(
             "Claim amount must be greater than zero",
         ));
     }
 
-    // TODO: check balance of the contract is sufficient
-
-    let mut state = read_state(&deps.storage)?;
     let config = read_config(&deps.storage)?;
 
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
     let mut to_send = claim_deposits(&mut deps.storage, &sender_raw, &env.block, amount)?;
+
     //TODO: doing two consecutive reads here, need to refactor
     let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw)?;
     to_send += depositor.redeemable_amount;
@@ -328,15 +327,21 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
             "Depositor does not have any amount to claim",
         ));
     }
-    //TODO: double-check if there is enough balance to send in the contract
-    //TODO: need to redeem amount of aUST to UST
+    // Double-check if there is enough balance to send in the contract
+    let balance = query_balance(
+        deps,
+        &deps.api.human_address(&config.contract_addr)?,
+        String::from("uusd")
+    )?;
 
-    //TODO: update total assets and other global variables
-
-    //TODO: we may deduct some tax in redemptions
+    if to_send > balance {
+        Err(StdError::generic_err("Not enough funds to pay the claim"))
+    }
 
     depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
+
+    //TODO: we may deduct some tax in redemptions - ex. send_net = deduct_tax(to_send)
 
     Ok(HandleResponse {
         messages: vec![CosmosMsg::Bank(BankMsg::Send {

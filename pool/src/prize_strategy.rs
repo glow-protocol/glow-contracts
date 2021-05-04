@@ -30,7 +30,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         ))
     };
 
-    if env.block.time > state.next_lottery_time {
+    if state.next_lottery_time.is_expired(&env.block) {
         state.next_lottery_time += config.lottery_interval;
     } else {
         Err(StdError::generic_err(format!(

@@ -6,7 +6,7 @@ use cosmwasm_std::{
 
 use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
-use crate::querier::{query_exchange_rate, query_token_balance, query_balance};
+use crate::querier::{query_balance, query_exchange_rate, query_token_balance};
 use crate::state::{
     read_config, read_depositor_info, read_sequence_info, read_state, sequence_bucket,
     store_config, store_depositor_info, store_sequence_info, store_state, Config, DepositorInfo,
@@ -17,6 +17,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use serde::__private::de::IdentifierDeserializer;
 use snafu::guide::examples::backtrace::Error::UsedInTightLoop;
 
+use cw0::{Duration, WEEK};
 use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
 use terraswap::hook::InitHook;
@@ -65,7 +66,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             prize_distribution: msg.prize_distribution,
             reserve_factor: msg.reserve_factor,
             split_factor: msg.split_factor,
-            ticket_exchange_rate: msg.ticket_exchange_rate,
             unbonding_period: msg.unbonding_period,
         },
     )?;
@@ -81,8 +81,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             award_available: Decimal256::zero(),
             spendable_balance: Decimal256::zero(),
             current_balance: Uint256::from(initial_deposit),
-            current_lottery: Uint256::zero(),
-            next_lottery_time: msg.lottery_interval,
+            current_lottery: 0,
+            next_lottery_time: msg.lottery_interval.after(&env.block),
         },
     )?;
 
@@ -101,8 +101,25 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::_HandlePrize {} => _handle_prize(deps, env, info),
         HandleMsg::UpdateConfig {
             owner,
-            period_prize,
-        } => update_config(deps, env, owner, ticket_prize),
+            lottery_interval,
+            block_time,
+            ticket_prize,
+            prize_distribution,
+            reserve_factor,
+            split_factor,
+            unbonding_period,
+        } => update_config(
+            deps,
+            env,
+            owner,
+            lottery_interval,
+            block_time,
+            ticket_prize,
+            prize_distribution,
+            reserve_factor,
+            split_factor,
+            unbonding_period,
+        ),
     }
 }
 
@@ -131,16 +148,16 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    //TODO: consider accepting any amount and moving the rest to spendable balance
+    //TODO: consider accepting any amount and moving the rest to redeemable_amount balance
     if deposit_amount != config.ticket_prize {
         return Err(StdError::generic_err(format!(
-            "Deposit amount must be equal to a ticket prize {} {}",
+            "Deposit amount must be equal to a ticket prize: {} {}",
             config.ticket_prize, config.stable_denom
         )));
     }
 
     //TODO: add a time buffer here with block_time
-    if env.block.time > state.next_lottery_time {
+    if state.next_lottery_time.is_expired(&env.block) {
         return Err(StdError::generic_err(
             "Current lottery is about to start, wait until the next one begins",
         ));
@@ -188,16 +205,16 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],
         log: vec![
-            log("action", "deposit_stable"),
+            log("action", "single_deposit"),
             log("depositor", env.message.sender),
-            log("mint_amount", mint_amount),
             log("deposit_amount", deposit_amount),
+            log("shares_minted", minted_amount),
         ],
         data: None,
     })
 }
 
-// TODO: burn specific tickets paramater - combinations: Option<Vec<String>>
+// TODO: burn specific tickets parameter - combinations: Option<Vec<String>>
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -229,7 +246,6 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let ticket_removed: Vec<String> = tickets.drain(0..amount).collect();
     depositor.tickets = tickets;
 
-
     // Remove depositor's address from holders Sequence
     ticket_removed.iter().map(|seq| {
         let mut holders: Vec<CanonicalAddr> = read_sequence_info(&mut deps.storage, seq)?;
@@ -256,17 +272,14 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
 
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
-
     // Calculate fraction of shares to be redeemed out of the global pool
-    let withdraw_ratio =
-        Decimal256::from_uint256(redeem_amount_shares) / state.shares_supply;
+    let withdraw_ratio = Decimal256::from_uint256(redeem_amount_shares) / state.shares_supply;
     // Get contract's total balance of aUST
-    let contract_a_balance =
-        query_token_balance(
-            deps,
-            &deps.api.human_address(&config.a_terra_contract)?,
-            &deps.api.human_address(&config.contract_addr)?
-        )?;
+    let contract_a_balance = query_token_balance(
+        deps,
+        &deps.api.human_address(&config.a_terra_contract)?,
+        &deps.api.human_address(&config.contract_addr)?,
+    )?;
 
     // Calculate amount of aUST to be redeemed
     // TODO: deduct anchor redemption taxes
@@ -307,7 +320,6 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     env: Env,
     amount: Option<Uint128>,
 ) -> HandleResult {
-
     if amount.unwrap() == 0 {
         return Err(StdError::generic_err(
             "Claim amount must be greater than zero",
@@ -331,7 +343,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     let balance = query_balance(
         deps,
         &deps.api.human_address(&config.contract_addr)?,
-        String::from("uusd")
+        String::from("uusd"),
     )?;
 
     if to_send > balance {
@@ -361,7 +373,13 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     owner: Option<HumanAddr>,
+    lottery_interval: Option<Duration>,
+    block_time: Option<Duration>,
     ticket_price: Option<u64>,
+    prize_distribution: Option<Vec<Decimal256>>,
+    reserve_factor: Option<Decimal256>,
+    split_factor: Option<Decimal256>,
+    unbonding_period: Option<Duration>,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
 
@@ -374,8 +392,32 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
         config.owner = deps.api.canonical_address(&owner)?;
     }
 
+    if let Some(lottery_interval) = lottery_interval {
+        config.lottery_interval = lottery_interval;
+    }
+
+    if let Some(block_time) = block_time {
+        config.block_time = block_time;
+    }
+
     if let Some(ticket_prize) = ticket_price {
         config.ticket_prize = ticket_prize;
+    }
+
+    if let Some(prize_distribution) = prize_distribution {
+        config.prize_distribution = prize_distribution;
+    }
+
+    if let Some(reserve_factor) = reserve_factor {
+        config.reserve_factor = reserve_factor;
+    }
+
+    if let Some(split_factor) = split_factor {
+        config.split_factor = split_factor;
+    }
+
+    if let Some(unbonding_period) = unbonding_period {
+        config.unbonding_period = unbonding_period;
     }
 
     store_config(&mut deps.storage, &config)?;
@@ -405,8 +447,13 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(
         owner: deps.api.human_address(&config.owner)?,
         stable_denom: config.stable_denom,
         anchor_contract: deps.api.human_address(&config.anchor_contract)?,
-        period_prize: config.period_prize,
-        ticket_exchange_rate: config.ticket_exchange_rate,
+        lottery_interval: config.lottery_interval,
+        block_time: config.block_time,
+        ticket_prize: config.ticket_prize,
+        prize_distribution: config.prize_distribution,
+        reserve_factor: config.reserve_factor,
+        split_factor: config.split_factor,
+        unbonding_period: config.unbonding_period,
     })
 }
 
@@ -416,14 +463,18 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<StateResponse> {
     let state: State = read_state(&deps.storage)?;
 
-    //Todo: add block_height logic
+    //TODO: add block_height logic
 
     Ok(StateResponse {
         total_tickets: state.total_tickets,
-        total_reserves: state.total_reserves,
-        last_interest: state.last_interest,
-        total_accrued_interest: state.total_accrued_interest,
+        total_reserve: state.total_reserve,
+        total_deposits: state.total_deposits,
+        lottery_deposits: state.lottery_deposits,
+        shares_supply: state.shares_supply,
         award_available: state.award_available,
-        total_assets: state.total_assets,
+        spendable_balance: state.spendable_balance,
+        current_balance: state.current_balance,
+        current_lottery: state.current_lottery,
+        next_lottery_time: state.next_lottery_time,
     })
 }

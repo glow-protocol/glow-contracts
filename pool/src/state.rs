@@ -12,7 +12,7 @@ use cosmwasm_storage::{
 
 use crate::claims::Claim;
 use crate::prize_strategy::count_seq_matches;
-use cw0::Duration;
+use cw0::{Duration, Expiration};
 
 const KEY_CONFIG: &[u8] = b"config";
 const KEY_STATE: &[u8] = b"state";
@@ -28,13 +28,12 @@ pub struct Config {
     pub a_terra_contract: CanonicalAddr,
     pub stable_denom: String,
     pub anchor_contract: CanonicalAddr,
-    pub lottery_interval: u64, // number of blocks (or time) between lotteries
-    pub block_time: u64,       // number of blocks (or time) lottery is blocked while is executed
-    pub ticket_prize: u64,     // prize of a ticket in stable_denom
+    pub lottery_interval: Duration, // number of blocks (or time) between lotteries
+    pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
+    pub ticket_prize: u64,    // prize of a ticket in stable_denom
     pub prize_distribution: Vec<Decimal256>, // [0, 0, 0.05, 0.15, 0.3, 0.5]
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
-    pub ticket_exchange_rate: Decimal256, //pub mock_anchor_rate // to simulate interest rate accrued
     pub unbonding_period: Duration,
 }
 
@@ -48,9 +47,8 @@ pub struct State {
     pub award_available: Decimal256,
     pub spendable_balance: Decimal256,
     pub current_balance: Uint256,
-    pub current_lottery: Uint256,
-    pub next_lottery_time: u64,
-
+    pub current_lottery: u64,
+    pub next_lottery_time: Expiration,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -114,7 +112,7 @@ pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -
 
 pub fn store_lottery_info<S: Storage>(
     storage: &mut S,
-    lottery_id: Uint256,
+    lottery_id: u64,
     lottery_info: &LotteryInfo,
 ) -> StdResult<()> {
     bucket(PREFIX_LOTTERY, storage).save(&lottery_id.to_be_bytes(), lottery_info)

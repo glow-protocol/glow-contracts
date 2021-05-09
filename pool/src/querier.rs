@@ -79,7 +79,7 @@ pub fn query_depositor_claims<S: Storage, A: Api, Q: Querier>(
     addr: &HumanAddr,
 ) -> StdResult<Vec<Claim>> {
     let address_raw = deps.api.canonical_address(&addr)?;
-    let claims = read_depositor_info(&deps.storage, &address_raw).unbonding_info?;
+    let claims = read_depositor_info(&deps.storage, &address_raw).unbonding_info;
     Ok(claims)
 }
 

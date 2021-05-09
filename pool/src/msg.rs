@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{HumanAddr, Uint128};
+use cosmwasm_std::{HumanAddr};
 
 use cw0::{Duration, Expiration};
 
@@ -13,7 +13,7 @@ pub struct InitMsg {
     pub anchor_contract: HumanAddr,
     pub lottery_interval: Duration,
     pub block_time: Duration,
-    pub ticket_prize: u64,
+    pub ticket_prize: Decimal256,
     pub prize_distribution: Vec<Decimal256>,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
@@ -27,7 +27,7 @@ pub enum HandleMsg {
         combination: String,
     },
     Withdraw {
-        amount: Uint128,
+        amount: u64,
     },
     ExecuteLottery {},
     _HandlePrize {},
@@ -35,7 +35,7 @@ pub enum HandleMsg {
         owner: Option<HumanAddr>,
         lottery_interval: Option<Duration>,
         block_time: Option<Duration>,
-        ticket_prize: Option<u64>,
+        ticket_prize: Option<Decimal256>,
         prize_distribution: Option<Vec<Decimal256>>,
         reserve_factor: Option<Decimal256>,
         split_factor: Option<Decimal256>,
@@ -59,7 +59,7 @@ pub struct ConfigResponse {
     pub anchor_contract: HumanAddr,
     pub lottery_interval: Duration,
     pub block_time: Duration,
-    pub ticket_prize: u64,
+    pub ticket_prize: Decimal256,
     pub prize_distribution: Vec<Decimal256>,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
@@ -71,7 +71,7 @@ pub struct ConfigResponse {
 pub struct StateResponse {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
-    pub total_deposits: Uint256,
+    pub total_deposits: Decimal256,
     pub lottery_deposits: Decimal256,
     pub shares_supply: Decimal256,
     pub award_available: Decimal256,

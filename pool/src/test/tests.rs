@@ -1,7 +1,7 @@
 use crate::contract::{handle, init, query, query_config, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
 use crate::state::{read_config, read_state, store_config, store_state, Config, State};
 
-use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
+use crate::msg::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::test::mock_querier::mock_dependencies;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
@@ -16,8 +16,9 @@ use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use std::str::FromStr;
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
+use std::ops::{Mul, Add};
 
-const TICKET_PRIZE: u64 = 10_000_000;
+const TICKET_PRIZE: u64 = 1000; // 10 as %
 
 #[test]
 fn proper_initialization() {
@@ -35,7 +36,7 @@ fn proper_initialization() {
         anchor_contract: HumanAddr::from("anchor"),
         lottery_interval: WEEK,
         block_time: HOUR,
-        ticket_prize: 10_000_000u64,
+        ticket_prize: Decimal256::percent(TICKET_PRIZE),
         prize_distribution: vec![
             Decimal256::zero(),
             Decimal256::zero(),
@@ -59,7 +60,7 @@ fn proper_initialization() {
 
     let res = init(&mut deps, env.clone(), msg).unwrap();
 
-    assert_eq!(res.messages, InitResponse::default());
+    assert_eq!(res, InitResponse::default());
 
     // Test query config
     let query_res = query(&deps, QueryMsg::Config {}).unwrap();
@@ -68,8 +69,8 @@ fn proper_initialization() {
     assert_eq!("uusd".to_string(), config_res.stable_denom);
     assert_eq!(HumanAddr::from("anchor"), config_res.anchor_contract);
     assert_eq!(WEEK, config_res.lottery_interval);
-    assert_eq!(50u64, config_res.block_time);
-    assert_eq!(10_000_000u64, config_res.ticket_prize);
+    assert_eq!(HOUR, config_res.block_time);
+    assert_eq!(Decimal256::percent(TICKET_PRIZE), config_res.ticket_prize);
     assert_eq!(
         vec![
             Decimal256::zero(),
@@ -88,19 +89,19 @@ fn proper_initialization() {
     // Test query state
     let query_res = query(&deps, QueryMsg::State { block_height: None }).unwrap();
     let state_res: StateResponse = from_binary(&query_res).unwrap();
-    assert_eq!(state_res.total_tickets, Decimal256::zero());
+    assert_eq!(state_res.total_tickets, Uint256::zero());
     assert_eq!(
         state_res.total_reserve,
         Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
     );
-    assert_eq!(state_res.total_deposits, Uint256::zero());
+    assert_eq!(state_res.total_deposits, Decimal256::zero());
     assert_eq!(state_res.lottery_deposits, Decimal256::zero());
     assert_eq!(state_res.shares_supply, Decimal256::zero());
     assert_eq!(state_res.award_available, Decimal256::zero());
-    assert_eq!(state_res.spendable_balance, Decimal256::zero()):
+    assert_eq!(state_res.spendable_balance, Decimal256::zero());
         assert_eq!(
             state_res.current_balance,
-            Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
+            Uint256::from(INITIAL_DEPOSIT_AMOUNT)
         );
     assert_eq!(state_res.current_lottery, 0);
     assert_eq!(state_res.next_lottery_time, WEEK.after(&env.block));
@@ -122,7 +123,7 @@ fn update_config() {
         anchor_contract: HumanAddr::from("anchor"),
         lottery_interval: WEEK,
         block_time: HOUR,
-        ticket_prize: 10_000_000u64,
+        ticket_prize: Decimal256::percent(TICKET_PRIZE),
         prize_distribution: vec![
             Decimal256::zero(),
             Decimal256::zero(),
@@ -239,13 +240,13 @@ fn single_deposit() {
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
-    InitMsg {
+    let msg = InitMsg {
         owner: HumanAddr::from("owner"),
         stable_denom: "uusd".to_string(),
         anchor_contract: HumanAddr::from("anchor"),
         lottery_interval: WEEK,
         block_time: HOUR,
-        ticket_prize: TICKET_PRIZE,
+        ticket_prize: Decimal256::percent(TICKET_PRIZE),
         prize_distribution: vec![
             Decimal256::zero(),
             Decimal256::zero(),
@@ -271,13 +272,13 @@ fn single_deposit() {
 
     // Must deposit stable_denom coins
     let msg = HandleMsg::SingleDeposit {
-        combination: "13579".into_string(),
+        combination: String::from("13579"),
     };
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "ukrw".to_string(),
-            amount: Uint128::from(TICKET_PRIZE),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
 
@@ -306,12 +307,14 @@ fn single_deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
+    let wrong_amount = Decimal256::percent(TICKET_PRIZE * 2) ;
+
     // correct base denom, deposit different to ticket_prize
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(TICKET_PRIZE + 2),
+            amount: (wrong_amount * Uint256::one()).into() ,
         }],
     );
 
@@ -333,13 +336,13 @@ fn single_deposit() {
 
     // Invalid ticket sequence - more number of digits
     let msg = HandleMsg::SingleDeposit {
-        combination: "123579".into_string(),
+        combination: String::from("123579"),
     };
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(TICKET_PRIZE),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
     let res = handle(&mut deps, env, msg.clone());
@@ -358,13 +361,13 @@ fn single_deposit() {
 
     // Invalid ticket sequence - less number of digits
     let msg = HandleMsg::SingleDeposit {
-        combination: "1359".into_string(),
+        combination: String::from("1359"),
     };
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(TICKET_PRIZE),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
     let res = handle(&mut deps, env, msg.clone());
@@ -383,13 +386,13 @@ fn single_deposit() {
 
     // Invalid ticket sequence - only numbers allowed
     let msg = HandleMsg::SingleDeposit {
-        combination: "1e579".into_string(),
+        combination: String::from("1e579"),
     };
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(TICKET_PRIZE),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
     let res = handle(&mut deps, env, msg.clone());
@@ -408,13 +411,13 @@ fn single_deposit() {
 
     // Correct single deposit - buys one ticket
     let msg = HandleMsg::SingleDeposit {
-        combination: "13579".into_string(),
+        combination: String::from("13579"),
     };
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(TICKET_PRIZE),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
 
@@ -429,7 +432,7 @@ fn single_deposit() {
 
      */
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = handle(&mut deps, env, msg.clone()).unwrap();
 
     // TODO: How do we mock Anchor queries?
     assert_eq!(
@@ -445,12 +448,12 @@ fn single_deposit() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            contract_addr: HumanAddr::from("anchor"),
             send: vec![Coin {
-                denom: "uusd".into_string(),
-                amount: Uint128::from(TICKET_PRIZE),
+                denom: String::from("uusd"),
+                amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
             }],
-            msg: to_binary(&AnchorMsg::DepositStable {})?,
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
         })]
     );
 

@@ -1,10 +1,6 @@
-use cosmwasm_std::{
-    from_binary, log, to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
-    HandleResponse, HandleResult, HumanAddr, InitResponse, InitResult, Querier, StdError,
-    StdResult, Storage, Uint128, WasmMsg,
-};
+use cosmwasm_std::{log, to_binary, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Env, HandleResponse, HandleResult, InitResponse, InitResult, StdError, StdResult, Storage, Uint128, WasmMsg, Api, Querier, Extern, HumanAddr};
 
-use crate::msg::{ConfigResponse, Cw20HookMsg, HandleMsg, InitMsg, QueryMsg, StateResponse};
+use crate::msg::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_token_balance};
 use crate::state::{
@@ -14,17 +10,13 @@ use crate::state::{
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use serde::__private::de::IdentifierDeserializer;
-use snafu::guide::examples::backtrace::Error::UsedInTightLoop;
 
 use cw0::{Duration, WEEK};
 use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
-use terraswap::hook::InitHook;
-use terraswap::token::InitMsg as TokenInitMsg;
-
 use crate::claims::{claim_deposits, Claim};
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
+use std::ops::{Sub, Add};
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
@@ -75,7 +67,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         &State {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::from_uint256(initial_deposit),
-            total_deposits: Uint256::zero(),
+            total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
             award_available: Decimal256::zero(),
@@ -92,13 +84,13 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 pub fn handle<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    msg: HandleMsg,
+    msg: HandleMsg
 ) -> HandleResult {
     match msg {
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::Withdraw { amount } => withdraw(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
-        HandleMsg::_HandlePrize {} => _handle_prize(deps, env, info),
+        HandleMsg::_HandlePrize {} => _handle_prize(deps, env),
         HandleMsg::UpdateConfig {
             owner,
             lottery_interval,
@@ -149,7 +141,7 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     }
 
     //TODO: consider accepting any amount and moving the rest to redeemable_amount balance
-    if deposit_amount != config.ticket_prize {
+    if deposit_amount != config.ticket_prize * Uint256::one() {
         return Err(StdError::generic_err(format!(
             "Deposit amount must be equal to a ticket prize: {} {}",
             config.ticket_prize, config.stable_denom
@@ -171,7 +163,7 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     }
 
     let depositor = deps.api.canonical_address(&env.message.sender)?;
-    let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor)?;
+    let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor);
 
     // query exchange_rate from anchor money market
     let anchor_exchange_rate =
@@ -179,9 +171,9 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
 
     // add amount of aUST entitled from the deposit
     let minted_amount = Decimal256::from_uint256(deposit_amount) / anchor_exchange_rate;
-    depositor_info.deposit_amount += deposit_amount;
-    depositor_info.shares += minted_amount;
-    depositor_info.tickets.push(combination);
+    depositor_info.deposit_amount.add(Decimal256::from_uint256(deposit_amount));
+    depositor_info.shares.add(minted_amount);
+    depositor_info.tickets.push(combination.clone());
 
     // Update depositor information
     store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
@@ -189,10 +181,10 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     store_sequence_info(&mut deps.storage, depositor, &combination)?;
 
     // Update global state
-    state.total_tickets += Uint256::one();
-    state.total_deposits += deposit_amount;
-    state.shares_supply += minted_amount;
-    state.lottery_deposits += Decimal256::from_uint256(deposit_amount) * config.split_factor;
+    state.total_tickets.add(Uint256::one());
+    state.total_deposits.add(Decimal256::from_uint256(deposit_amount));
+    state.shares_supply.add(minted_amount);
+    state.lottery_deposits.add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
     store_state(&mut deps.storage, &state)?;
 
     Ok(HandleResponse {
@@ -200,7 +192,7 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![Coin {
                 denom: config.stable_denom,
-                amount: Uint128::from(deposit_amount),
+                amount: deposit_amount.into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],
@@ -218,21 +210,21 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    amount: Uint128, // amount of tickets
+    amount: u64, // amount of tickets
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
 
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw)?;
+    let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
 
-    if amount == Uint128::zero() {
+    if amount == 0 {
         return Err(StdError::generic_err(
             "Amount of tickets must be greater than zero",
         ));
     }
 
-    if amount > depositor.tickets.len() as Uint128 {
+    if amount > depositor.tickets.len() as u64 {
         return Err(StdError::generic_err(format!(
             "User has {} tickets but {} tickets were requested to be withdrawn",
             amount,
@@ -243,37 +235,38 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let mut tickets = depositor.tickets.clone();
 
     // Remove amount of tickets randomly from user's vector of sequences
-    let ticket_removed: Vec<String> = tickets.drain(0..amount).collect();
+    let ticket_removed: Vec<String> = tickets.drain(0..amount as usize).collect();
     depositor.tickets = tickets;
 
     // Remove depositor's address from holders Sequence
     ticket_removed.iter().map(|seq| {
-        let mut holders: Vec<CanonicalAddr> = read_sequence_info(&mut deps.storage, seq)?;
+        let mut holders: Vec<CanonicalAddr> = read_sequence_info(&mut deps.storage, seq);
         let index = holders.iter().position(|x| *x == sender_raw).unwrap();
-        holders.remove(index)?;
-        sequence_bucket(&mut deps.storage).save(seq.as_bytes(), &holders)?;
+        holders.remove(index);
+        sequence_bucket(&mut deps.storage).save(seq.as_bytes(), &holders);
     });
 
-    let unbonding_amount = config.ticket_prize * amount;
+    let unbonding_amount = config.ticket_prize * Decimal256::from_uint256(amount);
 
     // Place amount in unbonding state as a claim
     depositor.unbonding_info.push(Claim {
         amount: unbonding_amount,
         release_at: config.unbonding_period.after(&env.block),
-    })?;
+    });
 
     // Withdraw from Anchor the proportional amount of total user deposits
-    let unbonding_ratio: Uint256 = unbonding_amount / depositor.deposit_amount;
-    depositor.deposit_amount -= unbonding_amount;
+    let unbonding_ratio: Decimal256 =
+        unbonding_amount / depositor.deposit_amount;
+    depositor.deposit_amount.sub(unbonding_amount);
 
     // Calculate amount of pool shares to be redeemed
     let redeem_amount_shares = unbonding_ratio * depositor.shares;
-    depositor.shares -= redeem_amount_shares;
+    depositor.shares.sub(redeem_amount_shares);
 
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     // Calculate fraction of shares to be redeemed out of the global pool
-    let withdraw_ratio = Decimal256::from_uint256(redeem_amount_shares) / state.shares_supply;
+    let withdraw_ratio = redeem_amount_shares / state.shares_supply;
     // Get contract's total balance of aUST
     let contract_a_balance = query_token_balance(
         deps,
@@ -286,19 +279,19 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let redeem_amount = withdraw_ratio * contract_a_balance;
 
     // Update global state
-    state.total_tickets -= amount;
-    state.shares_supply -= redeem_amount_shares;
-    state.total_deposits -= unbonding_amount;
-    state.lottery_deposits -= unbonding_amount * config.split_factor; // feels unnecessary
+    state.total_tickets.sub(Uint256::from(amount));
+    state.shares_supply.sub(redeem_amount_shares);
+    state.total_deposits.sub(unbonding_amount);
+    state.lottery_deposits.sub(unbonding_amount * config.split_factor); // feels unnecessary
     store_state(&mut deps.storage, &state)?;
 
     // Message for redeem amount operation of aUST
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: deps.api.human_address(&config.a_terra_contract)?,
         send: vec![],
-        msg: to_binary(&Cw20Send {
+        msg: to_binary(&Cw20HandleMsg::Send {
             contract: deps.api.human_address(&config.a_terra_contract)?,
-            amount: Uint128::from(redeem_amount),
+            amount: redeem_amount.into(),
             msg: Some(to_binary(&Cw20HookMsg::RedeemStable {})?),
         })?,
     });
@@ -306,9 +299,9 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![redeem_msg],
         log: vec![
-            log("action", "withdraw_ticket")
-            log("tickets_amount", amount)
-            log("redeem_amount_anchor", redeem_amount)
+            log("action", "withdraw_ticket"),
+            log("tickets_amount", amount),
+            log("redeem_amount_anchor", redeem_amount),
         ],
         data: None,
     })
@@ -320,7 +313,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     env: Env,
     amount: Option<Uint128>,
 ) -> HandleResult {
-    if amount.unwrap() == 0 {
+    if amount.unwrap().is_zero() {
         return Err(StdError::generic_err(
             "Claim amount must be greater than zero",
         ));
@@ -332,7 +325,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     let mut to_send = claim_deposits(&mut deps.storage, &sender_raw, &env.block, amount)?;
 
     //TODO: doing two consecutive reads here, need to refactor
-    let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw)?;
+    let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
     to_send += depositor.redeemable_amount;
     if to_send == Uint128(0) {
         return Err(StdError::generic_err(
@@ -346,8 +339,8 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         String::from("uusd"),
     )?;
 
-    if to_send > balance {
-        Err(StdError::generic_err("Not enough funds to pay the claim"))
+    if to_send > balance.into() {
+        return Err(StdError::generic_err("Not enough funds to pay the claim"));
     }
 
     depositor.redeemable_amount = Uint128::zero();
@@ -375,7 +368,7 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     owner: Option<HumanAddr>,
     lottery_interval: Option<Duration>,
     block_time: Option<Duration>,
-    ticket_price: Option<u64>,
+    ticket_price: Option<Decimal256>,
     prize_distribution: Option<Vec<Decimal256>>,
     reserve_factor: Option<Decimal256>,
     split_factor: Option<Decimal256>,

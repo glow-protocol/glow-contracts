@@ -1,5 +1,8 @@
 use crate::contract::{handle, init, query, query_config, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
-use crate::state::{read_config, read_state, store_config, store_state, Config, State};
+use crate::state::{
+    read_config, read_depositor_info, read_sequence_info, read_state, store_config, store_state,
+    Config, DepositorInfo, State,
+};
 
 use crate::msg::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, StateResponse};
 use crate::test::mock_querier::mock_dependencies;
@@ -19,6 +22,9 @@ use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 
 const TICKET_PRIZE: u64 = 1000; // 10 as %
+const SPLIT_FACTOR: u64 = 75; // as a %
+const RESERVE_FACTOR: u64 = 5; // as a %
+const RATE: u64 = 1023; // as a permille
 
 #[test]
 fn proper_initialization() {
@@ -45,8 +51,8 @@ fn proper_initialization() {
             Decimal256::percent(30),
             Decimal256::percent(50),
         ],
-        reserve_factor: Decimal256::percent(5),
-        split_factor: Decimal256::percent(75),
+        reserve_factor: Decimal256::percent(RESERVE_FACTOR),
+        split_factor: Decimal256::percent(SPLIT_FACTOR),
         unbonding_period: WEEK,
     };
 
@@ -409,8 +415,6 @@ fn single_deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
-
     // Correct single deposit - buys one ticket
     let msg = HandleMsg::SingleDeposit {
         combination: String::from("13579"),
@@ -423,6 +427,9 @@ fn single_deposit() {
         }],
     );
 
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+
     /*
     deps.querier.update_balance(
         HumanAddr::from(MOCK_CONTRACT_ADDR),
@@ -431,21 +438,51 @@ fn single_deposit() {
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + TICKET_PRIZE,
         }],
     );
-
      */
 
-    let res = handle(&mut deps, env, msg.clone()).unwrap();
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
 
-    // TODO: How do we mock Anchor queries?
+    // Check address of sender was stored correctly in the sequence bucket
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("13579")),
+        vec![deps
+            .api
+            .canonical_address(&HumanAddr::from("addr0000"))
+            .unwrap()]
+    );
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0000"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::percent(TICKET_PRIZE),
+            shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
+            redeemable_amount: Uint128(0),
+            tickets: vec![String::from("13579")],
+            unbonding_info: vec![]
+        }
+    );
 
     assert_eq!(
-        res.log,
-        vec![
-            log("action", "single_deposit"),
-            log("depositor", "addr0000"),
-            log("deposit_amount", "1000000"),
-            log("deposit_amount", "1000000"),
-        ]
+        read_state(&deps.storage).unwrap(),
+        State {
+            total_tickets: Uint256::one(),
+            total_reserve: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            total_deposits: Decimal256::percent(TICKET_PRIZE),
+            lottery_deposits: Decimal256::percent(TICKET_PRIZE) * Decimal256::percent(SPLIT_FACTOR),
+            shares_supply: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
+            award_available: Decimal256::zero(),
+            spendable_balance: Decimal256::zero(),
+            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&env.block)
+        }
     );
 
     assert_eq!(
@@ -460,7 +497,18 @@ fn single_deposit() {
         })]
     );
 
-    // TODO: query state and depositor's info to check it's been changed correctly
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "single_deposit"),
+            log("depositor", "addr0000"),
+            log("deposit_amount", Decimal256::percent(TICKET_PRIZE)),
+            log(
+                "shares_minted",
+                Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)
+            ),
+        ]
+    );
 }
 
 #[test]

@@ -136,7 +136,7 @@ pub fn store_sequence_info<S: Storage>(
     sequence_bucket(storage).save(sequence.as_bytes(), &holders)
 }
 
-pub fn read_sequence_info<S: Storage>(storage: &mut S, sequence: &String) -> Vec<CanonicalAddr> {
+pub fn read_sequence_info<S: Storage>(storage: &S, sequence: &String) -> Vec<CanonicalAddr> {
     match bucket_read(PREFIX_SEQUENCE, storage).load(sequence.as_bytes()) {
         Ok(v) => v,
         _ => vec![],

@@ -91,7 +91,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     // TODO: Get random sequence here
     // TODO: deduct terra taxes and oracle fees
-    let winning_sequence = String::from("34280");
+    let winning_sequence = String::from("00000");
 
     // Get contract current uusd balance
     let curr_balance = query_balance(

@@ -9,8 +9,8 @@ use crate::test::mock_querier::mock_dependencies;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, log, to_binary, Api, BankMsg, Coin, CosmosMsg, Decimal, HandleResponse, HumanAddr,
-    InitResponse, StdError, Uint128, WasmMsg,
+    from_binary, log, to_binary, Api, BankMsg, Coin, CosmosMsg, Decimal, Extern, HandleResponse,
+    HumanAddr, InitResponse, Querier, StdError, Storage, Uint128, WasmMsg,
 };
 use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
@@ -25,6 +25,10 @@ const TICKET_PRIZE: u64 = 1000; // 10 as %
 const SPLIT_FACTOR: u64 = 75; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const RATE: u64 = 1023; // as a permille
+
+fn initialize<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
+    // TODO: Refactor tests
+}
 
 #[test]
 fn proper_initialization() {
@@ -502,6 +506,274 @@ fn single_deposit() {
         vec![
             log("action", "single_deposit"),
             log("depositor", "addr0000"),
+            log("deposit_amount", Decimal256::percent(TICKET_PRIZE)),
+            log(
+                "shares_minted",
+                Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)
+            ),
+        ]
+    );
+
+    // TODO: same address, buys second ticket but same sequence - should fail
+
+    // Same address, correctly buys second ticket different sequence
+    let msg = HandleMsg::SingleDeposit {
+        combination: String::from("23456"),
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        }],
+    );
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check address of sender was stored correctly in the sequence bucket
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("23456")),
+        vec![deps
+            .api
+            .canonical_address(&HumanAddr::from("addr0000"))
+            .unwrap()]
+    );
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0000"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::percent(TICKET_PRIZE * 2),
+            shares: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE))
+                .mul(Decimal256::percent(200)),
+            redeemable_amount: Uint128(0),
+            tickets: vec![String::from("13579"), String::from("23456")],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        read_state(&deps.storage).unwrap(),
+        State {
+            total_tickets: Uint256::from(2u64),
+            total_reserve: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 2),
+            lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2)
+                * Decimal256::percent(SPLIT_FACTOR),
+            shares_supply: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE))
+                .mul(Decimal256::percent(200)),
+            award_available: Decimal256::zero(),
+            spendable_balance: Decimal256::zero(),
+            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&env.block)
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("anchor"),
+            send: vec![Coin {
+                denom: String::from("uusd"),
+                amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+        })]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "single_deposit"),
+            log("depositor", "addr0000"),
+            log("deposit_amount", Decimal256::percent(TICKET_PRIZE)),
+            log(
+                "shares_minted",
+                Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)
+            ),
+        ]
+    );
+
+    // New address, buys the 3rd overall ticket with a new sequence
+    let msg = HandleMsg::SingleDeposit {
+        combination: String::from("98765"),
+    };
+    let env = mock_env(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        }],
+    );
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check address of sender was stored correctly in the sequence bucket
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("98765")),
+        vec![deps
+            .api
+            .canonical_address(&HumanAddr::from("addr0001"))
+            .unwrap()]
+    );
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0001"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::percent(TICKET_PRIZE),
+            shares: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)),
+            redeemable_amount: Uint128(0),
+            tickets: vec![String::from("98765")],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        read_state(&deps.storage).unwrap(),
+        State {
+            total_tickets: Uint256::from(3u64),
+            total_reserve: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 3),
+            lottery_deposits: Decimal256::percent(TICKET_PRIZE * 3)
+                * Decimal256::percent(SPLIT_FACTOR),
+            shares_supply: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE))
+                .mul(Decimal256::percent(300)),
+            award_available: Decimal256::zero(),
+            spendable_balance: Decimal256::zero(),
+            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&env.block)
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("anchor"),
+            send: vec![Coin {
+                denom: String::from("uusd"),
+                amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+        })]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "single_deposit"),
+            log("depositor", "addr0001"),
+            log("deposit_amount", Decimal256::percent(TICKET_PRIZE)),
+            log(
+                "shares_minted",
+                Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)
+            ),
+        ]
+    );
+
+    // New address, buy ticket with existing sequence
+    let msg = HandleMsg::SingleDeposit {
+        combination: String::from("23456"),
+    };
+    let env = mock_env(
+        "addr0002",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        }],
+    );
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check address of sender was stored correctly in the sequence bucket
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("23456")),
+        vec![
+            deps.api
+                .canonical_address(&HumanAddr::from("addr0000"))
+                .unwrap(),
+            deps.api
+                .canonical_address(&HumanAddr::from("addr0002"))
+                .unwrap()
+        ]
+    );
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0002"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::percent(TICKET_PRIZE),
+            shares: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)),
+            redeemable_amount: Uint128(0),
+            tickets: vec![String::from("23456")],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        read_state(&deps.storage).unwrap(),
+        State {
+            total_tickets: Uint256::from(4u64),
+            total_reserve: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 4),
+            lottery_deposits: Decimal256::percent(TICKET_PRIZE * 4)
+                * Decimal256::percent(SPLIT_FACTOR),
+            shares_supply: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE))
+                .mul(Decimal256::percent(400)),
+            award_available: Decimal256::zero(),
+            spendable_balance: Decimal256::zero(),
+            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&env.block)
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("anchor"),
+            send: vec![Coin {
+                denom: String::from("uusd"),
+                amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+        })]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "single_deposit"),
+            log("depositor", "addr0002"),
             log("deposit_amount", Decimal256::percent(TICKET_PRIZE)),
             log(
                 "shares_minted",

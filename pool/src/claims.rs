@@ -2,14 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{
-    Api, BlockInfo, CanonicalAddr, Extern, HumanAddr, Order, Querier, StdError, StdResult, Storage,
-    Uint128,
-};
-use cosmwasm_storage::{
-    bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
-    Singleton,
-};
+use cosmwasm_std::{Api, BlockInfo, CanonicalAddr, StdError, StdResult, Storage, Uint128};
 
 use crate::state::{read_depositor_info, store_depositor_info};
 use cw0::Expiration;
@@ -24,16 +17,14 @@ pub fn create_claim<S: Storage>(
     release_at: Expiration,
 ) -> StdResult<()> {
     let mut depositor = read_depositor_info(storage, addr);
-    depositor
-        .unbonding_info
-        .push(Claim { amount, release_at });
+    depositor.unbonding_info.push(Claim { amount, release_at });
     store_depositor_info(storage, addr, &depositor)?;
     Ok(())
 }
 
 /// This iterates over all mature claims for the address, and removes them, up to an optional cap.
 /// it removes the finished claims and returns the total amount of tokens to be released.
-pub fn claim_deposits<S:Storage>(
+pub fn claim_deposits<S: Storage>(
     storage: &mut S,
     addr: &CanonicalAddr,
     block: &BlockInfo,
@@ -45,7 +36,7 @@ pub fn claim_deposits<S:Storage>(
     if depositor.unbonding_info.len() == 0 {
         return Err(StdError::generic_err(
             "Depositor does not have any outstanding claims",
-        ))
+        ));
     }
 
     let (_send, waiting): (Vec<_>, _) = depositor.unbonding_info.iter().cloned().partition(|c| {

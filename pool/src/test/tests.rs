@@ -13,10 +13,10 @@ use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
 use cw0::{Duration, HOUR, WEEK};
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
+use std::ops::{Add, Mul};
 use std::str::FromStr;
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
-use std::ops::{Mul, Add};
 
 const TICKET_PRIZE: u64 = 1000; // 10 as %
 
@@ -99,10 +99,10 @@ fn proper_initialization() {
     assert_eq!(state_res.shares_supply, Decimal256::zero());
     assert_eq!(state_res.award_available, Decimal256::zero());
     assert_eq!(state_res.spendable_balance, Decimal256::zero());
-        assert_eq!(
-            state_res.current_balance,
-            Uint256::from(INITIAL_DEPOSIT_AMOUNT)
-        );
+    assert_eq!(
+        state_res.current_balance,
+        Uint256::from(INITIAL_DEPOSIT_AMOUNT)
+    );
     assert_eq!(state_res.current_lottery, 0);
     assert_eq!(state_res.next_lottery_time, WEEK.after(&env.block));
 }
@@ -307,14 +307,14 @@ fn single_deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let wrong_amount = Decimal256::percent(TICKET_PRIZE * 2) ;
+    let wrong_amount = Decimal256::percent(TICKET_PRIZE * 2);
 
     // correct base denom, deposit different to ticket_prize
     let env = mock_env(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (wrong_amount * Uint256::one()).into() ,
+            amount: (wrong_amount * Uint256::one()).into(),
         }],
     );
 
@@ -325,7 +325,7 @@ fn single_deposit() {
                 msg,
                 format!(
                     "Deposit amount must be equal to a ticket prize: {} uusd",
-                    TICKET_PRIZE
+                    Decimal256::percent(TICKET_PRIZE)
                 )
             )
         }

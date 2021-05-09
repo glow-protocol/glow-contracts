@@ -2,19 +2,18 @@ use crate::msg::HandleMsg;
 use crate::querier::query_balance;
 use crate::state::{
     read_all_sequences, read_config, read_depositor_info, read_matching_sequences,
-    read_sequence_info, read_state, store_config, store_depositor_info, store_lottery_info,
-    store_sequence_info, store_state, LotteryInfo,
+    read_sequence_info, read_state, store_depositor_info, store_lottery_info, store_sequence_info,
+    store_state, LotteryInfo,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    log, to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
-    HandleResponse, HandleResult, Querier,
-    StdError, Storage, WasmMsg,
+    log, to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Env, Extern, HandleResponse, HandleResult,
+    Querier, StdError, Storage, WasmMsg,
 };
 use cw20::Cw20HandleMsg::Send as Cw20Send;
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
-use std::ops::{Add, Sub};
 use std::collections::HashMap;
+use std::ops::{Add, Sub};
 
 pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -31,7 +30,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     }
 
     if state.next_lottery_time.is_expired(&env.block) {
-        state.next_lottery_time.add(config.lottery_interval);
+        state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
     } else {
         return Err(StdError::generic_err(format!(
             "Lottery is still running, please check again after {}",
@@ -79,7 +78,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub fn _handle_prize<S:Storage, A: Api, Q: Querier>(
+pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
 ) -> HandleResult {
@@ -130,13 +129,14 @@ pub fn _handle_prize<S:Storage, A: Api, Q: Querier>(
         for winner in winners {
             let mut depositor = read_depositor_info(&deps.storage, winner);
 
-            let assigned = assign_prize(prize, number_winners, *matches , &config.prize_distribution);
+            let assigned =
+                assign_prize(prize, number_winners, *matches, &config.prize_distribution);
 
             total_awarded_prize += assigned;
             let reserve_commission = apply_reserve_factor(assigned, config.reserve_factor);
             total_reserve_commission += reserve_commission;
             let amount_redeem = (assigned - reserve_commission) * Uint256::one();
-            depositor.redeemable_amount.add(amount_redeem.into());
+            depositor.redeemable_amount = depositor.redeemable_amount.add(amount_redeem.into());
 
             store_depositor_info(&mut deps.storage, winner, &depositor)?;
         }
@@ -151,10 +151,10 @@ pub fn _handle_prize<S:Storage, A: Api, Q: Querier>(
 
     store_lottery_info(&mut deps.storage, state.current_lottery, &lottery_info)?;
 
-    state.next_lottery_time.add(config.lottery_interval);
+    state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
     state.current_lottery += 1;
-    state.total_reserve.add(total_reserve_commission);
-    state.award_available.sub(total_awarded_prize);
+    state.total_reserve = state.total_reserve.add(total_reserve_commission);
+    state.award_available = state.award_available.sub(total_awarded_prize);
     //TODO: update total_assets and spendable_balance??
     store_state(&mut deps.storage, &state)?;
 
@@ -179,7 +179,12 @@ fn apply_reserve_factor(awarded_amount: Decimal256, reserve_factor: Decimal256) 
 }
 
 // distribution is a vector [0, 0, 0.025, 0.15, 0.3, 0.5]
-fn assign_prize(awardable_prize: Decimal256, matches: u8 ,winners: u8, distribution: &Vec<Decimal256>) -> Decimal256 {
+fn assign_prize(
+    awardable_prize: Decimal256,
+    matches: u8,
+    winners: u8,
+    distribution: &Vec<Decimal256>,
+) -> Decimal256 {
     let number_winners = Uint256::from(winners as u64);
     awardable_prize * distribution[matches as usize] / Decimal256::from_uint256(number_winners)
 }

@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{HumanAddr};
+use cosmwasm_std::HumanAddr;
 
 use cw0::{Duration, Expiration};
 

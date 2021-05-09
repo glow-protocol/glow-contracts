@@ -2,11 +2,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Api, CanonicalAddr, Extern, Order, Querier, StdResult, Storage, Uint128, StdError};
-use cosmwasm_storage::{
-    bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton,
-    Singleton,
+use cosmwasm_std::{
+    Api, CanonicalAddr, Extern, Order, Querier, StdError, StdResult, Storage, Uint128,
 };
+use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 
 use crate::claims::Claim;
 use crate::prize_strategy::count_seq_matches;
@@ -28,7 +27,7 @@ pub struct Config {
     pub anchor_contract: CanonicalAddr,
     pub lottery_interval: Duration, // number of blocks (or time) between lotteries
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
-    pub ticket_prize: Decimal256,    // prize of a ticket in stable_denom
+    pub ticket_prize: Decimal256, // prize of a ticket in stable_denom
     pub prize_distribution: Vec<Decimal256>, // [0, 0, 0.05, 0.15, 0.3, 0.5]
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
@@ -117,13 +116,10 @@ pub fn store_lottery_info<S: Storage>(
 }
 
 pub fn read_lottery_info<S: Storage>(storage: &S, lottery_id: u128) -> Option<LotteryInfo> {
-    match bucket_read(PREFIX_LOTTERY, storage).load(&lottery_id.to_be_bytes()){
-        Ok (v) => v,
-        _ => None
+    match bucket_read(PREFIX_LOTTERY, storage).load(&lottery_id.to_be_bytes()) {
+        Ok(v) => v,
+        _ => None,
     }
-
-
-
 }
 
 pub fn sequence_bucket<S: Storage>(storage: &mut S) -> Bucket<S, Vec<CanonicalAddr>> {
@@ -178,7 +174,7 @@ pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
     start_after: Option<CanonicalAddr>,
     limit: Option<u32>,
     win_sequence: &String,
-) ->  Vec<(u8, Vec<CanonicalAddr>)>  {
+) -> Vec<(u8, Vec<CanonicalAddr>)> {
     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
         bucket_read(PREFIX_SEQUENCE, &deps.storage);
 

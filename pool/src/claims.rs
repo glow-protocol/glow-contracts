@@ -9,7 +9,7 @@ use cw0::Expiration;
 
 // TODO: helper functions should be methods, check cw_controllers
 /// This creates a claim, such that the given address can claim an amount of tokens after
-/// the release date.
+/// the release date. Fn not used at the moment
 pub fn create_claim<S: Storage>(
     storage: &mut S,
     addr: &CanonicalAddr,

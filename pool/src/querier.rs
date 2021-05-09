@@ -17,14 +17,14 @@ use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 pub fn query_exchange_rate<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     money_market_addr: &HumanAddr,
-) -> StdResult<Decimal256> {
+) -> StdResult<EpochStateResponse> {
     let epoch_state: EpochStateResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: HumanAddr::from(money_market_addr),
             msg: to_binary(&AnchorMsg::EpochState { block_height: None })?,
         }))?;
 
-    Ok(epoch_state.exchange_rate)
+    Ok(epoch_state)
 }
 
 pub fn query_all_balances<S: Storage, A: Api, Q: Querier>(

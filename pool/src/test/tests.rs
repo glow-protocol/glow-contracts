@@ -409,6 +409,8 @@ fn single_deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+
     // Correct single deposit - buys one ticket
     let msg = HandleMsg::SingleDeposit {
         combination: String::from("13579"),
@@ -435,6 +437,7 @@ fn single_deposit() {
     let res = handle(&mut deps, env, msg.clone()).unwrap();
 
     // TODO: How do we mock Anchor queries?
+
     assert_eq!(
         res.log,
         vec![

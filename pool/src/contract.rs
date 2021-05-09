@@ -19,7 +19,7 @@ use cw0::{Duration, WEEK};
 use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
 use crate::claims::{claim_deposits, Claim};
-use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
+use moneymarket::market::{Cw20HookMsg, EpochStateResponse, HandleMsg as AnchorMsg};
 use std::ops::{Add, Sub};
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
@@ -170,11 +170,11 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor);
 
     // query exchange_rate from anchor money market
-    let anchor_exchange_rate =
+    let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
 
     // add amount of aUST entitled from the deposit
-    let minted_amount = Decimal256::from_uint256(deposit_amount) / anchor_exchange_rate;
+    let minted_amount = Decimal256::from_uint256(deposit_amount) / epoch_state.exchange_rate;
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
         .add(Decimal256::from_uint256(deposit_amount));

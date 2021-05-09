@@ -11,8 +11,16 @@ use cosmwasm_storage::to_length_prefixed;
 use cw20::TokenInfoResponse;
 use std::collections::HashMap;
 
+use moneymarket::market::EpochStateResponse;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 //TODO: remember to check TaxCapResponse and TaxRateResponse logic
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryMsg {
+    /// Query exchange rate to Anchor money market contract
+    EpochState { block_height: Option<u64> },
+}
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -38,6 +46,7 @@ pub struct WasmMockQuerier {
     base: MockQuerier<TerraQueryWrapper>,
     token_querier: TokenQuerier,
     tax_querier: TaxQuerier,
+    exchange_rate_querier: ExchangeRateQuerier,
     canonical_length: usize,
 }
 
@@ -94,6 +103,17 @@ pub(crate) fn caps_to_map(caps: &[(&String, &Uint128)]) -> HashMap<String, Uint1
     owner_map
 }
 
+#[derive(Clone, Default)]
+pub struct ExchangeRateQuerier {
+    exchange_rate: Decimal256,
+}
+
+impl ExchangeRateQuerier {
+    pub fn new(exchange_rate: Decimal256) -> Self {
+        ExchangeRateQuerier { exchange_rate }
+    }
+}
+
 impl Querier for WasmMockQuerier {
     fn raw_query(&self, bin_request: &[u8]) -> QuerierResult {
         // MockQuerier doesn't support Custom, so we ignore it completely here
@@ -136,6 +156,17 @@ impl WasmMockQuerier {
                     }
                 } else {
                     panic!("DO NOT ENTER HERE")
+                }
+            }
+
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
+                match from_binary(&msg).unwrap() {
+                    QueryMsg::EpochState { block_height: _ } => {
+                        Ok(to_binary(&EpochStateResponse {
+                            exchange_rate: Decimal256::permille(1023), // Current anchor rate,
+                            aterra_supply: Uint256::one(),
+                        }))
+                    }
                 }
             }
 
@@ -217,6 +248,7 @@ impl WasmMockQuerier {
             base,
             token_querier: TokenQuerier::default(),
             tax_querier: TaxQuerier::default(),
+            exchange_rate_querier: ExchangeRateQuerier::default(),
             canonical_length,
         }
     }
@@ -233,5 +265,10 @@ impl WasmMockQuerier {
     // configure the mint whitelist mock querier
     pub fn with_token_balances(&mut self, balances: &[(&HumanAddr, &[(&HumanAddr, &Uint128)])]) {
         self.token_querier = TokenQuerier::new(balances);
+    }
+
+    // configure anchor exchange rate
+    pub fn with_exchange_rate(&mut self, rate: Decimal256) {
+        self.exchange_rate_querier = ExchangeRateQuerier::new(rate);
     }
 }

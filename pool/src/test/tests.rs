@@ -9,11 +9,12 @@ use crate::test::mock_querier::mock_dependencies;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, log, to_binary, Api, BankMsg, Coin, CosmosMsg, Decimal, Extern, HandleResponse,
-    HumanAddr, InitResponse, Querier, StdError, Storage, Uint128, WasmMsg,
+    from_binary, log, to_binary, Api, BankMsg, Coin, CosmosMsg, Decimal, Env, Extern,
+    HandleResponse, HumanAddr, InitResponse, Querier, StdError, Storage, Uint128, WasmMsg,
 };
 use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
+use crate::claims::Claim;
 use cw0::{Duration, HOUR, WEEK};
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use std::ops::{Add, Mul};
@@ -26,24 +27,15 @@ const SPLIT_FACTOR: u64 = 75; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const RATE: u64 = 1023; // as a permille
 
-fn initialize<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
-    // TODO: Refactor tests
-}
-
-#[test]
-fn proper_initialization() {
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
+fn initialize<S: Storage, A: Api, Q: Querier>(
+    mut deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> InitResponse {
     let msg = InitMsg {
         owner: HumanAddr::from("owner"),
         stable_denom: "uusd".to_string(),
         anchor_contract: HumanAddr::from("anchor"),
+        aterra_contract: HumanAddr::from("aterra"),
         lottery_interval: WEEK,
         block_time: HOUR,
         ticket_prize: Decimal256::percent(TICKET_PRIZE),
@@ -60,6 +52,19 @@ fn proper_initialization() {
         unbonding_period: WEEK,
     };
 
+    init(&mut deps, env.clone(), msg).unwrap()
+}
+
+#[test]
+fn proper_initialization() {
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
     let env = mock_env(
         "addr0000",
         &[Coin {
@@ -68,8 +73,7 @@ fn proper_initialization() {
         }],
     );
 
-    let res = init(&mut deps, env.clone(), msg).unwrap();
-
+    let res = initialize(&mut deps, env.clone());
     assert_eq!(res, InitResponse::default());
 
     // Test query config
@@ -127,26 +131,6 @@ fn update_config() {
         }],
     );
 
-    let msg = InitMsg {
-        owner: HumanAddr::from("owner"),
-        stable_denom: "uusd".to_string(),
-        anchor_contract: HumanAddr::from("anchor"),
-        lottery_interval: WEEK,
-        block_time: HOUR,
-        ticket_prize: Decimal256::percent(TICKET_PRIZE),
-        prize_distribution: vec![
-            Decimal256::zero(),
-            Decimal256::zero(),
-            Decimal256::percent(5),
-            Decimal256::percent(15),
-            Decimal256::percent(30),
-            Decimal256::percent(50),
-        ],
-        reserve_factor: Decimal256::percent(5),
-        split_factor: Decimal256::percent(75),
-        unbonding_period: WEEK,
-    };
-
     let env = mock_env(
         "addr0000",
         &[Coin {
@@ -155,7 +139,7 @@ fn update_config() {
         }],
     );
 
-    let _res = init(&mut deps, env.clone(), msg).unwrap();
+    let _res = initialize(&mut deps, env.clone());
 
     // update owner
     let env = mock_env("owner", &[]);
@@ -250,25 +234,6 @@ fn single_deposit() {
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
-    let msg = InitMsg {
-        owner: HumanAddr::from("owner"),
-        stable_denom: "uusd".to_string(),
-        anchor_contract: HumanAddr::from("anchor"),
-        lottery_interval: WEEK,
-        block_time: HOUR,
-        ticket_prize: Decimal256::percent(TICKET_PRIZE),
-        prize_distribution: vec![
-            Decimal256::zero(),
-            Decimal256::zero(),
-            Decimal256::percent(5),
-            Decimal256::percent(15),
-            Decimal256::percent(30),
-            Decimal256::percent(50),
-        ],
-        reserve_factor: Decimal256::percent(5),
-        split_factor: Decimal256::percent(75),
-        unbonding_period: WEEK,
-    };
 
     let env = mock_env(
         "addr0000",
@@ -278,7 +243,7 @@ fn single_deposit() {
         }],
     );
 
-    let _res = init(&mut deps, env.clone(), msg).unwrap();
+    let _res = initialize(&mut deps, env.clone());
 
     // Must deposit stable_denom coins
     let msg = HandleMsg::SingleDeposit {
@@ -341,8 +306,6 @@ fn single_deposit() {
         }
         _ => panic!("DO NOT ENTER HERE"),
     }
-
-    // TODO: current lottery deposit time is expired
 
     // Invalid ticket sequence - more number of digits
     let msg = HandleMsg::SingleDeposit {
@@ -781,10 +744,220 @@ fn single_deposit() {
             ),
         ]
     );
+
+    // TODO: deposit fails when current lottery deposit time is expired
 }
 
 #[test]
-fn withdraw() {}
+fn withdraw() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+
+    // Address buys one ticket
+    let env = mock_env(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        }],
+    );
+
+    let msg = HandleMsg::SingleDeposit {
+        combination: String::from("23456"),
+    };
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    let _res = handle(&mut deps, env, msg).unwrap();
+
+    let env = mock_env("addr0001", &[]);
+    let msg = HandleMsg::Withdraw { amount: 0 };
+
+    // Should fail, we cannot withdraw a 0 amount of tickets
+    let res = handle(&mut deps, env.clone(), msg.clone());
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Amount of tickets must be greater than zero")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let msg = HandleMsg::Withdraw { amount: 2 };
+    // Should fail, we cannot withdraw more tickets than the ones we have
+    let res = handle(&mut deps, env.clone(), msg.clone());
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(
+                msg,
+                "User has 1 tickets but 2 tickets were requested to be withdrawn"
+            )
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let msg = HandleMsg::Withdraw { amount: 1 };
+
+    deps.querier.with_token_balances(&[(
+        &HumanAddr::from("aterra"),
+        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &Uint128::from(10u64))],
+    )]);
+
+    // Correct withdraw, user has 1 ticket to be withdrawn
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // TODO: check with other ratios of redeem_amount_shares and shares_supply
+    let redeem_amount: Uint256 = Uint256::one().mul(Uint256::from(10u128));
+
+    // Check address of sender was removed correctly in the sequence bucket
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("23456")),
+        vec![]
+    );
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0001"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::zero(),
+            shares: Decimal256::zero(),
+            redeemable_amount: Uint128(0),
+            tickets: vec![],
+            unbonding_info: vec![Claim {
+                amount: Decimal256::percent(TICKET_PRIZE),
+                release_at: WEEK.after(&env.block),
+            }]
+        }
+    );
+
+    assert_eq!(
+        read_state(&deps.storage).unwrap(),
+        State {
+            total_tickets: Uint256::zero(),
+            total_reserve: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            total_deposits: Decimal256::zero(),
+            lottery_deposits: Decimal256::zero(),
+            shares_supply: Decimal256::zero(),
+            award_available: Decimal256::zero(),
+            spendable_balance: Decimal256::zero(),
+            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&env.block)
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("aterra"),
+            send: vec![],
+            msg: to_binary(&Cw20HandleMsg::Send {
+                contract: HumanAddr::from("aterra"),
+                amount: redeem_amount.into(),
+                msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
+            })
+            .unwrap(),
+        })]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "withdraw_ticket"),
+            log("depositor", "addr0001"),
+            log("tickets_amount", 1u64),
+            log("redeem_amount_anchor", redeem_amount),
+        ]
+    );
+}
 
 #[test]
-fn claim() {}
+fn claim() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+}
+
+#[test]
+fn execute_lottery() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+}
+
+#[test]
+fn handle_prize() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+}
+
+// TODO: Refactor tests

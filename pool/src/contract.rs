@@ -53,7 +53,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         &Config {
             contract_addr: deps.api.canonical_address(&env.contract.address)?,
             owner: deps.api.canonical_address(&msg.owner)?,
-            a_terra_contract: CanonicalAddr::default(),
+            a_terra_contract: deps.api.canonical_address(&msg.aterra_contract)?,
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.canonical_address(&msg.anchor_contract)?,
             lottery_interval: msg.lottery_interval,
@@ -228,6 +228,8 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
     let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
 
+    // TODO: check user does not send funds
+
     if amount == 0 {
         return Err(StdError::generic_err(
             "Amount of tickets must be greater than zero",
@@ -237,8 +239,8 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     if amount > depositor.tickets.len() as u64 {
         return Err(StdError::generic_err(format!(
             "User has {} tickets but {} tickets were requested to be withdrawn",
-            amount,
-            depositor.tickets.len()
+            depositor.tickets.len(),
+            amount
         )));
     }
 
@@ -305,7 +307,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         msg: to_binary(&Cw20HandleMsg::Send {
             contract: deps.api.human_address(&config.a_terra_contract)?,
             amount: redeem_amount.into(),
-            msg: Some(to_binary(&Cw20HookMsg::RedeemStable {})?),
+            msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
         })?,
     });
 
@@ -313,6 +315,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         messages: vec![redeem_msg],
         log: vec![
             log("action", "withdraw_ticket"),
+            log("depositor", env.message.sender),
             log("tickets_amount", amount),
             log("redeem_amount_anchor", redeem_amount),
         ],

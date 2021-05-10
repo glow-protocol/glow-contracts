@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::HumanAddr;
+use cosmwasm_std::{HumanAddr, Uint128};
 
 use cw0::{Duration, Expiration};
 
@@ -29,6 +29,9 @@ pub enum HandleMsg {
     },
     Withdraw {
         amount: u64,
+    },
+    Claim {
+        amount: Option<Uint128>,
     },
     ExecuteLottery {},
     _HandlePrize {},

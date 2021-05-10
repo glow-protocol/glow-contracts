@@ -22,7 +22,7 @@ use std::str::FromStr;
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 
-const TICKET_PRIZE: u64 = 1000; // 10 as %
+const TICKET_PRIZE: u64 = 1_000_000_000; // 10_000_000 as %
 const SPLIT_FACTOR: u64 = 75; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const RATE: u64 = 1023; // as a permille
@@ -914,6 +914,143 @@ fn claim() {
     );
 
     let _res = initialize(&mut deps, env.clone());
+
+    // Address buys one ticket
+    let env = mock_env(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        }],
+    );
+
+    let msg = HandleMsg::SingleDeposit {
+        combination: String::from("23456"),
+    };
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    let _res = handle(&mut deps, env, msg).unwrap();
+
+    // Address withdraws one ticket
+    let env = mock_env("addr0001", &[]);
+    let msg = HandleMsg::Withdraw { amount: 1 };
+
+    deps.querier.with_token_balances(&[(
+        &HumanAddr::from("aterra"),
+        &[(
+            &HumanAddr::from(MOCK_CONTRACT_ADDR),
+            &Uint128::from(10_000_000u64),
+        )],
+    )]);
+
+    // Correct withdraw, user has 1 ticket to be withdrawn
+    let _res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Claim 0 amount, should fail
+    let msg = HandleMsg::Claim {
+        amount: Some(Uint128::zero()),
+    };
+    let res = handle(&mut deps, env.clone(), msg.clone());
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Claim amount must be greater than zero")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Claim amount that you don't have, should fail
+    let env = mock_env("addr0002", &[]);
+    let msg = HandleMsg::Claim {
+        amount: Some(Uint128::from(10u64)),
+    };
+
+    let res = handle(&mut deps, env, msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Depositor does not have any amount to claim")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Claim amount that you have, but still in unbonding state, should fail
+    let mut env = mock_env("addr0001", &[]);
+    let msg = HandleMsg::Claim {
+        amount: Some(Uint128::from(10u64)),
+    };
+
+    let res = handle(&mut deps, env.clone(), msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Depositor does not have any amount to claim")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let msg = HandleMsg::Claim { amount: None };
+
+    // Advance one week in time
+    if let Duration::Time(time) = WEEK {
+        env.block.time += time;
+    }
+    // TODO: change also the exchange rate here
+
+    // TODO: add case asking for more amount that the one we have (which is non-zero)
+    // TODO: add case asking for an amount (not None) that we do have
+    // TODO: add case where contract balances are not enough to fulfill claim
+
+    // TODO: this update is not needed (??)
+    deps.querier.update_balance(
+        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + 10000000u128),
+        }],
+    );
+
+    // Claim amount is already unbonded, so claim execution should work
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0001"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::zero(),
+            shares: Decimal256::zero(),
+            redeemable_amount: Uint128(0),
+            tickets: vec![],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Bank(BankMsg::Send {
+            from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
+            to_address: HumanAddr::from("addr0001"),
+            amount: vec![Coin {
+                denom: String::from("uusd"),
+                amount: Uint128::from(10_000_000u64),
+            }],
+        })]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "claim"),
+            log("depositor", "addr0001"),
+            log("redeemed_amount", 10_000_000u64),
+            log("redeemable_amount_left", Uint128(0)),
+        ]
+    );
 }
 
 #[test]

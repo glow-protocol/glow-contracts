@@ -34,9 +34,7 @@ pub fn claim_deposits<S: Storage>(
     let mut depositor = read_depositor_info(storage, addr);
 
     if depositor.unbonding_info.len() == 0 {
-        return Err(StdError::generic_err(
-            "Depositor does not have any outstanding claims",
-        ));
+        return Ok(to_send);
     }
 
     let (_send, waiting): (Vec<_>, _) = depositor.unbonding_info.iter().cloned().partition(|c| {

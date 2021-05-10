@@ -93,6 +93,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     match msg {
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::Withdraw { amount } => withdraw(deps, env, amount),
+        HandleMsg::Claim { amount } => claim(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
         HandleMsg::_HandlePrize {} => _handle_prize(deps, env),
         HandleMsg::UpdateConfig {
@@ -329,10 +330,12 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     env: Env,
     amount: Option<Uint128>,
 ) -> HandleResult {
-    if amount.unwrap().is_zero() {
-        return Err(StdError::generic_err(
-            "Claim amount must be greater than zero",
-        ));
+    if amount.is_some() {
+        if amount.unwrap().is_zero() {
+            return Err(StdError::generic_err(
+                "Claim amount must be greater than zero",
+            ));
+        }
     }
 
     let config = read_config(&deps.storage)?;
@@ -343,6 +346,8 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     //TODO: doing two consecutive reads here, need to refactor
     let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
     to_send += depositor.redeemable_amount;
+
+    // TODO: add check for when the amount requested is greater than to_send
     if to_send == Uint128(0) {
         return Err(StdError::generic_err(
             "Depositor does not have any amount to claim",
@@ -359,21 +364,27 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Not enough funds to pay the claim"));
     }
 
+    // TODO: add logic when claim amount is less than redeemable_amount
     depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
-    //TODO: we may deduct some tax in redemptions - ex. send_net = deduct_tax(to_send)
+    // TODO: we may deduct some tax in redemptions - ex. send_net = deduct_tax(to_send)
 
     Ok(HandleResponse {
         messages: vec![CosmosMsg::Bank(BankMsg::Send {
-            from_address: env.contract.address,
-            to_address: env.message.sender,
+            from_address: env.clone().contract.address,
+            to_address: env.clone().message.sender,
             amount: vec![Coin {
                 denom: config.stable_denom,
                 amount: to_send.into(),
             }],
         })],
-        log: vec![log("action", "claim"), log("redeemed_amount", to_send)],
+        log: vec![
+            log("action", "claim"),
+            log("depositor", env.message.sender),
+            log("redeemed_amount", to_send),
+            log("redeemable_amount_left", depositor.redeemable_amount),
+        ],
         data: None,
     })
 }

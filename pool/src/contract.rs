@@ -280,6 +280,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     // Calculate fraction of shares to be redeemed out of the global pool
+    // TODO: escape divide by zero error
     let withdraw_ratio = redeem_amount_shares / state.shares_supply;
     // Get contract's total balance of aUST
     let contract_a_balance = query_token_balance(

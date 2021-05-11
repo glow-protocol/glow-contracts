@@ -1,5 +1,5 @@
 use crate::msg::HandleMsg;
-use crate::querier::query_balance;
+use crate::querier::{query_balance, query_token_balance};
 use crate::state::{
     read_all_sequences, read_config, read_depositor_info, read_matching_sequences,
     read_sequence_info, read_state, store_depositor_info, store_lottery_info, store_sequence_info,
@@ -38,16 +38,22 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    // Get contract current uusd balance
-    state.current_balance = query_balance(
+    // Get contract current aUST balance
+    let total_aterra_balance = query_token_balance(
         &deps,
+        &deps.api.human_address(&config.a_terra_contract)?,
         &deps.api.human_address(&config.contract_addr)?,
-        String::from("uusd"),
     )?;
 
+    if total_aterra_balance.is_zero() {
+        return Err(StdError::generic_err(
+            "No current available aUST funds to execute the lottery",
+        ));
+    }
+
     // Get lottery deposits of aUST
-    // TODO: is it better to query_token_balance instead of track it with state variables??
-    let lottery_deposits = (state.total_deposits * config.split_factor) * Uint256::one();
+    let lottery_aterra =
+        (Decimal256::from_uint256(total_aterra_balance) * config.split_factor) * Uint256::one();
 
     // Store state
     store_state(&mut deps.storage, &state)?;
@@ -58,7 +64,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         send: vec![],
         msg: to_binary(&Cw20Send {
             contract: deps.api.human_address(&config.a_terra_contract)?,
-            amount: lottery_deposits.into(),
+            amount: lottery_aterra.into(),
             msg: Some(to_binary(&Cw20HookMsg::RedeemStable {})?),
         })?,
     });

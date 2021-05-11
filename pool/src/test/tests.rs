@@ -15,7 +15,7 @@ use cosmwasm_std::{
 use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
 
 use crate::claims::Claim;
-use cw0::{Duration, HOUR, WEEK};
+use cw0::{Duration, Expiration, HOUR, WEEK};
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use std::ops::{Add, Mul};
 use std::str::FromStr;
@@ -1073,6 +1073,106 @@ fn execute_lottery() {
     );
 
     let _res = initialize(&mut deps, env.clone());
+
+    let env = mock_env(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(1),
+        }],
+    );
+
+    let msg = HandleMsg::ExecuteLottery {};
+
+    let res = handle(&mut deps, env, msg.clone());
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Do not send funds when executing the lottery")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let mut env = mock_env("addr0001", &[]);
+    let res = handle(&mut deps, env.clone(), msg.clone());
+
+    let mut lottery_expiration: u64 = 0;
+    if let Duration::Time(time) = WEEK {
+        lottery_expiration = env.block.time + time;
+    }
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(
+                msg,
+                format!(
+                    "Lottery is still running, please check again after expiration time: {}",
+                    lottery_expiration
+                )
+            )
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Advance one week in time
+    if let Duration::Time(time) = WEEK {
+        env.block.time += time;
+    }
+
+    // It should fail, as the contract does not have any balance on Anchor
+    let res = handle(&mut deps, env.clone(), msg.clone());
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(
+                msg,
+                "No current available aUST funds to execute the lottery",
+            )
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Add 10 aUST to our contract balance
+    deps.querier.with_token_balances(&[(
+        &HumanAddr::from("aterra"),
+        &[(
+            &HumanAddr::from(MOCK_CONTRACT_ADDR),
+            &Uint128::from(10_000_000u128),
+        )],
+    )]);
+
+    let to_redeem = Decimal256::percent(75) * Uint256::from(10_000_000u128);
+
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Directly check next_lottery_time has been set up for next week
+    let next_lottery_time = read_state(&deps.storage).unwrap().next_lottery_time;
+
+    assert_eq!(
+        next_lottery_time,
+        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: HumanAddr::from("aterra"),
+                send: vec![],
+                msg: to_binary(&Cw20HandleMsg::Send {
+                    contract: HumanAddr::from("aterra"),
+                    amount: to_redeem.into(),
+                    msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
+                })
+                .unwrap(),
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: HumanAddr::from(MOCK_CONTRACT_ADDR),
+                send: vec![],
+                msg: to_binary(&HandleMsg::_HandlePrize {}).unwrap(),
+            })
+        ]
+    );
 }
 
 #[test]

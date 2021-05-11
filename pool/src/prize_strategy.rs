@@ -79,7 +79,10 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     //Handle Response withdraws from Anchor and call internal _handle_prize
     Ok(HandleResponse {
         messages: vec![redeem_msg, handle_prize_msg],
-        log: vec![log("action", "execute_lottery")],
+        log: vec![
+            log("action", "execute_lottery"),
+            log("redeemed_amount", lottery_aterra),
+        ],
         data: None,
     })
 }

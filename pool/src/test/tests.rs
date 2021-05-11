@@ -1173,6 +1173,14 @@ fn execute_lottery() {
             })
         ]
     );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "execute_lottery"),
+            log("redeemed_amount", to_redeem),
+        ]
+    );
 }
 
 #[test]

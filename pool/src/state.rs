@@ -2,9 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{
-    Api, CanonicalAddr, Extern, Order, Querier, StdError, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{Api, CanonicalAddr, Extern, Order, Querier, StdResult, Storage, Uint128};
 use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 
 use crate::claims::Claim;

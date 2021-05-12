@@ -12,13 +12,12 @@ use cosmwasm_std::{
     from_binary, log, to_binary, Api, BankMsg, Coin, CosmosMsg, Decimal, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, Querier, StdError, Storage, Uint128, WasmMsg,
 };
-use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
+use cw20::Cw20HandleMsg;
 
 use crate::claims::Claim;
 use cw0::{Duration, Expiration, HOUR, WEEK};
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use std::ops::{Add, Mul};
-use std::str::FromStr;
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
 

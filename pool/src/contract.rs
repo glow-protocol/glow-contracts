@@ -15,8 +15,8 @@ use crate::state::{
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 
-use cw0::{Duration, WEEK};
-use cw20::{Cw20CoinHuman, Cw20HandleMsg, Cw20ReceiveMsg, MinterResponse};
+use cw0::Duration;
+use cw20::Cw20HandleMsg;
 
 use crate::claims::{claim_deposits, Claim};
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, HandleMsg as AnchorMsg};

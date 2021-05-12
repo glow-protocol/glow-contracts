@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Api, BlockInfo, CanonicalAddr, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{BlockInfo, CanonicalAddr, StdResult, Storage, Uint128};
 
 use crate::state::{read_depositor_info, store_depositor_info};
 use cw0::Expiration;

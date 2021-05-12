@@ -45,6 +45,13 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         &deps.api.human_address(&config.contract_addr)?,
     )?;
 
+    // Get contract current UST balance (used in _handle_prize)
+    state.current_balance = query_balance(
+        &deps,
+        &deps.api.human_address(&config.contract_addr)?,
+        "uusd".to_string(),
+    )?;
+
     if total_aterra_balance.is_zero() {
         return Err(StdError::generic_err(
             "No current available aUST funds to execute the lottery",
@@ -76,7 +83,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         msg: to_binary(&HandleMsg::_HandlePrize {})?,
     });
 
-    //Handle Response withdraws from Anchor and call internal _handle_prize
+    // Handle Response withdraws from Anchor and call internal _handle_prize
     Ok(HandleResponse {
         messages: vec![redeem_msg, handle_prize_msg],
         log: vec![
@@ -120,6 +127,12 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     let prize = state.award_available;
 
+    if prize.is_zero() {
+        return Err(StdError::generic_err(
+            "There is no UST balance to fund the prize",
+        ));
+    }
+
     // Get winners and respective sequences
     let lucky_holders: Vec<(u8, Vec<CanonicalAddr>)> =
         read_matching_sequences(&deps, None, None, &winning_sequence);
@@ -160,11 +173,10 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     store_lottery_info(&mut deps.storage, state.current_lottery, &lottery_info)?;
 
-    state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
+    // state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
     state.current_lottery += 1;
     state.total_reserve = state.total_reserve.add(total_reserve_commission);
     state.award_available = state.award_available.sub(total_awarded_prize);
-    //TODO: update total_assets and spendable_balance??
     store_state(&mut deps.storage, &state)?;
 
     let reinvest_amount = state.lottery_deposits * Uint256::one();
@@ -178,7 +190,11 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],
-        log: vec![log("action", "execute_lottery")],
+        log: vec![
+            log("action", "handle_prize"),
+            log("total_awarded_prize", total_awarded_prize),
+            log("reinvested_amount", reinvest_amount),
+        ],
         data: None,
     })
 }

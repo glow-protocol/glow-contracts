@@ -1,7 +1,7 @@
 use crate::contract::{handle, init, query, query_config, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
 use crate::state::{
-    read_config, read_depositor_info, read_sequence_info, read_state, store_config, store_state,
-    Config, DepositorInfo, State,
+    read_config, read_depositor_info, read_lottery_info, read_sequence_info, read_state,
+    store_config, store_state, Config, DepositorInfo, LotteryInfo, State,
 };
 
 use crate::msg::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, StateResponse};
@@ -1141,17 +1141,29 @@ fn execute_lottery() {
         )],
     )]);
 
+    // Add 100 UST to our contract balance
+    deps.querier.update_balance(
+        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(100_000_000u128),
+        }],
+    );
+
     let to_redeem = Decimal256::percent(75) * Uint256::from(10_000_000u128);
 
     let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
     let next_lottery_time = read_state(&deps.storage).unwrap().next_lottery_time;
+    let current_balance = read_state(&deps.storage).unwrap().current_balance;
 
     assert_eq!(
         next_lottery_time,
         Expiration::AtTime(env.block.time).add(WEEK).unwrap()
     );
+
+    assert_eq!(current_balance, Uint256::from(100_000_000u128));
 
     assert_eq!(
         res.messages,
@@ -1184,7 +1196,7 @@ fn execute_lottery() {
 }
 
 #[test]
-fn handle_prize() {
+fn handle_prize_no_winners() {
     // Initialize contract
     let mut deps = mock_dependencies(
         20,
@@ -1203,6 +1215,84 @@ fn handle_prize() {
     );
 
     let _res = initialize(&mut deps, env.clone());
+
+    let env = mock_env("addr0001", &[]);
+
+    let msg = HandleMsg::_HandlePrize {};
+    let res = handle(&mut deps, env, msg.clone());
+
+    match res {
+        Err(StdError::Unauthorized { .. }) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
+    let msg = HandleMsg::_HandlePrize {};
+
+    // The contract does not have UST balance, should fail
+    let res = handle(&mut deps, env.clone(), msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "There is no UST balance to fund the prize",)
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Add 150_000 UST to our contract balance
+    deps.querier.update_balance(
+        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(150_000_000_000u128),
+        }],
+    );
+
+    // Run lottery, no winners - should run correctly
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check lottery info was updated correctly
+    assert_eq!(
+        read_lottery_info(&deps.storage, 0u64).unwrap(),
+        LotteryInfo {
+            sequence: "00000".to_string(),
+            awarded: true,
+            total_prizes: Decimal256::zero(),
+            winners: vec![]
+        }
+    );
+
+    let state = read_state(&deps.storage).unwrap();
+
+    assert_eq!(state.current_lottery, 1u64);
+    assert_eq!(
+        state.total_reserve,
+        Decimal256::from_uint256(10_000_000_000u128)
+    ); // From the initialization of the contract
+    assert_eq!(
+        state.award_available,
+        Decimal256::from_uint256(Uint256::from(140_000_000_000u128))
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("anchor"),
+            send: vec![Coin {
+                denom: "uusd".to_string(),
+                amount: Uint128(0),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+        })]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "handle_prize"),
+            log("total_awarded_prize", Decimal256::zero()),
+            log("reinvested_amount", Uint256::zero()),
+        ]
+    );
 }
 
 // TODO: Refactor tests

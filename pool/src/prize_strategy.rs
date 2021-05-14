@@ -119,6 +119,9 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     // Get delta after aUST redeem operation
     let balance_delta = Decimal256::from_uint256(curr_balance - state.current_balance);
 
+    println!("award_available {:?}", balance_delta);
+    println!("lottery_deposits {:?}", state.lottery_deposits);
+
     // Minus total_lottery_deposits and we get outstanding_interest
     let outstanding_interest = balance_delta - state.lottery_deposits;
 
@@ -151,8 +154,15 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         for winner in winners {
             let mut depositor = read_depositor_info(&deps.storage, winner);
 
+            println!("prize {:?}", prize);
+            println!("number_winners {:?}", number_winners);
+            println!("matches {:?}", *matches);
+            println!("prize_distribution {:?}", &config.prize_distribution);
+
             let assigned =
-                assign_prize(prize, number_winners, *matches, &config.prize_distribution);
+                assign_prize(prize, *matches, number_winners, &config.prize_distribution);
+
+            println!("assigned {:?}", assigned);
 
             total_awarded_prize += assigned;
             let reserve_commission = apply_reserve_factor(assigned, config.reserve_factor);
@@ -211,6 +221,9 @@ fn assign_prize(
     distribution: &Vec<Decimal256>,
 ) -> Decimal256 {
     let number_winners = Uint256::from(winners as u64);
+
+    println!("distribution element {:?}", matches);
+
     awardable_prize * distribution[matches as usize] / Decimal256::from_uint256(number_winners)
 }
 

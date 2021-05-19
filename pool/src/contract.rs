@@ -24,7 +24,7 @@ use std::ops::{Add, Sub};
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
-pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000_000; // fund reserve with 10k
+pub const INITIAL_DEPOSIT_AMOUNT: u128 = 1_000_000_000; // fund reserve with 10k
 pub const SEQUENCE_DIGITS: u8 = 5;
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
@@ -56,13 +56,13 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             a_terra_contract: deps.api.canonical_address(&msg.aterra_contract)?,
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.canonical_address(&msg.anchor_contract)?,
-            lottery_interval: msg.lottery_interval,
-            block_time: msg.block_time,
+            lottery_interval: Duration::Time(msg.lottery_interval),
+            block_time: Duration::Time(msg.block_time),
             ticket_prize: msg.ticket_prize,
             prize_distribution: msg.prize_distribution,
             reserve_factor: msg.reserve_factor,
             split_factor: msg.split_factor,
-            unbonding_period: msg.unbonding_period,
+            unbonding_period: Duration::Time(msg.unbonding_period),
         },
     )?;
 
@@ -78,7 +78,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             spendable_balance: Decimal256::zero(),
             current_balance: Uint256::from(initial_deposit),
             current_lottery: 0,
-            next_lottery_time: msg.lottery_interval.after(&env.block),
+            next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
         },
     )?;
 
@@ -394,13 +394,13 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     owner: Option<HumanAddr>,
-    lottery_interval: Option<Duration>,
-    block_time: Option<Duration>,
+    lottery_interval: Option<u64>,
+    block_time: Option<u64>,
     ticket_price: Option<Decimal256>,
     prize_distribution: Option<Vec<Decimal256>>,
     reserve_factor: Option<Decimal256>,
     split_factor: Option<Decimal256>,
-    unbonding_period: Option<Duration>,
+    unbonding_period: Option<u64>,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
 
@@ -414,11 +414,11 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     }
 
     if let Some(lottery_interval) = lottery_interval {
-        config.lottery_interval = lottery_interval;
+        config.lottery_interval = Duration::Time(lottery_interval);
     }
 
     if let Some(block_time) = block_time {
-        config.block_time = block_time;
+        config.block_time = Duration::Time(block_time);
     }
 
     if let Some(ticket_prize) = ticket_price {
@@ -438,7 +438,7 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     }
 
     if let Some(unbonding_period) = unbonding_period {
-        config.unbonding_period = unbonding_period;
+        config.unbonding_period = Duration::Time(unbonding_period);
     }
 
     store_config(&mut deps.storage, &config)?;

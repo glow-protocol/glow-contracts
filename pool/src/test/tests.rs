@@ -25,6 +25,8 @@ const TICKET_PRIZE: u64 = 1_000_000_000; // 10_000_000 as %
 const SPLIT_FACTOR: u64 = 75; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const RATE: u64 = 1023; // as a permille
+const WEEK_TIME: u64 = 604800; // in seconds
+const HOUR_TIME: u64 = 3600; // in seconds
 
 fn initialize<S: Storage, A: Api, Q: Querier>(
     mut deps: &mut Extern<S, A, Q>,
@@ -35,8 +37,8 @@ fn initialize<S: Storage, A: Api, Q: Querier>(
         stable_denom: "uusd".to_string(),
         anchor_contract: HumanAddr::from("anchor"),
         aterra_contract: HumanAddr::from("aterra"),
-        lottery_interval: WEEK,
-        block_time: HOUR,
+        lottery_interval: WEEK_TIME,
+        block_time: HOUR_TIME,
         ticket_prize: Decimal256::percent(TICKET_PRIZE),
         prize_distribution: vec![
             Decimal256::zero(),
@@ -48,7 +50,7 @@ fn initialize<S: Storage, A: Api, Q: Querier>(
         ],
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
-        unbonding_period: WEEK,
+        unbonding_period: WEEK_TIME,
     };
 
     init(&mut deps, env.clone(), msg).unwrap()
@@ -161,11 +163,11 @@ fn update_config() {
 
     assert_eq!(HumanAddr::from("owner1"), config_response.owner);
 
-    // update lottery interval to 1000 blocks
+    // update lottery interval to 30 minutes
     let env = mock_env("owner1", &[]);
     let msg = HandleMsg::UpdateConfig {
         owner: None,
-        lottery_interval: Some(Duration::Height(1000)),
+        lottery_interval: Some(1800),
         block_time: None,
         ticket_prize: None,
         prize_distribution: None,
@@ -180,7 +182,7 @@ fn update_config() {
     // check lottery_interval has changed
     let res = query(&deps, QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
-    assert_eq!(config_response.lottery_interval, Duration::Height(1000));
+    assert_eq!(config_response.lottery_interval, Duration::Time(1800));
 
     // update reserve_factor to 1%
     let env = mock_env("owner1", &[]);
@@ -207,7 +209,7 @@ fn update_config() {
     let env = mock_env("owner", &[]);
     let msg = HandleMsg::UpdateConfig {
         owner: None,
-        lottery_interval: Some(Duration::Height(1000)),
+        lottery_interval: Some(1800),
         block_time: None,
         ticket_prize: None,
         prize_distribution: None,
@@ -1265,11 +1267,11 @@ fn handle_prize_no_winners() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
         state.total_reserve,
-        Decimal256::from_uint256(10_000_000_000u128)
+        Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
     ); // From the initialization of the contract
     assert_eq!(
         state.award_available,
-        Decimal256::from_uint256(Uint256::from(140_000_000_000u128))
+        Decimal256::from_uint256(Uint256::from(149_000_000_000u128))
     );
 
     assert_eq!(
@@ -1389,7 +1391,7 @@ fn handle_prize_one_winner() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
         state.total_reserve,
-        Decimal256::from_uint256(10_000_000_000u128)
+        Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
             + (awarded_prize * Decimal256::percent(RESERVE_FACTOR))
     );
 
@@ -1553,7 +1555,7 @@ fn handle_prize_winners_diff_ranks() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
         state.total_reserve,
-        Decimal256::from_uint256(10_000_000_000u128)
+        Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
             + (awarded_prize * Decimal256::percent(RESERVE_FACTOR))
     );
 
@@ -1714,7 +1716,7 @@ fn handle_prize_winners_same_rank() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
         state.total_reserve,
-        Decimal256::from_uint256(10_000_000_000u128)
+        Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
             + (awarded_prize * Decimal256::percent(RESERVE_FACTOR))
     );
 

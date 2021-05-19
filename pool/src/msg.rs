@@ -12,13 +12,13 @@ pub struct InitMsg {
     pub stable_denom: String,
     pub anchor_contract: HumanAddr,
     pub aterra_contract: HumanAddr,
-    pub lottery_interval: Duration,
-    pub block_time: Duration,
+    pub lottery_interval: u64,
+    pub block_time: u64,
     pub ticket_prize: Decimal256,
     pub prize_distribution: Vec<Decimal256>,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
-    pub unbonding_period: Duration,
+    pub unbonding_period: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -37,13 +37,13 @@ pub enum HandleMsg {
     _HandlePrize {},
     UpdateConfig {
         owner: Option<HumanAddr>,
-        lottery_interval: Option<Duration>,
-        block_time: Option<Duration>,
+        lottery_interval: Option<u64>,
+        block_time: Option<u64>,
         ticket_prize: Option<Decimal256>,
         prize_distribution: Option<Vec<Decimal256>>,
         reserve_factor: Option<Decimal256>,
         split_factor: Option<Decimal256>,
-        unbonding_period: Option<Duration>,
+        unbonding_period: Option<u64>,
     },
 }
 

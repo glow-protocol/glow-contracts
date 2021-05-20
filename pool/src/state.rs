@@ -2,10 +2,13 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Api, CanonicalAddr, Extern, Order, Querier, StdResult, Storage, Uint128};
+use cosmwasm_std::{
+    Api, CanonicalAddr, Extern, HumanAddr, Order, Querier, StdResult, Storage, Uint128,
+};
 use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 
 use crate::claims::Claim;
+use crate::msg::DepositorInfoResponse;
 use crate::prize_strategy::count_seq_matches;
 use cw0::{Duration, Expiration};
 
@@ -82,27 +85,6 @@ pub fn store_state<S: Storage>(storage: &mut S, data: &State) -> StdResult<()> {
 
 pub fn read_state<S: Storage>(storage: &S) -> StdResult<State> {
     ReadonlySingleton::new(storage, KEY_STATE).load()
-}
-
-pub fn store_depositor_info<S: Storage>(
-    storage: &mut S,
-    depositor: &CanonicalAddr,
-    depositor_info: &DepositorInfo,
-) -> StdResult<()> {
-    bucket(PREFIX_DEPOSIT, storage).save(depositor.as_slice(), depositor_info)
-}
-
-pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -> DepositorInfo {
-    match bucket_read(PREFIX_DEPOSIT, storage).load(depositor.as_slice()) {
-        Ok(v) => v,
-        _ => DepositorInfo {
-            deposit_amount: Decimal256::zero(),
-            shares: Decimal256::zero(),
-            redeemable_amount: Uint128::zero(),
-            tickets: vec![],
-            unbonding_info: vec![],
-        },
-    }
 }
 
 pub fn store_lottery_info<S: Storage>(
@@ -196,15 +178,34 @@ pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
     //TODO: I could use into_group_map HashMap, but let's kiss
 }
 
-/*
+pub fn store_depositor_info<S: Storage>(
+    storage: &mut S,
+    depositor: &CanonicalAddr,
+    depositor_info: &DepositorInfo,
+) -> StdResult<()> {
+    bucket(PREFIX_DEPOSIT, storage).save(depositor.as_slice(), depositor_info)
+}
 
-pub fn read_depositor_infos<S: Storage, A: Api, Q: Querier>(
+pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -> DepositorInfo {
+    match bucket_read(PREFIX_DEPOSIT, storage).load(depositor.as_slice()) {
+        Ok(v) => v,
+        _ => DepositorInfo {
+            deposit_amount: Decimal256::zero(),
+            shares: Decimal256::zero(),
+            redeemable_amount: Uint128::zero(),
+            tickets: vec![],
+            unbonding_info: vec![],
+        },
+    }
+}
+
+pub fn read_depositors<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     start_after: Option<CanonicalAddr>,
     limit: Option<u32>,
 ) -> StdResult<Vec<DepositorInfoResponse>> {
     let liability_bucket: ReadonlyBucket<S, DepositorInfo> =
-        bucket_read(PREFIX_LIABILITY, &deps.storage);
+        bucket_read(PREFIX_DEPOSIT, &deps.storage);
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = calc_range_start(start_after);
@@ -218,14 +219,14 @@ pub fn read_depositor_infos<S: Storage, A: Api, Q: Querier>(
             Ok(DepositorInfoResponse {
                 depositor,
                 deposit_amount: v.deposit_amount,
+                shares: v.shares,
+                redeemable_amount: v.redeemable_amount,
                 tickets: v.tickets,
-                accrued_interest: v.accrued_interest,
+                unbonding_info: v.unbonding_info,
             })
         })
         .collect()
 }
-
- */
 
 // this will set the first key after the provided key, by appending a 1 byte
 fn calc_range_start(start_after: Option<CanonicalAddr>) -> Option<Vec<u8>> {

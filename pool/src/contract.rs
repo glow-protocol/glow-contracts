@@ -4,13 +4,16 @@ use cosmwasm_std::{
     StdResult, Storage, Uint128, WasmMsg,
 };
 
-use crate::msg::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, StateResponse};
+use crate::msg::{
+    ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, HandleMsg, InitMsg, QueryMsg,
+    StateResponse,
+};
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_token_balance};
 use crate::state::{
-    read_config, read_depositor_info, read_sequence_info, read_state, sequence_bucket,
-    store_config, store_depositor_info, store_sequence_info, store_state, Config, DepositorInfo,
-    State,
+    read_config, read_depositor_info, read_depositors, read_sequence_info, read_state,
+    sequence_bucket, store_config, store_depositor_info, store_sequence_info, store_state, Config,
+    DepositorInfo, State,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -456,6 +459,10 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State { block_height } => to_binary(&query_state(deps, block_height)?),
+        QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, address)?),
+        QueryMsg::Depositors { start_after, limit } => {
+            to_binary(&query_depositors(deps, start_after, limit)?)
+        }
     }
 }
 
@@ -498,4 +505,35 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,
     })
+}
+
+pub fn query_depositor<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    addr: HumanAddr,
+) -> StdResult<DepositorInfoResponse> {
+    let address_raw = deps.api.canonical_address(&addr)?;
+    let depositor = read_depositor_info(&deps.storage, &address_raw);
+    Ok(DepositorInfoResponse {
+        depositor: addr,
+        deposit_amount: depositor.deposit_amount,
+        shares: depositor.shares,
+        redeemable_amount: depositor.redeemable_amount,
+        tickets: depositor.tickets,
+        unbonding_info: depositor.unbonding_info,
+    })
+}
+
+pub fn query_depositors<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    start_after: Option<HumanAddr>,
+    limit: Option<u32>,
+) -> StdResult<DepositorsInfoResponse> {
+    let start_after = if let Some(start_after) = start_after {
+        Some(deps.api.canonical_address(&start_after)?)
+    } else {
+        None
+    };
+
+    let depositors = read_depositors(deps, start_after, limit)?;
+    Ok(DepositorsInfoResponse { depositors })
 }

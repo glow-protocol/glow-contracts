@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{HumanAddr, Uint128};
 
+use crate::claims::Claim;
 use cw0::{Duration, Expiration};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -50,9 +51,17 @@ pub enum HandleMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    // GetCount returns the current count as a json-encoded number
     Config {},
-    State { block_height: Option<u64> },
+    State {
+        block_height: Option<u64>,
+    },
+    Depositor {
+        address: HumanAddr,
+    },
+    Depositors {
+        start_after: Option<HumanAddr>,
+        limit: Option<u32>,
+    },
 }
 
 // We define a custom struct for each query response
@@ -83,4 +92,21 @@ pub struct StateResponse {
     pub current_balance: Uint256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorInfoResponse {
+    pub depositor: HumanAddr,
+    pub deposit_amount: Decimal256,
+    pub shares: Decimal256,
+    pub redeemable_amount: Uint128,
+    pub tickets: Vec<String>,
+    pub unbonding_info: Vec<Claim>,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorsInfoResponse {
+    pub depositors: Vec<DepositorInfoResponse>,
 }

@@ -65,6 +65,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     // Store state
     store_state(&mut deps.storage, &state)?;
 
+    // TODO: deduct anchor redemption taxes
     // Message for redeem amount operation of aUST
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: deps.api.human_address(&config.a_terra_contract)?,

@@ -876,7 +876,7 @@ fn withdraw() {
             contract_addr: HumanAddr::from("aterra"),
             send: vec![],
             msg: to_binary(&Cw20HandleMsg::Send {
-                contract: HumanAddr::from("aterra"),
+                contract: HumanAddr::from("anchor"),
                 amount: redeem_amount.into(),
                 msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
             })
@@ -1173,7 +1173,7 @@ fn execute_lottery() {
                 contract_addr: HumanAddr::from("aterra"),
                 send: vec![],
                 msg: to_binary(&Cw20HandleMsg::Send {
-                    contract: HumanAddr::from("aterra"),
+                    contract: HumanAddr::from("anchor"),
                     amount: to_redeem.into(),
                     msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
                 })

@@ -307,7 +307,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         contract_addr: deps.api.human_address(&config.a_terra_contract)?,
         send: vec![],
         msg: to_binary(&Cw20HandleMsg::Send {
-            contract: deps.api.human_address(&config.a_terra_contract)?,
+            contract: deps.api.human_address(&config.anchor_contract)?,
             amount: redeem_amount.into(),
             msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
         })?,

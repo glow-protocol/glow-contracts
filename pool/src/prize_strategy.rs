@@ -70,7 +70,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         contract_addr: deps.api.human_address(&config.a_terra_contract)?,
         send: vec![],
         msg: to_binary(&Cw20Send {
-            contract: deps.api.human_address(&config.a_terra_contract)?,
+            contract: deps.api.human_address(&config.anchor_contract)?,
             amount: lottery_aterra.into(),
             msg: Some(to_binary(&Cw20HookMsg::RedeemStable {})?),
         })?,

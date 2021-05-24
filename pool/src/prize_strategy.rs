@@ -14,6 +14,7 @@ use cw20::Cw20HandleMsg::Send as Cw20Send;
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
+use cw0::Expiration;
 
 pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -30,7 +31,8 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     }
 
     if state.next_lottery_time.is_expired(&env.block) {
-        state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
+        //state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
+        state.next_lottery_time = Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
     } else {
         return Err(StdError::generic_err(format!(
             "Lottery is still running, please check again after {}",
@@ -117,12 +119,14 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         String::from("uusd"),
     )?;
 
+    // TODO: make sure balance delta is positive
     // Get delta after aUST redeem operation
     let balance_delta = Decimal256::from_uint256(curr_balance - state.current_balance);
 
-    println!("award_available {:?}", balance_delta);
-    println!("lottery_deposits {:?}", state.lottery_deposits);
+    //println!("award_available {:?}", balance_delta);
+    //println!("lottery_deposits {:?}", state.lottery_deposits);
 
+    // TODO: make sure interest is positive
     // Minus total_lottery_deposits and we get outstanding_interest
     let outstanding_interest = balance_delta - state.lottery_deposits;
 
@@ -155,15 +159,17 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         for winner in winners {
             let mut depositor = read_depositor_info(&deps.storage, winner);
 
+            /*
             println!("prize {:?}", prize);
             println!("number_winners {:?}", number_winners);
             println!("matches {:?}", *matches);
             println!("prize_distribution {:?}", &config.prize_distribution);
+             */
 
             let assigned =
                 assign_prize(prize, *matches, number_winners, &config.prize_distribution);
 
-            println!("assigned {:?}", assigned);
+            //println!("assigned {:?}", assigned);
 
             total_awarded_prize += assigned;
             let reserve_commission = apply_reserve_factor(assigned, config.reserve_factor);
@@ -192,15 +198,20 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     let reinvest_amount = state.lottery_deposits * Uint256::one();
 
-    Ok(HandleResponse {
-        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
+    /*
+    let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![Coin {
                 denom: config.stable_denom,
                 amount: reinvest_amount.into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
-        })],
+        });
+
+     */
+
+    Ok(HandleResponse {
+        messages: vec![],
         log: vec![
             log("action", "handle_prize"),
             log("total_awarded_prize", total_awarded_prize),

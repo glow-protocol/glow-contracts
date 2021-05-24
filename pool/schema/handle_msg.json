@@ -24,6 +24,17 @@
     {
       "type": "object",
       "required": [
+        "sponsor"
+      ],
+      "properties": {
+        "sponsor": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
         "withdraw"
       ],
       "properties": {

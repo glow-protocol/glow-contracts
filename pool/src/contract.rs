@@ -27,7 +27,7 @@ use std::ops::{Add, Sub};
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
-pub const INITIAL_DEPOSIT_AMOUNT: u128 = 1_000_000_000; // fund reserve with 10k
+pub const INITIAL_DEPOSIT_AMOUNT: u128 = 100_000_000; // fund reserve with $100
 pub const SEQUENCE_DIGITS: u8 = 5;
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
@@ -95,6 +95,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 ) -> HandleResult {
     match msg {
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
+        HandleMsg::Sponsor { } => sponsor(deps, env),
         HandleMsg::Withdraw { amount } => withdraw(deps, env, amount),
         HandleMsg::Claim { amount } => claim(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
@@ -218,6 +219,65 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
         ],
         data: None,
     })
+}
+
+pub fn sponsor<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> HandleResult {
+
+    let config = read_config(&deps.storage)?;
+    //let mut state = read_state(&deps.storage)?;
+
+    // Check deposit is in base stable denom
+    let deposit_amount = env
+        .message
+        .sent_funds
+        .iter()
+        .find(|c| c.denom == config.stable_denom)
+        .map(|c| Uint256::from(c.amount))
+        .unwrap_or_else(Uint256::zero);
+
+    if deposit_amount.is_zero() {
+        return Err(StdError::generic_err(format!(
+            "Sponsorship amount must be greater than 0 {}",
+            config.stable_denom
+        )));
+    }
+
+    /*
+    if deposit_amount != Decimal256::from_uint256(amount) {
+        return Err(StdError::generic_err(format!(
+            "Sponsorship amount must be equal to the selected amount: {} {}",
+            amount, config.stable_denom
+        )));
+    }
+
+    //TODO: add a time buffer here with block_time
+    if state.next_lottery_time.is_expired(&env.block) {
+        return Err(StdError::generic_err(
+            "Current lottery is about to start, wait to sponsor when the next one begins",
+        ));
+    }
+     */
+
+    Ok(HandleResponse {
+        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            send: vec![Coin {
+                denom: config.stable_denom,
+                amount: deposit_amount.into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {})?,
+        })],
+        log: vec![
+            log("action", "sponsorship"),
+            log("sponsor", env.message.sender),
+            log("sponsorship_amount", deposit_amount),
+        ],
+        data: None,
+    })
+
 }
 
 // TODO: burn specific tickets parameter - combinations: Option<Vec<String>>

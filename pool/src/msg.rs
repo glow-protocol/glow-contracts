@@ -28,6 +28,7 @@ pub enum HandleMsg {
     SingleDeposit {
         combination: String,
     },
+    Sponsor {},
     Withdraw {
         amount: u64,
     },

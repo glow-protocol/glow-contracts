@@ -37,6 +37,27 @@
     {
       "type": "object",
       "required": [
+        "lottery_info"
+      ],
+      "properties": {
+        "lottery_info": {
+          "type": "object",
+          "properties": {
+            "lottery_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
         "depositor"
       ],
       "properties": {

@@ -5,15 +5,15 @@ use cosmwasm_std::{
 };
 
 use crate::msg::{
-    ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, HandleMsg, InitMsg, QueryMsg,
-    StateResponse,
+    ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, HandleMsg, InitMsg,
+    LotteryInfoResponse, QueryMsg, StateResponse,
 };
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_token_balance};
 use crate::state::{
-    read_config, read_depositor_info, read_depositors, read_sequence_info, read_state,
-    sequence_bucket, store_config, store_depositor_info, store_sequence_info, store_state, Config,
-    DepositorInfo, State,
+    read_config, read_depositor_info, read_depositors, read_lottery_info, read_sequence_info,
+    read_state, sequence_bucket, store_config, store_depositor_info, store_sequence_info,
+    store_state, Config, DepositorInfo, LotteryInfo, State,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -281,7 +281,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    amount: Option<u64>, // amount of tickets
+    amount: Option<u64>,      // amount of tickets
     sequence: Option<String>, // withdraw the ticket with this sequence
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
@@ -535,6 +535,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State { block_height } => to_binary(&query_state(deps, block_height)?),
+        QueryMsg::LotteryInfo { lottery_id } => to_binary(&query_lottery_info(deps, lottery_id)?),
         QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, address)?),
         QueryMsg::Depositors { start_after, limit } => {
             to_binary(&query_depositors(deps, start_after, limit)?)
@@ -581,6 +582,33 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,
     })
+}
+
+pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    lottery_id: Option<u64>,
+) -> StdResult<LotteryInfoResponse> {
+
+    if let Some(id) = lottery_id {
+        // TODO: fail gracefully, not just with unwrap
+        let lottery = read_lottery_info(&deps.storage, id).unwrap();
+        Ok(LotteryInfoResponse {
+            lottery_id: id,
+            sequence: lottery.sequence,
+            awarded: lottery.awarded,
+            total_prizes: lottery.total_prizes,
+        })
+    } else {
+        let current_lottery = read_state(&deps.storage)?.current_lottery;
+        let lottery = read_lottery_info(&deps.storage, current_lottery).unwrap();
+        Ok(LotteryInfoResponse {
+            lottery_id: current_lottery,
+            sequence: lottery.sequence,
+            awarded: lottery.awarded,
+            total_prizes: lottery.total_prizes,
+        })
+    }
+    // TODO: return also winners -> transform Canonical to HumanAddr
 }
 
 pub fn query_depositor<S: Storage, A: Api, Q: Querier>(

@@ -788,7 +788,7 @@ fn withdraw() {
     let _res = handle(&mut deps, env, msg).unwrap();
 
     let env = mock_env("addr0001", &[]);
-    let msg = HandleMsg::Withdraw { amount: 0 };
+    let msg = HandleMsg::Withdraw { amount: Some(0), sequence: None };
 
     // Should fail, we cannot withdraw a 0 amount of tickets
     let res = handle(&mut deps, env.clone(), msg.clone());
@@ -800,7 +800,7 @@ fn withdraw() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let msg = HandleMsg::Withdraw { amount: 2 };
+    let msg = HandleMsg::Withdraw { amount: Some(2), sequence: None };
     // Should fail, we cannot withdraw more tickets than the ones we have
     let res = handle(&mut deps, env.clone(), msg.clone());
 
@@ -814,7 +814,7 @@ fn withdraw() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let msg = HandleMsg::Withdraw { amount: 1 };
+    let msg = HandleMsg::Withdraw { amount: Some(1), sequence: None };
 
     deps.querier.with_token_balances(&[(
         &HumanAddr::from("aterra"),
@@ -935,7 +935,7 @@ fn claim() {
 
     // Address withdraws one ticket
     let env = mock_env("addr0001", &[]);
-    let msg = HandleMsg::Withdraw { amount: 1 };
+    let msg = HandleMsg::Withdraw { amount: Some(1), sequence: None};
 
     deps.querier.with_token_balances(&[(
         &HumanAddr::from("aterra"),
@@ -1271,7 +1271,7 @@ fn handle_prize_no_winners() {
     ); // From the initialization of the contract
     assert_eq!(
         state.award_available,
-        Decimal256::from_uint256(Uint256::from(149_000_000_000u128))
+        Decimal256::from_uint256(Uint256::from(149_900_000_000u128))
     );
 
     assert_eq!(

@@ -40,14 +40,20 @@
       "properties": {
         "withdraw": {
           "type": "object",
-          "required": [
-            "amount"
-          ],
           "properties": {
             "amount": {
-              "type": "integer",
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "uint64",
               "minimum": 0.0
+            },
+            "sequence": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }

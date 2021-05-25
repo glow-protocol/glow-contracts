@@ -30,7 +30,8 @@ pub enum HandleMsg {
     },
     Sponsor {},
     Withdraw {
-        amount: u64,
+        amount: Option<u64>,
+        sequence: Option<String>,
     },
     Claim {
         amount: Option<Uint128>,

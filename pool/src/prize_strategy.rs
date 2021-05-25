@@ -10,11 +10,11 @@ use cosmwasm_std::{
     log, to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Env, Extern, HandleResponse, HandleResult,
     Querier, StdError, Storage, WasmMsg,
 };
+use cw0::Expiration;
 use cw20::Cw20HandleMsg::Send as Cw20Send;
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
-use cw0::Expiration;
 
 pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -32,7 +32,8 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
 
     if state.next_lottery_time.is_expired(&env.block) {
         //state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
-        state.next_lottery_time = Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
+        state.next_lottery_time =
+            Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
     } else {
         return Err(StdError::generic_err(format!(
             "Lottery is still running, please check again after {}",
@@ -198,20 +199,17 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     let reinvest_amount = state.lottery_deposits * Uint256::one();
 
-    /*
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.human_address(&config.anchor_contract)?,
-            send: vec![Coin {
-                denom: config.stable_denom,
-                amount: reinvest_amount.into(),
-            }],
-            msg: to_binary(&AnchorMsg::DepositStable {})?,
-        });
-
-     */
+        contract_addr: deps.api.human_address(&config.anchor_contract)?,
+        send: vec![Coin {
+            denom: config.stable_denom,
+            amount: reinvest_amount.into(),
+        }],
+        msg: to_binary(&AnchorMsg::DepositStable {})?,
+    });
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages: vec![redeem_msg],
         log: vec![
             log("action", "handle_prize"),
             log("total_awarded_prize", total_awarded_prize),

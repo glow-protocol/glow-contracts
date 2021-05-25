@@ -95,8 +95,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 ) -> HandleResult {
     match msg {
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
-        HandleMsg::Sponsor { } => sponsor(deps, env),
-        HandleMsg::Withdraw { amount } => withdraw(deps, env, amount),
+        HandleMsg::Sponsor {} => sponsor(deps, env),
+        HandleMsg::Withdraw { amount, sequence } => withdraw(deps, env, amount, sequence),
         HandleMsg::Claim { amount } => claim(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
         HandleMsg::_HandlePrize {} => _handle_prize(deps, env),
@@ -225,7 +225,6 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
 ) -> HandleResult {
-
     let config = read_config(&deps.storage)?;
     //let mut state = read_state(&deps.storage)?;
 
@@ -277,14 +276,13 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
         ],
         data: None,
     })
-
 }
 
-// TODO: burn specific tickets parameter - combinations: Option<Vec<String>>
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    amount: u64, // amount of tickets
+    amount: Option<u64>, // amount of tickets
+    sequence: Option<String>, // withdraw the ticket with this sequence
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
@@ -293,6 +291,9 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
 
     // TODO: check user does not send funds
+
+    // If user does not specify an amount of tickets, we withdraw 1 ticket as default option
+    let amount = amount.unwrap_or(1);
 
     if amount == 0 {
         return Err(StdError::generic_err(
@@ -309,13 +310,28 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     }
 
     let mut tickets = depositor.tickets.clone();
+    let mut tickets_removed: Vec<String> = vec![];
 
-    // Remove amount of tickets randomly from user's vector of sequences
-    let ticket_removed: Vec<String> = tickets.drain(0..amount as usize).collect();
+    // TODO: test this logic
+    if let Some(seq) = sequence {
+        if let Some(index) = tickets.iter().position(|x| *x == seq) {
+            tickets_removed.push(tickets.remove(index));
+        } else {
+            return Err(StdError::generic_err(format!(
+                "It seems you don't have combination {}, so you can't withdraw it",
+                seq,
+            )));
+        }
+    } else {
+        // Remove amount of tickets randomly from user's vector of sequences
+        tickets_removed = tickets.drain(0..amount as usize).collect();
+    }
+
+    // Update depositor info with remaining tickets
     depositor.tickets = tickets;
 
     // Remove depositor's address from holders Sequence
-    ticket_removed.iter().for_each(|seq| {
+    tickets_removed.iter().for_each(|seq| {
         let mut holders: Vec<CanonicalAddr> = read_sequence_info(&mut deps.storage, seq);
         let index = holders.iter().position(|x| *x == sender_raw).unwrap();
         holders.remove(index);

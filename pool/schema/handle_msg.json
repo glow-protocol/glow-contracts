@@ -24,6 +24,28 @@
     {
       "type": "object",
       "required": [
+        "batch_deposit"
+      ],
+      "properties": {
+        "batch_deposit": {
+          "type": "object",
+          "required": [
+            "combinations"
+          ],
+          "properties": {
+            "combinations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
         "sponsor"
       ],
       "properties": {

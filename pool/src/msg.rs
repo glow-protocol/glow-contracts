@@ -28,6 +28,9 @@ pub enum HandleMsg {
     SingleDeposit {
         combination: String,
     },
+    BatchDeposit {
+        combinations: Vec<String>,
+    },
     Sponsor {},
     Withdraw {
         amount: Option<u64>,

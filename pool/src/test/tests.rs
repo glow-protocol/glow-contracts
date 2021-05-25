@@ -750,6 +750,271 @@ fn single_deposit() {
 }
 
 #[test]
+fn batch_deposit() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+
+    // Must deposit stable_denom coins
+    let msg = HandleMsg::BatchDeposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "ukrw".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        }],
+    );
+
+    let res = handle(&mut deps, env, msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Deposit amount must be greater than 0 uusd")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // correct base denom, zero deposit
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::zero(),
+        }],
+    );
+
+    let res = handle(&mut deps, env, msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Deposit amount must be greater than 0 uusd")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let wrong_amount = Decimal256::percent(TICKET_PRIZE * 4);
+
+    // correct base denom, deposit different to ticket_prize
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (wrong_amount * Uint256::one()).into(),
+        }],
+    );
+
+    let res = handle(&mut deps, env, msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(
+                msg,
+                format!(
+                    "Deposit amount required for 2 tickets is {} uusd",
+                    Decimal256::percent(TICKET_PRIZE * 2u64)
+                )
+            )
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Invalid ticket sequence - more number of digits
+    let msg = HandleMsg::BatchDeposit {
+        combinations: vec![String::from("135797"), String::from("34567")],
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+    let res = handle(&mut deps, env, msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(
+                msg,
+                format!(
+                    "Ticket sequence must be {} characters between 0-9",
+                    SEQUENCE_DIGITS
+                )
+            )
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Invalid ticket sequence - less number of digits
+    let msg = HandleMsg::BatchDeposit {
+        combinations: vec![String::from("13579"), String::from("3457")],
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+    let res = handle(&mut deps, env, msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(
+                msg,
+                format!(
+                    "Ticket sequence must be {} characters between 0-9",
+                    SEQUENCE_DIGITS
+                )
+            )
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Invalid ticket sequence - only numbers allowed
+    let msg = HandleMsg::BatchDeposit {
+        combinations: vec![String::from("135w9"), String::from("34567")],
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+    let res = handle(&mut deps, env, msg.clone());
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(
+                msg,
+                format!(
+                    "Ticket sequence must be {} characters between 0-9",
+                    SEQUENCE_DIGITS
+                )
+            )
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Correct single deposit - buys one ticket
+    let msg = HandleMsg::BatchDeposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::from(2u64)).into(),
+        }],
+    );
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+
+    /*
+    deps.querier.update_balance(
+        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + TICKET_PRIZE,
+        }],
+    );
+     */
+
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check address of sender was stored correctly in both sequence buckets
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("13579")),
+        vec![deps
+            .api
+            .canonical_address(&HumanAddr::from("addr0000"))
+            .unwrap()]
+    );
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("34567")),
+        vec![deps
+            .api
+            .canonical_address(&HumanAddr::from("addr0000"))
+            .unwrap()]
+    );
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0000"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::percent(TICKET_PRIZE * 2u64),
+            shares: Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE),
+            redeemable_amount: Uint128(0),
+            tickets: vec![String::from("13579"), String::from("34567")],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        read_state(&deps.storage).unwrap(),
+        State {
+            total_tickets: Uint256::from(2u64),
+            total_reserve: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 2u64),
+            lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2u64)
+                * Decimal256::percent(SPLIT_FACTOR),
+            shares_supply: Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE),
+            award_available: Decimal256::zero(),
+            spendable_balance: Decimal256::zero(),
+            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&env.block)
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("anchor"),
+            send: vec![Coin {
+                denom: String::from("uusd"),
+                amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+        })]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "batch_deposit"),
+            log("depositor", "addr0000"),
+            log("deposit_amount", Decimal256::percent(TICKET_PRIZE * 2u64)),
+            log(
+                "shares_minted",
+                Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE)
+            ),
+        ]
+    );
+
+    // TODO: cover more cases eg. sequential buys and repeated ticket in same buy
+    // TODO: deposit fails when current lottery deposit time is expired
+}
+
+#[test]
 fn withdraw() {
     // Initialize contract
     let mut deps = mock_dependencies(

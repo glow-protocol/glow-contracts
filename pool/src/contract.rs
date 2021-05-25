@@ -95,6 +95,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 ) -> HandleResult {
     match msg {
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
+        HandleMsg::BatchDeposit { combinations } => batch_deposit(deps, env, combinations),
         HandleMsg::Sponsor {} => sponsor(deps, env),
         HandleMsg::Withdraw { amount, sequence } => withdraw(deps, env, amount, sequence),
         HandleMsg::Claim { amount } => claim(deps, env, amount),
@@ -221,6 +222,114 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+// Batch deposit to buy several tickets at once
+pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    combinations: Vec<String>,
+) -> HandleResult {
+    let config = read_config(&deps.storage)?;
+    let mut state = read_state(&deps.storage)?;
+
+    // Check deposit is in base stable denom
+    let deposit_amount = env
+        .message
+        .sent_funds
+        .iter()
+        .find(|c| c.denom == config.stable_denom)
+        .map(|c| Uint256::from(c.amount))
+        .unwrap_or_else(Uint256::zero);
+
+    if deposit_amount.is_zero() {
+        return Err(StdError::generic_err(format!(
+            "Deposit amount must be greater than 0 {}",
+            config.stable_denom
+        )));
+    }
+
+    let amount_tickets = combinations.len() as u64;
+
+    //TODO: consider accepting any amount and moving the rest to redeemable_amount balance
+    let required_amount = config.ticket_prize * Uint256::from(amount_tickets);
+    if deposit_amount != required_amount {
+        return Err(StdError::generic_err(format!(
+            "Deposit amount required for {} tickets is {} {}",
+            amount_tickets, required_amount, config.stable_denom
+        )));
+    }
+
+    //TODO: add a time buffer here with block_time
+    if state.next_lottery_time.is_expired(&env.block) {
+        return Err(StdError::generic_err(
+            "Current lottery is about to start, wait until the next one begins",
+        ));
+    }
+
+    for combination in combinations.clone() {
+        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
+            return Err(StdError::generic_err(format!(
+                "Ticket sequence must be {} characters between 0-9",
+                SEQUENCE_DIGITS
+            )));
+        }
+    }
+
+    let depositor = deps.api.canonical_address(&env.message.sender)?;
+    let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor);
+
+    // query exchange_rate from anchor money market
+    let epoch_state: EpochStateResponse =
+        query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
+
+    // TODO: discount fees of the minted amount
+
+    // add amount of aUST entitled from the deposit
+    let minted_amount = Decimal256::from_uint256(deposit_amount) / epoch_state.exchange_rate;
+    depositor_info.deposit_amount = depositor_info
+        .deposit_amount
+        .add(Decimal256::from_uint256(deposit_amount));
+    depositor_info.shares = depositor_info.shares.add(minted_amount);
+
+    for combination in combinations.clone() {
+        depositor_info.tickets.push(combination.clone());
+        // Store ticket sequence in bucket
+        store_sequence_info(&mut deps.storage, depositor.clone(), &combination)?;
+    }
+
+    // Update depositor information
+    store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
+
+    // Update global state
+    state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
+    state.total_deposits = state
+        .total_deposits
+        .add(Decimal256::from_uint256(deposit_amount));
+    state.shares_supply = state.shares_supply.add(minted_amount);
+    state.lottery_deposits = state
+        .lottery_deposits
+        .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
+    store_state(&mut deps.storage, &state)?;
+
+    Ok(HandleResponse {
+        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            send: vec![Coin {
+                denom: config.stable_denom,
+                amount: deposit_amount.into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {})?,
+        })],
+        log: vec![
+            log("action", "batch_deposit"),
+            log("depositor", env.message.sender),
+            log("deposit_amount", deposit_amount),
+            log("shares_minted", minted_amount),
+        ],
+        data: None,
+    })
+}
+
+// Make a donation deposit to the lottery pool
 pub fn sponsor<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -588,7 +697,6 @@ pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: Option<u64>,
 ) -> StdResult<LotteryInfoResponse> {
-
     if let Some(id) = lottery_id {
         // TODO: fail gracefully, not just with unwrap
         let lottery = read_lottery_info(&deps.storage, id).unwrap();

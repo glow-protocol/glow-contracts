@@ -1530,7 +1530,7 @@ fn handle_prize_no_winners() {
 
     // Check lottery info was updated correctly
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64).unwrap(),
+        read_lottery_info(&deps.storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -1646,7 +1646,7 @@ fn handle_prize_one_winner() {
     let awarded_prize = total_prize * Decimal256::percent(50);
 
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64).unwrap(),
+        read_lottery_info(&deps.storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -1806,7 +1806,7 @@ fn handle_prize_winners_diff_ranks() {
     let awarded_prize = awarded_prize_0 + awarded_prize_1;
 
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64).unwrap(),
+        read_lottery_info(&deps.storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -1970,7 +1970,7 @@ fn handle_prize_winners_same_rank() {
     let awarded_prize_each = awarded_prize * Decimal256::percent(50); //divide by two
 
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64).unwrap(),
+        read_lottery_info(&deps.storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,

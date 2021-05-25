@@ -699,7 +699,7 @@ pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<LotteryInfoResponse> {
     if let Some(id) = lottery_id {
         // TODO: fail gracefully, not just with unwrap
-        let lottery = read_lottery_info(&deps.storage, id).unwrap();
+        let lottery = read_lottery_info(&deps.storage, id);
         Ok(LotteryInfoResponse {
             lottery_id: id,
             sequence: lottery.sequence,
@@ -708,7 +708,7 @@ pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
         })
     } else {
         let current_lottery = read_state(&deps.storage)?.current_lottery;
-        let lottery = read_lottery_info(&deps.storage, current_lottery).unwrap();
+        let lottery = read_lottery_info(&deps.storage, current_lottery);
         Ok(LotteryInfoResponse {
             lottery_id: current_lottery,
             sequence: lottery.sequence,

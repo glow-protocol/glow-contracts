@@ -95,10 +95,15 @@ pub fn store_lottery_info<S: Storage>(
     bucket(PREFIX_LOTTERY, storage).save(&lottery_id.to_be_bytes(), lottery_info)
 }
 
-pub fn read_lottery_info<S: Storage>(storage: &S, lottery_id: u64) -> Option<LotteryInfo> {
+pub fn read_lottery_info<S: Storage>(storage: &S, lottery_id: u64) -> LotteryInfo {
     match bucket_read(PREFIX_LOTTERY, storage).load(&lottery_id.to_be_bytes()) {
         Ok(v) => v,
-        _ => None,
+        _ => LotteryInfo {
+            sequence: "".to_string(),
+            awarded: false,
+            total_prizes: Decimal256::zero(),
+            winners: vec![],
+        },
     }
 }
 

@@ -24,6 +24,7 @@ pub fn query_exchange_rate<S: Storage, A: Api, Q: Querier>(
     Ok(epoch_state)
 }
 
+#[allow(dead_code)]
 pub fn query_all_balances<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account_addr: &HumanAddr,
@@ -71,6 +72,7 @@ pub fn query_token_balance<S: Storage, A: Api, Q: Querier>(
     Ok(balance.into())
 }
 
+#[allow(dead_code)]
 pub fn query_depositor_claims<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     addr: &HumanAddr,
@@ -80,6 +82,7 @@ pub fn query_depositor_claims<S: Storage, A: Api, Q: Querier>(
     Ok(claims)
 }
 
+#[allow(dead_code)]
 pub fn query_supply<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     contract_addr: &HumanAddr,
@@ -94,6 +97,7 @@ pub fn query_supply<S: Storage, A: Api, Q: Querier>(
     Ok(Uint256::from(token_info.total_supply))
 }
 
+#[allow(dead_code)]
 pub fn query_tax_rate<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
 ) -> StdResult<Decimal256> {
@@ -101,6 +105,7 @@ pub fn query_tax_rate<S: Storage, A: Api, Q: Querier>(
     Ok(terra_querier.query_tax_rate()?.rate.into())
 }
 
+#[allow(dead_code)]
 pub fn compute_tax<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     coin: &Coin,
@@ -115,6 +120,7 @@ pub fn compute_tax<S: Storage, A: Api, Q: Querier>(
     ))
 }
 
+#[allow(dead_code)]
 pub fn deduct_tax<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     coin: Coin,

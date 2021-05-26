@@ -1,9 +1,8 @@
 use crate::msg::HandleMsg;
 use crate::querier::{query_balance, query_token_balance};
 use crate::state::{
-    read_all_sequences, read_config, read_depositor_info, read_matching_sequences,
-    read_sequence_info, read_state, store_depositor_info, store_lottery_info, store_sequence_info,
-    store_state, LotteryInfo,
+    read_config, read_depositor_info, read_matching_sequences, read_state, store_depositor_info,
+    store_lottery_info, store_state, LotteryInfo,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -228,7 +227,7 @@ fn assign_prize(
     awardable_prize: Decimal256,
     matches: u8,
     winners: u8,
-    distribution: &Vec<Decimal256>,
+    distribution: &[Decimal256],
 ) -> Decimal256 {
     let number_winners = Uint256::from(winners as u64);
 

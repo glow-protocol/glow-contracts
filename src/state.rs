@@ -114,14 +114,14 @@ pub fn sequence_bucket<S: Storage>(storage: &mut S) -> Bucket<S, Vec<CanonicalAd
 pub fn store_sequence_info<S: Storage>(
     storage: &mut S,
     depositor: CanonicalAddr,
-    sequence: &String,
+    sequence: &str,
 ) -> StdResult<()> {
     let mut holders: Vec<CanonicalAddr> = read_sequence_info(storage, sequence);
     holders.push(depositor);
     sequence_bucket(storage).save(sequence.as_bytes(), &holders)
 }
 
-pub fn read_sequence_info<S: Storage>(storage: &S, sequence: &String) -> Vec<CanonicalAddr> {
+pub fn read_sequence_info<S: Storage>(storage: &S, sequence: &str) -> Vec<CanonicalAddr> {
     match bucket_read(PREFIX_SEQUENCE, storage).load(sequence.as_bytes()) {
         Ok(v) => v,
         _ => vec![],
@@ -158,7 +158,7 @@ pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     start_after: Option<CanonicalAddr>,
     limit: Option<u32>,
-    win_sequence: &String,
+    win_sequence: &str,
 ) -> Vec<(u8, Vec<CanonicalAddr>)> {
     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
         bucket_read(PREFIX_SEQUENCE, &deps.storage);
@@ -173,7 +173,7 @@ pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
             let (k, v) = elem.ok()?;
             let sequence = String::from_utf8(k).ok()?;
             let number_matches = count_seq_matches(win_sequence, &sequence);
-            if number_matches >= 2 {
+            if number_matches < 2 {
                 None
             } else {
                 Some((number_matches, v))

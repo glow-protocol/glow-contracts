@@ -13,7 +13,7 @@ use crate::querier::{query_balance, query_exchange_rate, query_token_balance};
 use crate::state::{
     read_config, read_depositor_info, read_depositors, read_lottery_info, read_sequence_info,
     read_state, sequence_bucket, store_config, store_depositor_info, store_sequence_info,
-    store_state, Config, DepositorInfo, LotteryInfo, State,
+    store_state, Config, DepositorInfo, State,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -23,7 +23,7 @@ use cw20::Cw20HandleMsg;
 
 use crate::claims::{claim_deposits, Claim};
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, HandleMsg as AnchorMsg};
-use moneymarket::querier::{compute_tax, deduct_tax};
+use moneymarket::querier::deduct_tax;
 use std::ops::{Add, Sub};
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
@@ -42,13 +42,12 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         .iter()
         .find(|c| c.denom == msg.stable_denom)
         .map(|c| c.amount)
-        .unwrap_or_else(|| Uint128::zero());
+        .unwrap_or_else(Uint128::zero);
 
     if initial_deposit != Uint128(INITIAL_DEPOSIT_AMOUNT) {
         return Err(StdError::generic_err(format!(
             "Must deposit initial reserve funds {:?}{:?}",
-            INITIAL_DEPOSIT_AMOUNT,
-            msg.stable_denom.clone()
+            INITIAL_DEPOSIT_AMOUNT, msg.stable_denom
         )));
     }
 
@@ -213,7 +212,7 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![Coin {
                 denom: config.stable_denom,
-                amount: amount.into(),
+                amount,
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],
@@ -322,7 +321,7 @@ pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![Coin {
                 denom: config.stable_denom,
-                amount: amount.into(),
+                amount,
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],
@@ -450,7 +449,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
 
     // Remove depositor's address from holders Sequence
     tickets_removed.iter().for_each(|seq| {
-        let mut holders: Vec<CanonicalAddr> = read_sequence_info(&mut deps.storage, seq);
+        let mut holders: Vec<CanonicalAddr> = read_sequence_info(&deps.storage, seq);
         let index = holders.iter().position(|x| *x == sender_raw).unwrap();
         holders.remove(index);
         sequence_bucket(&mut deps.storage)
@@ -527,12 +526,10 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     env: Env,
     amount: Option<Uint128>,
 ) -> HandleResult {
-    if amount.is_some() {
-        if amount.unwrap().is_zero() {
-            return Err(StdError::generic_err(
-                "Claim amount must be greater than zero",
-            ));
-        }
+    if (amount.is_some()) && (amount.unwrap().is_zero()) {
+        return Err(StdError::generic_err(
+            "Claim amount must be greater than zero",
+        ));
     }
 
     let config = read_config(&deps.storage)?;
@@ -576,7 +573,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
             to_address: env.clone().message.sender,
             amount: vec![Coin {
                 denom: config.stable_denom,
-                amount: net_send.into(),
+                amount: net_send,
             }],
         })],
         log: vec![
@@ -589,6 +586,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -684,7 +682,7 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(
 
 pub fn query_state<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
-    block_height: Option<u64>,
+    _block_height: Option<u64>,
 ) -> StdResult<StateResponse> {
     let state: State = read_state(&deps.storage)?;
 

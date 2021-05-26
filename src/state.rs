@@ -173,8 +173,8 @@ pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
             let (k, v) = elem.ok()?;
             let sequence = String::from_utf8(k).ok()?;
             let number_matches = count_seq_matches(win_sequence, &sequence);
-            if number_matches < 2 {
-                return None;
+            if number_matches >= 2 {
+                None
             } else {
                 Some((number_matches, v))
             }

@@ -33,7 +33,7 @@ pub fn claim_deposits<S: Storage>(
     let mut to_send = Uint128(0);
     let mut depositor = read_depositor_info(storage, addr);
 
-    if depositor.unbonding_info.len() == 0 {
+    if depositor.unbonding_info.is_empty() {
         return Ok(to_send);
     }
 

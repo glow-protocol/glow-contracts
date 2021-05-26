@@ -238,13 +238,7 @@ fn assign_prize(
 }
 
 pub fn is_valid_sequence(sequence: &str, len: u8) -> bool {
-    return if sequence.len() != (len as usize) {
-        false
-    } else if !sequence.chars().all(|c| ('0'..='9').contains(&c)) {
-        false
-    } else {
-        true
-    };
+    sequence.len() == (len as usize) && sequence.chars().all(|c| ('0'..='9').contains(&c))
 }
 
 pub fn count_seq_matches(a: &str, b: &str) -> u8 {

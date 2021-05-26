@@ -17,6 +17,7 @@ use cw20::Cw20HandleMsg;
 use crate::claims::Claim;
 use cw0::{Duration, Expiration, HOUR, WEEK};
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
+use moneymarket::querier::deduct_tax;
 use std::ops::{Add, Div, Mul};
 use terraswap::hook::InitHook;
 use terraswap::token::InitMsg as TokenInitMsg;
@@ -453,14 +454,19 @@ fn single_deposit() {
         }
     );
 
+    // TODO: how can test pass with and without deduct_tax??
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr::from("anchor"),
-            send: vec![Coin {
-                denom: String::from("uusd"),
-                amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
-            }],
+            send: vec![deduct_tax(
+                &deps,
+                Coin {
+                    denom: String::from("uusd"),
+                    amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+                }
+            )
+            .unwrap()],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
         })]
     );

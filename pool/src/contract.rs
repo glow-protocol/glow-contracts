@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    log, to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
+    coin, log, to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
     HandleResponse, HandleResult, HumanAddr, InitResponse, InitResult, Querier, StdError,
     StdResult, Storage, Uint128, WasmMsg,
 };
@@ -23,6 +23,7 @@ use cw20::Cw20HandleMsg;
 
 use crate::claims::{claim_deposits, Claim};
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, HandleMsg as AnchorMsg};
+use moneymarket::querier::{compute_tax, deduct_tax};
 use std::ops::{Add, Sub};
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
@@ -179,8 +180,12 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
 
+    // Discount tx taxes
+    let net_coin_amount = deduct_tax(deps, coin(deposit_amount.into(), "uusd"))?;
+    let amount = net_coin_amount.amount;
+
     // add amount of aUST entitled from the deposit
-    let minted_amount = Decimal256::from_uint256(deposit_amount) / epoch_state.exchange_rate;
+    let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
         .add(Decimal256::from_uint256(deposit_amount));
@@ -208,7 +213,7 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![Coin {
                 denom: config.stable_denom,
-                amount: deposit_amount.into(),
+                amount: amount.into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],
@@ -281,10 +286,12 @@ pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
     let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
 
-    // TODO: discount fees of the minted amount
+    // Discount tx taxes
+    let net_coin_amount = deduct_tax(deps, coin(deposit_amount.into(), "uusd"))?;
+    let amount = net_coin_amount.amount;
 
     // add amount of aUST entitled from the deposit
-    let minted_amount = Decimal256::from_uint256(deposit_amount) / epoch_state.exchange_rate;
+    let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
         .add(Decimal256::from_uint256(deposit_amount));
@@ -315,7 +322,7 @@ pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![Coin {
                 denom: config.stable_denom,
-                amount: deposit_amount.into(),
+                amount: amount.into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })],
@@ -352,6 +359,8 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
             config.stable_denom
         )));
     }
+
+    // TODO: store list of sponsors
 
     /*
     if deposit_amount != Decimal256::from_uint256(amount) {
@@ -478,7 +487,6 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     )?;
 
     // Calculate amount of aUST to be redeemed
-    // TODO: deduct anchor redemption taxes
     let redeem_amount = withdraw_ratio * contract_a_balance;
 
     // Update global state
@@ -536,8 +544,12 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
     to_send += depositor.redeemable_amount;
 
+    // Deduct taxes on the claim
+    let net_coin_amount = deduct_tax(deps, coin(to_send.into(), "uusd"))?;
+    let net_send = net_coin_amount.amount;
+
     // TODO: add check for when the amount requested is greater than to_send
-    if to_send == Uint128(0) {
+    if net_send == Uint128(0) {
         return Err(StdError::generic_err(
             "Depositor does not have any amount to claim",
         ));
@@ -549,15 +561,14 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         String::from("uusd"),
     )?;
 
-    if to_send > balance.into() {
+    if net_send > balance.into() {
         return Err(StdError::generic_err("Not enough funds to pay the claim"));
     }
 
     // TODO: add logic when claim amount is less than redeemable_amount
+
     depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
-
-    // TODO: we may deduct some tax in redemptions - ex. send_net = deduct_tax(to_send)
 
     Ok(HandleResponse {
         messages: vec![CosmosMsg::Bank(BankMsg::Send {
@@ -565,13 +576,13 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
             to_address: env.clone().message.sender,
             amount: vec![Coin {
                 denom: config.stable_denom,
-                amount: to_send.into(),
+                amount: net_send.into(),
             }],
         })],
         log: vec![
             log("action", "claim"),
             log("depositor", env.message.sender),
-            log("redeemed_amount", to_send),
+            log("redeemed_amount", net_send),
             log("redeemable_amount_left", depositor.redeemable_amount),
         ],
         data: None,
@@ -698,7 +709,6 @@ pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
     lottery_id: Option<u64>,
 ) -> StdResult<LotteryInfoResponse> {
     if let Some(id) = lottery_id {
-        // TODO: fail gracefully, not just with unwrap
         let lottery = read_lottery_info(&deps.storage, id);
         Ok(LotteryInfoResponse {
             lottery_id: id,

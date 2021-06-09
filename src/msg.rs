@@ -113,7 +113,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    //pub winners: Vec<(u8, Vec<HumanAddr>)>, // [(number_hits, [lucky_holders])]
+    pub winners: Vec<(u8, Vec<HumanAddr>)>, // [(number_hits, [lucky_holders])]
 }
 
 // We define a custom struct for each query response

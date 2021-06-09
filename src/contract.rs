@@ -836,6 +836,18 @@ pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             total_prizes: lottery.total_prizes,
+            winners: lottery
+                .winners
+                .into_iter()
+                .map(|w| {
+                    (
+                        w.0,
+                        w.1.into_iter()
+                            .map(|addr| deps.api.human_address(&addr).unwrap())
+                            .collect(),
+                    )
+                })
+                .collect(),
         })
     } else {
         let current_lottery = read_state(&deps.storage)?.current_lottery;
@@ -845,6 +857,18 @@ pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             total_prizes: lottery.total_prizes,
+            winners: lottery
+                .winners
+                .into_iter()
+                .map(|w| {
+                    (
+                        w.0,
+                        w.1.into_iter()
+                            .map(|addr| deps.api.human_address(&addr).unwrap())
+                            .collect(),
+                    )
+                })
+                .collect(), // transform CanonicalAddr to HumanAddr
         })
     }
     // TODO: return also winners -> transform Canonical to HumanAddr

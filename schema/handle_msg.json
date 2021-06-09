@@ -46,6 +46,32 @@
     {
       "type": "object",
       "required": [
+        "gift"
+      ],
+      "properties": {
+        "gift": {
+          "type": "object",
+          "required": [
+            "combinations",
+            "recipient"
+          ],
+          "properties": {
+            "combinations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "recipient": {
+              "$ref": "#/definitions/HumanAddr"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
         "sponsor"
       ],
       "properties": {

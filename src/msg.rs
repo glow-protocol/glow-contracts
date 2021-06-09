@@ -31,6 +31,10 @@ pub enum HandleMsg {
     BatchDeposit {
         combinations: Vec<String>,
     },
+    Gift {
+        combinations: Vec<String>,
+        recipient: HumanAddr,
+    },
     Sponsor {},
     Withdraw {
         amount: Option<u64>,

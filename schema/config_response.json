@@ -5,6 +5,8 @@
   "required": [
     "anchor_contract",
     "block_time",
+    "collector_contract",
+    "distributor_contract",
     "lottery_interval",
     "owner",
     "prize_distribution",
@@ -20,6 +22,12 @@
     },
     "block_time": {
       "$ref": "#/definitions/Duration"
+    },
+    "collector_contract": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "distributor_contract": {
+      "$ref": "#/definitions/HumanAddr"
     },
     "lottery_interval": {
       "$ref": "#/definitions/Duration"

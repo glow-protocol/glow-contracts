@@ -147,7 +147,7 @@ pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
     if deps.api.canonical_address(&env.message.sender)? != config.owner {
         return Err(StdError::unauthorized());
     }
-    
+
     // can't be registered twice
     if config.collector_contract != CanonicalAddr::default()
         || config.distributor_contract != CanonicalAddr::default()
@@ -826,6 +826,8 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(
         owner: deps.api.human_address(&config.owner)?,
         stable_denom: config.stable_denom,
         anchor_contract: deps.api.human_address(&config.anchor_contract)?,
+        collector_contract: deps.api.human_address(&config.collector_contract)?,
+        distributor_contract: deps.api.human_address(&config.distributor_contract)?,
         lottery_interval: config.lottery_interval,
         block_time: config.block_time,
         ticket_prize: config.ticket_prize,

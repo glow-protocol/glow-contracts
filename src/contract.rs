@@ -57,6 +57,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             contract_addr: deps.api.canonical_address(&env.contract.address)?,
             owner: deps.api.canonical_address(&msg.owner)?,
             a_terra_contract: deps.api.canonical_address(&msg.aterra_contract)?,
+            collector_contract: CanonicalAddr::default(),
+            distributor_contract: CanonicalAddr::default(),
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.canonical_address(&msg.anchor_contract)?,
             lottery_interval: Duration::Time(msg.lottery_interval),
@@ -94,6 +96,10 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> HandleResult {
     match msg {
+        HandleMsg::RegisterContracts {
+            collector_contract,
+            distributor_contract,
+        } => register_contracts(deps, env, collector_contract, distributor_contract),
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::BatchDeposit { combinations } => batch_deposit(deps, env, combinations),
         HandleMsg::Gift {
@@ -127,6 +133,33 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             unbonding_period,
         ),
     }
+}
+
+pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    collector_contract: HumanAddr,
+    distributor_contract: HumanAddr,
+) -> HandleResult {
+    let mut config: Config = read_config(&deps.storage)?;
+
+    // check permission
+    if deps.api.canonical_address(&env.message.sender)? != config.owner {
+        return Err(StdError::unauthorized());
+    }
+    
+    // can't be registered twice
+    if config.collector_contract != CanonicalAddr::default()
+        || config.distributor_contract != CanonicalAddr::default()
+    {
+        return Err(StdError::unauthorized());
+    }
+
+    config.collector_contract = deps.api.canonical_address(&collector_contract)?;
+    config.distributor_contract = deps.api.canonical_address(&distributor_contract)?;
+    store_config(&mut deps.storage, &config)?;
+
+    Ok(HandleResponse::default())
 }
 
 // Single Deposit buys one ticket
@@ -871,7 +904,6 @@ pub fn query_lottery_info<S: Storage, A: Api, Q: Querier>(
                 .collect(), // transform CanonicalAddr to HumanAddr
         })
     }
-    // TODO: return also winners -> transform Canonical to HumanAddr
 }
 
 pub fn query_depositor<S: Storage, A: Api, Q: Querier>(

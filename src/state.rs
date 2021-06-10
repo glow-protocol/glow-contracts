@@ -24,6 +24,8 @@ pub struct Config {
     pub contract_addr: CanonicalAddr,
     pub owner: CanonicalAddr,
     pub a_terra_contract: CanonicalAddr,
+    pub collector_contract: CanonicalAddr,
+    pub distributor_contract: CanonicalAddr,
     pub stable_denom: String,
     pub anchor_contract: CanonicalAddr,
     pub lottery_interval: Duration, // number of blocks (or time) between lotteries

@@ -25,6 +25,28 @@ pub struct InitMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
+    /// Register Contracts contract address
+    RegisterContracts {
+        /// overseer_contract: HumanAddr,
+        /// The contract has the logics for
+        /// GLOW distribution speed
+        /// distribution_model: HumanAddr,
+        /// Collector contract to send the reserve fees
+        collector_contract: HumanAddr,
+        /// Faucet contract to drip GLOW token to users
+        distributor_contract: HumanAddr,
+    },
+    /// Update contract configuration
+    UpdateConfig {
+        owner: Option<HumanAddr>,
+        lottery_interval: Option<u64>,
+        block_time: Option<u64>,
+        ticket_prize: Option<Decimal256>,
+        prize_distribution: Option<Vec<Decimal256>>,
+        reserve_factor: Option<Decimal256>,
+        split_factor: Option<Decimal256>,
+        unbonding_period: Option<u64>,
+    },
     SingleDeposit {
         combination: String,
     },
@@ -44,17 +66,8 @@ pub enum HandleMsg {
         amount: Option<Uint128>,
     },
     ExecuteLottery {},
+    /// (internal) Called internally by ExecuteLottery
     _HandlePrize {},
-    UpdateConfig {
-        owner: Option<HumanAddr>,
-        lottery_interval: Option<u64>,
-        block_time: Option<u64>,
-        ticket_prize: Option<Decimal256>,
-        prize_distribution: Option<Vec<Decimal256>>,
-        reserve_factor: Option<Decimal256>,
-        split_factor: Option<Decimal256>,
-        unbonding_period: Option<u64>,
-    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

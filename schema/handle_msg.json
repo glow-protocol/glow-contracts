@@ -3,6 +3,127 @@
   "title": "HandleMsg",
   "anyOf": [
     {
+      "description": "Register Contracts contract address",
+      "type": "object",
+      "required": [
+        "register_contracts"
+      ],
+      "properties": {
+        "register_contracts": {
+          "type": "object",
+          "required": [
+            "collector_contract",
+            "distributor_contract"
+          ],
+          "properties": {
+            "collector_contract": {
+              "description": "overseer_contract: HumanAddr, The contract has the logics for GLOW distribution speed distribution_model: HumanAddr, Collector contract to send the reserve fees",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                }
+              ]
+            },
+            "distributor_contract": {
+              "description": "Faucet contract to drip GLOW token to users",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Update contract configuration",
+      "type": "object",
+      "required": [
+        "update_config"
+      ],
+      "properties": {
+        "update_config": {
+          "type": "object",
+          "properties": {
+            "block_time": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "lottery_interval": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "owner": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "prize_distribution": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/definitions/Decimal256"
+              }
+            },
+            "reserve_factor": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Decimal256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "split_factor": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Decimal256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ticket_prize": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Decimal256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "unbonding_period": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
       "type": "object",
       "required": [
         "single_deposit"
@@ -142,6 +263,7 @@
       }
     },
     {
+      "description": "(internal) Called internally by ExecuteLottery",
       "type": "object",
       "required": [
         "__handle_prize"
@@ -149,92 +271,6 @@
       "properties": {
         "__handle_prize": {
           "type": "object"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "update_config"
-      ],
-      "properties": {
-        "update_config": {
-          "type": "object",
-          "properties": {
-            "block_time": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "lottery_interval": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "owner": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/HumanAddr"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "prize_distribution": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "items": {
-                "$ref": "#/definitions/Decimal256"
-              }
-            },
-            "reserve_factor": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Decimal256"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "split_factor": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Decimal256"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "ticket_prize": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Decimal256"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "unbonding_period": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0.0
-            }
-          }
         }
       }
     }

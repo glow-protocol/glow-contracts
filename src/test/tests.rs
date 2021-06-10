@@ -68,7 +68,7 @@ fn proper_initialization() {
     );
 
     let env = mock_env(
-        "addr0000",
+        "owner",
         &[Coin {
             denom: "uusd".to_string(),
             amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
@@ -77,6 +77,22 @@ fn proper_initialization() {
 
     let res = initialize(&mut deps, env.clone());
     assert_eq!(res, InitResponse::default());
+
+    // Register contracts
+    let msg = HandleMsg::RegisterContracts {
+        collector_contract: HumanAddr::from("collector"),
+        distributor_contract: HumanAddr::from("distributor"),
+    };
+    let env = mock_env("owner", &[]);
+    let _res = handle(&mut deps, env, msg).unwrap();
+
+    // Cannot register contracts again
+    let msg = HandleMsg::RegisterContracts {
+        collector_contract: HumanAddr::from("collector"),
+        distributor_contract: HumanAddr::from("distributor"),
+    };
+    let env = mock_env("owner", &[]);
+    let _res = handle(&mut deps, env.clone(), msg).unwrap_err();
 
     // Test query config
     let query_res = query(&deps, QueryMsg::Config {}).unwrap();
@@ -101,6 +117,11 @@ fn proper_initialization() {
     assert_eq!(Decimal256::percent(5), config_res.reserve_factor);
     assert_eq!(Decimal256::percent(75), config_res.split_factor);
     assert_eq!(WEEK, config_res.unbonding_period);
+    assert_eq!(
+        HumanAddr::from("distributor"),
+        config_res.distributor_contract
+    );
+    assert_eq!(HumanAddr::from("collector"), config_res.collector_contract);
 
     // Test query state
     let query_res = query(&deps, QueryMsg::State { block_height: None }).unwrap();
@@ -142,6 +163,14 @@ fn update_config() {
     );
 
     let _res = initialize(&mut deps, env.clone());
+
+    // Register contracts
+    let msg = HandleMsg::RegisterContracts {
+        collector_contract: HumanAddr::from("collector"),
+        distributor_contract: HumanAddr::from("distributor"),
+    };
+    let env = mock_env("owner", &[]);
+    let _res = handle(&mut deps, env, msg).unwrap();
 
     // update owner
     let env = mock_env("owner", &[]);

@@ -196,6 +196,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     state.award_available = state.award_available.sub(total_awarded_prize);
     store_state(&mut deps.storage, &state)?;
 
+    // TODO: catch error when reinvest_amount == 0
     let reinvest_amount = state.lottery_deposits * Uint256::one();
 
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {

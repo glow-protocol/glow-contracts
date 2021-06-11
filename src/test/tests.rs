@@ -1343,6 +1343,8 @@ fn gift_tickets() {
     // TODO: deposit fails when current lottery deposit time is expired
 }
 
+// TODO: write sponsor testcases
+
 #[test]
 fn withdraw() {
     // Initialize contract

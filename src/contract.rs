@@ -497,7 +497,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
     env: Env,
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
-    //let mut state = read_state(&deps.storage)?;
+    let mut state = read_state(&deps.storage)?;
 
     // Check deposit is in base stable denom
     let deposit_amount = env
@@ -514,6 +514,12 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
             config.stable_denom
         )));
     }
+
+    state.lottery_deposits = state
+        .lottery_deposits
+        .add(Decimal256::from_uint256(deposit_amount));
+
+    store_state(&mut deps.storage, &state)?;
 
     // TODO: store list of sponsors
 

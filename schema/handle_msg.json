@@ -273,6 +273,17 @@
           "type": "object"
         }
       }
+    },
+    {
+      "type": "object",
+      "required": [
+        "execute_epoch_ops"
+      ],
+      "properties": {
+        "execute_epoch_ops": {
+          "type": "object"
+        }
+      }
     }
   ],
   "definitions": {

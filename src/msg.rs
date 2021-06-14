@@ -68,6 +68,7 @@ pub enum HandleMsg {
     ExecuteLottery {},
     /// (internal) Called internally by ExecuteLottery
     _HandlePrize {},
+    ExecuteEpochOps {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

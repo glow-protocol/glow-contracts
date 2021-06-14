@@ -119,19 +119,28 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         String::from("uusd"),
     )?;
 
-    // TODO: make sure balance delta is positive
     // Get delta after aUST redeem operation
+    if state.current_balance > curr_balance {
+        return Err(StdError::generic_err(
+            "aUST redemption net negative. no balance to award",
+        ));
+    }
     let balance_delta = Decimal256::from_uint256(curr_balance - state.current_balance);
 
     //println!("award_available {:?}", balance_delta);
     //println!("lottery_deposits {:?}", state.lottery_deposits);
 
-    // TODO: make sure interest is positive
     // Minus total_lottery_deposits and we get outstanding_interest
+    if state.lottery_deposits > balance_delta {
+        return Err(StdError::generic_err(
+            "Outstanding interest shouldn't be negative",
+        ));
+    }
+
     let outstanding_interest = balance_delta - state.lottery_deposits;
 
     // Add outstanding_interest to previous available award
-    state.award_available += outstanding_interest;
+    state.award_available = state.award_available + outstanding_interest;
 
     let prize = state.award_available;
 
@@ -190,26 +199,27 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     store_lottery_info(&mut deps.storage, state.current_lottery, &lottery_info)?;
 
-    // state.next_lottery_time = state.next_lottery_time.add(config.lottery_interval)?;
     state.current_lottery += 1;
     state.total_reserve = state.total_reserve.add(total_reserve_commission);
     state.award_available = state.award_available.sub(total_awarded_prize);
     store_state(&mut deps.storage, &state)?;
 
-    // TODO: catch error when reinvest_amount == 0
     let reinvest_amount = state.lottery_deposits * Uint256::one();
+    let mut messages: Vec<CosmosMsg> = vec![];
 
-    let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: deps.api.human_address(&config.anchor_contract)?,
-        send: vec![Coin {
-            denom: config.stable_denom,
-            amount: reinvest_amount.into(),
-        }],
-        msg: to_binary(&AnchorMsg::DepositStable {})?,
-    });
+    if !reinvest_amount.is_zero() {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            send: vec![Coin {
+                denom: config.stable_denom,
+                amount: reinvest_amount.into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {})?,
+        }))
+    }
 
     Ok(HandleResponse {
-        messages: vec![redeem_msg],
+        messages,
         log: vec![
             log("action", "handle_prize"),
             log("total_awarded_prize", total_awarded_prize),

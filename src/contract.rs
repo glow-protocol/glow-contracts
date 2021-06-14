@@ -111,6 +111,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Claim { amount } => claim(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
         HandleMsg::_HandlePrize {} => _handle_prize(deps, env),
+        HandleMsg::ExecuteEpochOps {} => execute_epoch_operations(deps, env),
         HandleMsg::UpdateConfig {
             owner,
             lottery_interval,
@@ -497,7 +498,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
     env: Env,
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
-    let mut state = read_state(&deps.storage)?;
+    //let mut state = read_state(&deps.storage)?;
 
     // Check deposit is in base stable denom
     let deposit_amount = env
@@ -514,12 +515,14 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
             config.stable_denom
         )));
     }
+    /*
+       state.lottery_deposits = state
+           .lottery_deposits
+           .add(Decimal256::from_uint256(deposit_amount));
 
-    state.lottery_deposits = state
-        .lottery_deposits
-        .add(Decimal256::from_uint256(deposit_amount));
+       store_state(&mut deps.storage, &state)?;
 
-    store_state(&mut deps.storage, &state)?;
+    */
 
     // TODO: store list of sponsors
 
@@ -746,6 +749,50 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         ],
         data: None,
     })
+}
+
+pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> HandleResult {
+    let config: Config = read_config(&deps.storage)?;
+    /*
+    if config.overseer_contract != deps.api.canonical_address(&env.message.sender)? {
+        return Err(StdError::unauthorized());
+    }
+     */
+
+    let mut state: State = read_state(&deps.storage)?;
+
+    // Compute total_reserves to fund collector contract
+    let total_reserves = state.total_reserve * Uint256::one();
+    let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
+        vec![CosmosMsg::Bank(BankMsg::Send {
+            from_address: env.contract.address,
+            to_address: deps.api.human_address(&config.collector_contract)?,
+            amount: vec![deduct_tax(
+                &deps,
+                Coin {
+                    denom: config.stable_denom,
+                    amount: total_reserves.into(),
+                },
+            )?],
+        })]
+    } else {
+        vec![]
+    };
+
+    state.total_reserve = state.total_reserve - Decimal256::from_uint256(total_reserves);
+    store_state(&mut deps.storage, &state)?;
+
+    return Ok(HandleResponse {
+        messages,
+        log: vec![
+            log("action", "execute_epoch_operations"),
+            log("total_reserves", total_reserves),
+        ],
+        data: None,
+    });
 }
 
 #[allow(clippy::too_many_arguments)]

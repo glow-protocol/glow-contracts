@@ -6,6 +6,7 @@
     "award_available",
     "current_balance",
     "current_lottery",
+    "deposit_shares",
     "lottery_deposits",
     "next_lottery_time",
     "shares_supply",
@@ -24,6 +25,9 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
+    },
+    "deposit_shares": {
+      "$ref": "#/definitions/Decimal256"
     },
     "lottery_deposits": {
       "$ref": "#/definitions/Decimal256"

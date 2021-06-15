@@ -48,11 +48,8 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     )?;
 
     // Get lottery deposits of aUST
-    // TODO: is this true? think. deposit_aUST is invariant, lottery_aterra is not
-    // TODO: idea -> store total_deposits_aUST a subtract to total_aterra_balance
-    // TODO: in depositors_info, store deposit_shares
     let lottery_aterra =
-        (Decimal256::from_uint256(total_aterra_balance) * config.split_factor) * Uint256::one();
+        (Decimal256::from_uint256(total_aterra_balance) - state.deposit_shares) * Uint256::one();
 
     // Get contract current UST balance (used in _handle_prize)
     state.current_balance = query_balance(
@@ -156,10 +153,8 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     /*If not, the protocol eats the losses in fees.
     else {
-        // TODO: check reserve is enough to absorb the losses in fees. Also, related to epoch_ops
-
+        // TODO: check contract balance is enough to absorb the losses in fees. Also, related to epoch_ops
     }
-
      */
 
     // Add outstanding_interest to previous available award

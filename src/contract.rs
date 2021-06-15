@@ -79,6 +79,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
+            deposit_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(initial_deposit),
             current_balance: Uint256::from(initial_deposit),
             current_lottery: 0,
@@ -239,6 +240,9 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
     state.shares_supply = state.shares_supply.add(minted_amount);
+    state.deposit_shares = state
+        .deposit_shares
+        .add(minted_amount - minted_amount * config.split_factor);
     state.lottery_deposits = state
         .lottery_deposits
         .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
@@ -348,6 +352,9 @@ pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
     state.shares_supply = state.shares_supply.add(minted_amount);
+    state.deposit_shares = state
+        .deposit_shares
+        .add(minted_amount - minted_amount * config.split_factor);
     state.lottery_deposits = state
         .lottery_deposits
         .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
@@ -465,6 +472,9 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
     state.shares_supply = state.shares_supply.add(minted_amount);
+    state.deposit_shares = state
+        .deposit_shares
+        .add(minted_amount - minted_amount * config.split_factor);
     state.lottery_deposits = state
         .lottery_deposits
         .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
@@ -516,17 +526,33 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
+    let mut messages: Vec<CosmosMsg> = vec![];
+
+    // TODO: should I deduct taxes in the values I record in state? ux decision
+
     if let Some(true) = award {
         state.award_available = state
             .award_available
             .add(Decimal256::from_uint256(deposit_amount));
     } else {
-        let lottery_deposit = Decimal256::from_uint256(deposit_amount) * config.split_factor;
-
-        state.lottery_deposits = state.lottery_deposits.add(lottery_deposit);
+        state.lottery_deposits = state
+            .lottery_deposits
+            .add(Decimal256::from_uint256(deposit_amount));
         state.total_deposits = state
             .total_deposits
             .add(Decimal256::from_uint256(deposit_amount));
+
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.anchor_contract)?,
+            send: vec![deduct_tax(
+                deps,
+                Coin {
+                    denom: config.stable_denom,
+                    amount: deposit_amount.into(),
+                },
+            )?],
+            msg: to_binary(&AnchorMsg::DepositStable {})?,
+        }));
     }
 
     store_state(&mut deps.storage, &state)?;
@@ -543,14 +569,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
      */
 
     Ok(HandleResponse {
-        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.human_address(&config.anchor_contract)?,
-            send: vec![Coin {
-                denom: config.stable_denom,
-                amount: deposit_amount.into(),
-            }],
-            msg: to_binary(&AnchorMsg::DepositStable {})?,
-        })],
+        messages,
         log: vec![
             log("action", "sponsorship"),
             log("sponsor", env.message.sender),
@@ -638,6 +657,9 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let redeem_amount_shares = unbonding_ratio * depositor.shares;
     depositor.shares = depositor.shares.sub(redeem_amount_shares);
 
+    // Calculate corresponding amount of deposit shares
+    let amount_deposit_shares = redeem_amount_shares - redeem_amount_shares * config.split_factor;
+
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     // Calculate fraction of shares to be redeemed out of the global pool
@@ -656,6 +678,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     // Update global state
     state.total_tickets = state.total_tickets.sub(Uint256::from(amount));
     state.shares_supply = state.shares_supply.sub(redeem_amount_shares);
+    state.deposit_shares = state.deposit_shares.sub(amount_deposit_shares);
     state.total_deposits = state.total_deposits.sub(unbonding_amount);
     state.lottery_deposits = state
         .lottery_deposits
@@ -905,6 +928,7 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
         total_deposits: state.total_deposits,
         lottery_deposits: state.lottery_deposits,
         shares_supply: state.shares_supply,
+        deposit_shares: state.deposit_shares,
         award_available: state.award_available,
         current_balance: state.current_balance,
         current_lottery: state.current_lottery,

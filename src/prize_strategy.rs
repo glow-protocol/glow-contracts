@@ -47,6 +47,13 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         &deps.api.human_address(&config.contract_addr)?,
     )?;
 
+    // Get lottery deposits of aUST
+    // TODO: is this true? think. deposit_aUST is invariant, lottery_aterra is not
+    // TODO: idea -> store total_deposits_aUST a subtract to total_aterra_balance
+    // TODO: in depositors_info, store deposit_shares
+    let lottery_aterra =
+        (Decimal256::from_uint256(total_aterra_balance) * config.split_factor) * Uint256::one();
+
     // Get contract current UST balance (used in _handle_prize)
     state.current_balance = query_balance(
         &deps,
@@ -54,30 +61,31 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         "uusd".to_string(),
     )?;
 
-    if total_aterra_balance.is_zero() {
-        return Err(StdError::generic_err(
-            "No current available aUST funds to execute the lottery",
-        ));
-    }
+    let mut msgs: Vec<CosmosMsg> = vec![];
 
-    // Get lottery deposits of aUST
-    let lottery_aterra =
-        (Decimal256::from_uint256(total_aterra_balance) * config.split_factor) * Uint256::one();
+    if lottery_aterra.is_zero() {
+        if state.award_available.is_zero() {
+            return Err(StdError::generic_err(
+                "There is no available funds to execute the lottery",
+            ));
+        }
+    } else {
+        // Message for redeem amount operation of aUST
+        let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.a_terra_contract)?,
+            send: vec![],
+            msg: to_binary(&Cw20Send {
+                contract: deps.api.human_address(&config.anchor_contract)?,
+                amount: lottery_aterra.into(),
+                msg: Some(to_binary(&Cw20HookMsg::RedeemStable {})?),
+            })?,
+        });
+
+        msgs.push(redeem_msg);
+    }
 
     // Store state
     store_state(&mut deps.storage, &state)?;
-
-    // TODO: deduct anchor redemption taxes
-    // Message for redeem amount operation of aUST
-    let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: deps.api.human_address(&config.a_terra_contract)?,
-        send: vec![],
-        msg: to_binary(&Cw20Send {
-            contract: deps.api.human_address(&config.anchor_contract)?,
-            amount: lottery_aterra.into(),
-            msg: Some(to_binary(&Cw20HookMsg::RedeemStable {})?),
-        })?,
-    });
 
     // Prepare message for internal call to _handle_prize
     let handle_prize_msg = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -86,9 +94,11 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         msg: to_binary(&HandleMsg::_HandlePrize {})?,
     });
 
+    msgs.push(handle_prize_msg);
+
     // Handle Response withdraws from Anchor and call internal _handle_prize
     Ok(HandleResponse {
-        messages: vec![redeem_msg, handle_prize_msg],
+        messages: msgs,
         log: vec![
             log("action", "execute_lottery"),
             log("redeemed_amount", lottery_aterra),
@@ -119,25 +129,38 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         String::from("uusd"),
     )?;
 
+    let mut outstanding_interest = Decimal256::zero();
+
     // Get delta after aUST redeem operation
     if state.current_balance > curr_balance {
         return Err(StdError::generic_err(
             "aUST redemption net negative. no balance to award",
         ));
     }
+
     let balance_delta = Decimal256::from_uint256(curr_balance - state.current_balance);
 
-    //println!("award_available {:?}", balance_delta);
-    //println!("lottery_deposits {:?}", state.lottery_deposits);
-
+    /*
     // Minus total_lottery_deposits and we get outstanding_interest
     if state.lottery_deposits > balance_delta {
         return Err(StdError::generic_err(
             "Outstanding interest shouldn't be negative",
         ));
     }
+     */
 
-    let outstanding_interest = balance_delta - state.lottery_deposits;
+    // Check outstanding_interest is positive. This might not be true if lottery_interval is too small.
+    if balance_delta > state.lottery_deposits {
+        outstanding_interest = balance_delta - state.lottery_deposits
+    }
+
+    /*If not, the protocol eats the losses in fees.
+    else {
+        // TODO: check reserve is enough to absorb the losses in fees. Also, related to epoch_ops
+
+    }
+
+     */
 
     // Add outstanding_interest to previous available award
     state.award_available = state.award_available + outstanding_interest;
@@ -168,17 +191,8 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         for winner in winners {
             let mut depositor = read_depositor_info(&deps.storage, winner);
 
-            /*
-            println!("prize {:?}", prize);
-            println!("number_winners {:?}", number_winners);
-            println!("matches {:?}", *matches);
-            println!("prize_distribution {:?}", &config.prize_distribution);
-             */
-
             let assigned =
                 assign_prize(prize, *matches, number_winners, &config.prize_distribution);
-
-            //println!("assigned {:?}", assigned);
 
             total_awarded_prize += assigned;
             let reserve_commission = apply_reserve_factor(assigned, config.reserve_factor);
@@ -207,6 +221,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     let reinvest_amount = state.lottery_deposits * Uint256::one();
     let mut messages: Vec<CosmosMsg> = vec![];
 
+    // TODO: deduct taxes
     if !reinvest_amount.is_zero() {
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
@@ -218,10 +233,13 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         }))
     }
 
+    // TODO: consider sending reserve commission here directly to collector
+
     Ok(HandleResponse {
         messages,
         log: vec![
             log("action", "handle_prize"),
+            log("accrued_interest", outstanding_interest),
             log("total_awarded_prize", total_awarded_prize),
             log("reinvested_amount", reinvest_amount),
         ],

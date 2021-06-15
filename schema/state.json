@@ -9,7 +9,6 @@
     "lottery_deposits",
     "next_lottery_time",
     "shares_supply",
-    "spendable_balance",
     "total_deposits",
     "total_reserve",
     "total_tickets"
@@ -33,9 +32,6 @@
       "$ref": "#/definitions/Expiration"
     },
     "shares_supply": {
-      "$ref": "#/definitions/Decimal256"
-    },
-    "spendable_balance": {
       "$ref": "#/definitions/Decimal256"
     },
     "total_deposits": {

@@ -75,12 +75,11 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         &mut deps.storage,
         &State {
             total_tickets: Uint256::zero(),
-            total_reserve: Decimal256::from_uint256(initial_deposit),
+            total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
-            award_available: Decimal256::zero(),
-            spendable_balance: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(initial_deposit),
             current_balance: Uint256::from(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
@@ -106,7 +105,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             combinations,
             recipient,
         } => gift_tickets(deps, env, combinations, recipient),
-        HandleMsg::Sponsor {} => sponsor(deps, env),
+        HandleMsg::Sponsor { award } => sponsor(deps, env, award),
         HandleMsg::Withdraw { amount, sequence } => withdraw(deps, env, amount, sequence),
         HandleMsg::Claim { amount } => claim(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
@@ -496,9 +495,10 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
 pub fn sponsor<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    award: Option<bool>,
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
-    //let mut state = read_state(&deps.storage)?;
+    let mut state = read_state(&deps.storage)?;
 
     // Check deposit is in base stable denom
     let deposit_amount = env
@@ -515,25 +515,25 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
             config.stable_denom
         )));
     }
-    /*
-       state.lottery_deposits = state
-           .lottery_deposits
-           .add(Decimal256::from_uint256(deposit_amount));
 
-       store_state(&mut deps.storage, &state)?;
+    if let Some(true) = award {
+        state.award_available = state
+            .award_available
+            .add(Decimal256::from_uint256(deposit_amount));
+    } else {
+        let lottery_deposit = Decimal256::from_uint256(deposit_amount) * config.split_factor;
 
-    */
+        state.lottery_deposits = state.lottery_deposits.add(lottery_deposit);
+        state.total_deposits = state
+            .total_deposits
+            .add(Decimal256::from_uint256(deposit_amount));
+    }
+
+    store_state(&mut deps.storage, &state)?;
 
     // TODO: store list of sponsors
 
     /*
-    if deposit_amount != Decimal256::from_uint256(amount) {
-        return Err(StdError::generic_err(format!(
-            "Sponsorship amount must be equal to the selected amount: {} {}",
-            amount, config.stable_denom
-        )));
-    }
-
     //TODO: add a time buffer here with block_time
     if state.next_lottery_time.is_expired(&env.block) {
         return Err(StdError::generic_err(
@@ -906,7 +906,6 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
         lottery_deposits: state.lottery_deposits,
         shares_supply: state.shares_supply,
         award_available: state.award_available,
-        spendable_balance: state.spendable_balance,
         current_balance: state.current_balance,
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,

@@ -197,15 +197,7 @@
       ],
       "properties": {
         "sponsor": {
-          "type": "object",
-          "properties": {
-            "award": {
-              "type": [
-                "boolean",
-                "null"
-              ]
-            }
-          }
+          "type": "object"
         }
       }
     },

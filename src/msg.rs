@@ -57,7 +57,9 @@ pub enum HandleMsg {
         combinations: Vec<String>,
         recipient: HumanAddr,
     },
-    Sponsor {},
+    Sponsor {
+        award: Option<bool>,
+    },
     Withdraw {
         amount: Option<u64>,
         sequence: Option<String>,
@@ -116,7 +118,6 @@ pub struct StateResponse {
     pub lottery_deposits: Decimal256,
     pub shares_supply: Decimal256,
     pub award_available: Decimal256,
-    pub spendable_balance: Decimal256,
     pub current_balance: Uint256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,

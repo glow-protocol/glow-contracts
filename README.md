@@ -6,7 +6,7 @@ You can find information about the architecture, usage, and function of the smar
 
 ### Dependencies
 
-Glow Protocols depends on [Glow Token Contracts](https://github.com/anchor-protocol/anchor-token-contracts) and [Anchor Protocol Contracts](https://github.com/Anchor-Protocol).
+Glow Protocols depends on [Glow Token Contracts](https://github.com/elevenyellow/glow-token-contracts) and [Anchor Protocol Contracts](https://github.com/Anchor-Protocol).
 
 ## Development
 

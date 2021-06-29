@@ -332,9 +332,12 @@ pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
 
     // add amount of aUST entitled from the deposit
     let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
+
+    // We are storing the deposit amount without the tax deduction, so we subsidy it for UX reasons.
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
         .add(Decimal256::from_uint256(deposit_amount));
+
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in combinations.clone() {
@@ -643,12 +646,6 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
 
     let unbonding_amount = config.ticket_prize * Decimal256::from_uint256(amount);
 
-    // Place amount in unbonding state as a claim
-    depositor.unbonding_info.push(Claim {
-        amount: unbonding_amount,
-        release_at: config.unbonding_period.after(&env.block),
-    });
-
     // Withdraw from Anchor the proportional amount of total user deposits
     let unbonding_ratio: Decimal256 = unbonding_amount / depositor.deposit_amount;
     depositor.deposit_amount = depositor.deposit_amount.sub(unbonding_amount);
@@ -657,10 +654,9 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let redeem_amount_shares = unbonding_ratio * depositor.shares;
     depositor.shares = depositor.shares.sub(redeem_amount_shares);
 
-    // Calculate corresponding amount of deposit shares
+    // Calculate corresponding amount of deposit shares to be redeemed
     let amount_deposit_shares = redeem_amount_shares - redeem_amount_shares * config.split_factor;
 
-    store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     // Calculate fraction of shares to be redeemed out of the global pool
     // TODO: escape divide by zero error
@@ -674,6 +670,27 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
 
     // Calculate amount of aUST to be redeemed
     let redeem_amount = withdraw_ratio * contract_a_balance;
+
+    // Calculate amount of UST expected to be redeemed
+    // query exchange_rate from anchor money market
+    let epoch_state: EpochStateResponse =
+        query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
+
+    // add amount of aUST entitled from the deposit
+    let redeem_stable = Decimal256::from_uint256(amount) * epoch_state.exchange_rate;
+
+    // Discount tx taxes
+    let net_coin_amount = deduct_tax(deps, coin((redeem_stable*Uint256::one()).into(), "uusd"))?;
+
+    // TODO: if net_coin.amount < unbonding_amount {return unbonding_amount} -> subsidize, ux Qs
+
+    // Place amount in unbonding state as a claim
+    depositor.unbonding_info.push(Claim {
+        amount: Decimal256::from_uint256(Uint256::from(net_coin_amount.amount)),
+        release_at: config.unbonding_period.after(&env.block),
+    });
+
+    store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     // Update global state
     state.total_tickets = state.total_tickets.sub(Uint256::from(amount));

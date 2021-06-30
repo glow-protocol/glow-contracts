@@ -187,7 +187,6 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    //TODO: consider accepting any amount and moving the rest to redeemable_amount balance
     if deposit_amount != config.ticket_prize * Uint256::one() {
         return Err(StdError::generic_err(format!(
             "Deposit amount must be equal to a ticket prize: {} {}",
@@ -551,17 +550,6 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
     }
 
     store_state(&mut deps.storage, &state)?;
-
-    // TODO: store list of sponsors
-
-    /*
-    //TODO: add a time buffer here with block_time
-    if state.next_lottery_time.is_expired(&env.block) {
-        return Err(StdError::generic_err(
-            "Current lottery is about to start, wait to sponsor when the next one begins",
-        ));
-    }
-     */
 
     Ok(HandleResponse {
         messages,

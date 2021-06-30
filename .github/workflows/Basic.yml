@@ -64,7 +64,6 @@ jobs:
           command: clippy
           args: -- -D warnings
 
-      # TODO: we should check
       # CHANGES_IN_REPO=$(git status --porcelain)
       # after this, but I don't know how
       - name: Generate Schema

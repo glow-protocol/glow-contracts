@@ -56,7 +56,7 @@ pub struct DepositorInfo {
     pub shares: Decimal256,
     pub redeemable_amount: Uint128,
     pub tickets: Vec<String>,
-    pub unbonding_info: Vec<Claim>, // TODO: rename to claims? should this be decoupled?
+    pub unbonding_info: Vec<Claim>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -181,7 +181,6 @@ pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
             }
         })
         .collect()
-    //TODO: I could use into_group_map HashMap, but let's kiss
 }
 
 pub fn store_depositor_info<S: Storage>(

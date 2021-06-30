@@ -61,8 +61,7 @@ pub enum HandleMsg {
         award: Option<bool>,
     },
     Withdraw {
-        amount: Option<u64>,
-        sequence: Option<String>,
+        instant: Option<bool>,
     },
     Claim {
         amount: Option<Uint128>,

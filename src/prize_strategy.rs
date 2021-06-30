@@ -129,6 +129,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     let mut outstanding_interest = Decimal256::zero();
 
     // Get delta after aUST redeem operation
+    // TODO: what if there is no aUST, like at genesis? it would be fail, but should it?
     if state.current_balance > curr_balance {
         return Err(StdError::generic_err(
             "aUST redemption net negative. no balance to award",

@@ -1461,7 +1461,7 @@ fn withdraw() {
             redeemable_amount: Uint128(0),
             tickets: vec![],
             unbonding_info: vec![Claim {
-                amount: Decimal256::percent(TICKET_PRIZE).div(Decimal256::percent(1_000_000_000)) ,
+                amount: Decimal256::percent(TICKET_PRIZE).div(Decimal256::percent(1_000_000_000)),
                 release_at: WEEK.after(&env.block),
             }]
         }
@@ -1490,7 +1490,9 @@ fn withdraw() {
             send: vec![],
             msg: to_binary(&Cw20HandleMsg::Send {
                 contract: HumanAddr::from("anchor"),
-                amount: (Decimal256::percent(TICKET_PRIZE).div(Decimal256::percent(1_000_000_000)) * Uint256::one()).into(),
+                amount: (Decimal256::percent(TICKET_PRIZE).div(Decimal256::percent(1_000_000_000))
+                    * Uint256::one())
+                .into(),
                 msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
             })
             .unwrap(),

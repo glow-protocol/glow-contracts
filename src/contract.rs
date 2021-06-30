@@ -107,7 +107,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             recipient,
         } => gift_tickets(deps, env, combinations, recipient),
         HandleMsg::Sponsor { award } => sponsor(deps, env, award),
-        HandleMsg::Withdraw { amount, sequence } => withdraw(deps, env, amount, sequence),
+        HandleMsg::Withdraw { instant } => withdraw(deps, env, instant),
         HandleMsg::Claim { amount } => claim(deps, env, amount),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
         HandleMsg::_HandlePrize {} => _handle_prize(deps, env),
@@ -538,6 +538,13 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
             .award_available
             .add(Decimal256::from_uint256(deposit_amount));
     } else {
+        // query exchange_rate from anchor money market
+        let epoch_state: EpochStateResponse =
+            query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
+        // add amount of aUST entitled from the deposit
+        let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
+
+        state.shares_supply = state.shares_supply.add(minted_amount);
         state.lottery_deposits = state
             .lottery_deposits
             .add(Decimal256::from_uint256(deposit_amount));
@@ -585,8 +592,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    amount: Option<u64>,      // amount of tickets
-    sequence: Option<String>, // withdraw the ticket with this sequence
+    instant: Option<bool>,
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
@@ -594,48 +600,16 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
     let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
 
-    // TODO: check user does not send funds
-
-    // If user does not specify an amount of tickets, we withdraw 1 ticket as default option
-    let amount = amount.unwrap_or(1);
-
-    if amount == 0 {
-        return Err(StdError::generic_err(
-            "Amount of tickets must be greater than zero",
-        ));
-    }
-
-    if amount > depositor.tickets.len() as u64 {
-        return Err(StdError::generic_err(format!(
-            "User has {} tickets but {} tickets were requested to be withdrawn",
-            depositor.tickets.len(),
-            amount
-        )));
+    // Depositor does not have deposits in the pool
+    if depositor.shares.is_zero() {
+        return Err(StdError::generic_err("User has no deposits to withdraw"));
     }
 
     let mut tickets = depositor.tickets.clone();
-    let mut tickets_removed: Vec<String> = vec![];
-
-    // TODO: test this logic
-    if let Some(seq) = sequence {
-        if let Some(index) = tickets.iter().position(|x| *x == seq) {
-            tickets_removed.push(tickets.remove(index));
-        } else {
-            return Err(StdError::generic_err(format!(
-                "It seems you don't have combination {}, so you can't withdraw it",
-                seq,
-            )));
-        }
-    } else {
-        // Remove amount of tickets randomly from user's vector of sequences
-        tickets_removed = tickets.drain(0..amount as usize).collect();
-    }
-
-    // Update depositor info with remaining tickets
-    depositor.tickets = tickets;
+    let tickets_amount = depositor.tickets.len() as u128;
 
     // Remove depositor's address from holders Sequence
-    tickets_removed.iter().for_each(|seq| {
+    tickets.iter().for_each(|seq| {
         let mut holders: Vec<CanonicalAddr> = read_sequence_info(&deps.storage, seq);
         let index = holders.iter().position(|x| *x == sender_raw).unwrap();
         holders.remove(index);
@@ -644,22 +618,23 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
             .unwrap();
     });
 
-    let unbonding_amount = config.ticket_prize * Decimal256::from_uint256(amount);
+    // Drain depositor info ticket holdings
+    depositor.tickets = vec![];
 
-    // Withdraw from Anchor the proportional amount of total user deposits
-    let unbonding_ratio: Decimal256 = unbonding_amount / depositor.deposit_amount;
-    depositor.deposit_amount = depositor.deposit_amount.sub(unbonding_amount);
+    // Deduct corresponding lottery deposits
+    state.lottery_deposits = state
+        .lottery_deposits
+        .sub(depositor.deposit_amount * config.split_factor);
+    depositor.deposit_amount = Decimal256::zero();
 
     // Calculate amount of pool shares to be redeemed
-    let redeem_amount_shares = unbonding_ratio * depositor.shares;
-    depositor.shares = depositor.shares.sub(redeem_amount_shares);
+    let redeem_amount_shares = depositor.shares;
+    depositor.shares = Decimal256::zero();
 
     // Calculate corresponding amount of deposit shares to be redeemed
     let amount_deposit_shares = redeem_amount_shares - redeem_amount_shares * config.split_factor;
 
-
     // Calculate fraction of shares to be redeemed out of the global pool
-    // TODO: escape divide by zero error
     let withdraw_ratio = redeem_amount_shares / state.shares_supply;
     // Get contract's total balance of aUST
     let contract_a_balance = query_token_balance(
@@ -669,18 +644,18 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     )?;
 
     // Calculate amount of aUST to be redeemed
-    let redeem_amount = withdraw_ratio * contract_a_balance;
+    let redeem_amount = withdraw_ratio * Decimal256::from_uint256(contract_a_balance);
 
     // Calculate amount of UST expected to be redeemed
     // query exchange_rate from anchor money market
     let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
 
-    // add amount of aUST entitled from the deposit
-    let redeem_stable = Decimal256::from_uint256(amount) * epoch_state.exchange_rate;
+    // Amount of UST expected to be redeemed
+    let redeem_stable = redeem_amount * epoch_state.exchange_rate;
 
     // Discount tx taxes
-    let net_coin_amount = deduct_tax(deps, coin((redeem_stable*Uint256::one()).into(), "uusd"))?;
+    let net_coin_amount = deduct_tax(deps, coin((redeem_stable * Uint256::one()).into(), "uusd"))?;
 
     // TODO: if net_coin.amount < unbonding_amount {return unbonding_amount} -> subsidize, ux Qs
 
@@ -693,13 +668,10 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     // Update global state
-    state.total_tickets = state.total_tickets.sub(Uint256::from(amount));
+    state.total_tickets = state.total_tickets.sub(Uint256::from(tickets_amount));
     state.shares_supply = state.shares_supply.sub(redeem_amount_shares);
     state.deposit_shares = state.deposit_shares.sub(amount_deposit_shares);
-    state.total_deposits = state.total_deposits.sub(unbonding_amount);
-    state.lottery_deposits = state
-        .lottery_deposits
-        .sub(unbonding_amount * config.split_factor); // feels unnecessary
+    state.total_deposits = state.total_deposits.sub(redeem_amount); //TODO: maybe not be needed
     store_state(&mut deps.storage, &state)?;
 
     // Message for redeem amount operation of aUST
@@ -718,7 +690,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         log: vec![
             log("action", "withdraw_ticket"),
             log("depositor", env.message.sender),
-            log("tickets_amount", amount),
+            log("tickets_amount", tickets_amount),
             log("redeem_amount_anchor", redeem_amount),
         ],
         data: None,

@@ -128,7 +128,6 @@ fn proper_initialization() {
     let state_res: StateResponse = from_binary(&query_res).unwrap();
     assert_eq!(state_res.total_tickets, Uint256::zero());
     assert_eq!(state_res.total_reserve, Decimal256::zero());
-    assert_eq!(state_res.total_deposits, Decimal256::zero());
     assert_eq!(state_res.lottery_deposits, Decimal256::zero());
     assert_eq!(state_res.shares_supply, Decimal256::zero());
     assert_eq!(
@@ -475,7 +474,6 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::one(),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::percent(TICKET_PRIZE),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE) * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares,
             deposit_shares: minted_deposit_shares,
@@ -568,7 +566,6 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::percent(TICKET_PRIZE * 2),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares * Decimal256::percent(200),
@@ -654,7 +651,6 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::from(3u64),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::percent(TICKET_PRIZE * 3),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 3)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares * Decimal256::percent(300),
@@ -744,7 +740,6 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::from(4u64),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::percent(TICKET_PRIZE * 4),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 4)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares * Decimal256::percent(400),
@@ -1010,7 +1005,6 @@ fn batch_deposit() {
         State {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::percent(TICKET_PRIZE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares,
@@ -1304,7 +1298,6 @@ fn gift_tickets() {
         State {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::percent(TICKET_PRIZE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares,
@@ -1412,7 +1405,7 @@ fn withdraw() {
         &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
     );
 
-    let redeem_amount = deduct_tax(
+    let _redeem_amount = deduct_tax(
         &deps,
         Coin {
             denom: String::from("uusd"),
@@ -1421,7 +1414,8 @@ fn withdraw() {
     )
     .unwrap()
     .amount;
-    // TODO: use below redeem amount
+
+    // TODO: use below redeem amount instead of hardcoded unbonding info
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1449,7 +1443,6 @@ fn withdraw() {
         State {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),

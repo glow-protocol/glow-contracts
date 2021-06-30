@@ -76,7 +76,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         &State {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
-            total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
@@ -236,9 +235,6 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
 
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::one());
-    state.total_deposits = state
-        .total_deposits
-        .add(Decimal256::from_uint256(deposit_amount));
     state.shares_supply = state.shares_supply.add(minted_amount);
     state.deposit_shares = state
         .deposit_shares
@@ -351,9 +347,6 @@ pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
 
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    state.total_deposits = state
-        .total_deposits
-        .add(Decimal256::from_uint256(deposit_amount));
     state.shares_supply = state.shares_supply.add(minted_amount);
     state.deposit_shares = state
         .deposit_shares
@@ -471,9 +464,6 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
 
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    state.total_deposits = state
-        .total_deposits
-        .add(Decimal256::from_uint256(deposit_amount));
     state.shares_supply = state.shares_supply.add(minted_amount);
     state.deposit_shares = state
         .deposit_shares
@@ -548,10 +538,6 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
         state.lottery_deposits = state
             .lottery_deposits
             .add(Decimal256::from_uint256(deposit_amount));
-        state.total_deposits = state
-            .total_deposits
-            .add(Decimal256::from_uint256(deposit_amount));
-
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
             send: vec![deduct_tax(
@@ -592,7 +578,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    instant: Option<bool>,
+    _instant: Option<bool>,
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
@@ -605,7 +591,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("User has no deposits to withdraw"));
     }
 
-    let mut tickets = depositor.tickets.clone();
+    let tickets = depositor.tickets.clone();
     let tickets_amount = depositor.tickets.len() as u128;
 
     // Remove depositor's address from holders Sequence
@@ -625,8 +611,6 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     state.lottery_deposits = state
         .lottery_deposits
         .sub(depositor.deposit_amount * config.split_factor);
-
-    state.total_deposits = state.total_deposits.sub(depositor.deposit_amount);
 
     depositor.deposit_amount = Decimal256::zero();
 
@@ -674,7 +658,6 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     state.total_tickets = state.total_tickets.sub(Uint256::from(tickets_amount));
     state.shares_supply = state.shares_supply.sub(redeem_amount_shares);
     state.deposit_shares = state.deposit_shares.sub(amount_deposit_shares);
-    state.total_deposits = Decimal256::zero(); //TODO: var may not be needed
     store_state(&mut deps.storage, &state)?;
 
     // Message for redeem amount operation of aUST
@@ -800,14 +783,14 @@ pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
     state.total_reserve = state.total_reserve - Decimal256::from_uint256(total_reserves);
     store_state(&mut deps.storage, &state)?;
 
-    return Ok(HandleResponse {
+    Ok(HandleResponse {
         messages,
         log: vec![
             log("action", "execute_epoch_operations"),
             log("total_reserves", total_reserves),
         ],
         data: None,
-    });
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -917,7 +900,6 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
     Ok(StateResponse {
         total_tickets: state.total_tickets,
         total_reserve: state.total_reserve,
-        total_deposits: state.total_deposits,
         lottery_deposits: state.lottery_deposits,
         shares_supply: state.shares_supply,
         deposit_shares: state.deposit_shares,

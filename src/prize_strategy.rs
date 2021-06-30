@@ -159,7 +159,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
      */
 
     // Add outstanding_interest to previous available award
-    state.award_available = state.award_available + outstanding_interest;
+    state.award_available = state.award_available.add(outstanding_interest);
 
     let prize = state.award_available;
 

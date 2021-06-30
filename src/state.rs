@@ -41,7 +41,6 @@ pub struct Config {
 pub struct State {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
-    pub total_deposits: Decimal256,
     pub lottery_deposits: Decimal256,
     pub shares_supply: Decimal256,
     pub deposit_shares: Decimal256,

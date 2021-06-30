@@ -100,7 +100,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             distributor_contract,
         } => register_contracts(deps, env, collector_contract, distributor_contract),
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
-        HandleMsg::BatchDeposit { combinations } => batch_deposit(deps, env, combinations),
+        HandleMsg::Deposit { combinations } => deposit(deps, env, combinations),
         HandleMsg::Gift {
             combinations,
             recipient,
@@ -263,8 +263,8 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-// Batch deposit to buy several tickets at once
-pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
+// Deposit and get several tickets at once
+pub fn deposit<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     combinations: Vec<String>,
@@ -290,11 +290,10 @@ pub fn batch_deposit<S: Storage, A: Api, Q: Querier>(
 
     let amount_tickets = combinations.len() as u64;
 
-    //TODO: consider accepting any amount and moving the rest to redeemable_amount balance
     let required_amount = config.ticket_prize * Uint256::from(amount_tickets);
-    if deposit_amount != required_amount {
+    if deposit_amount < required_amount {
         return Err(StdError::generic_err(format!(
-            "Deposit amount required for {} tickets is {} {}",
+            "Minimum deposit amount required for {} tickets is {} {}",
             amount_tickets, required_amount, config.stable_denom
         )));
     }
@@ -409,8 +408,8 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
 
     let amount_tickets = combinations.len() as u64;
 
-    //TODO: consider accepting any amount and moving the rest to redeemable_amount balance
     let required_amount = config.ticket_prize * Uint256::from(amount_tickets);
+
     if deposit_amount != required_amount {
         return Err(StdError::generic_err(format!(
             "Deposit amount required to gift {} tickets is {} {}",

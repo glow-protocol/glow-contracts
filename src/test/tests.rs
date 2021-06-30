@@ -801,7 +801,7 @@ fn batch_deposit() {
     let _res = initialize(&mut deps, env.clone());
 
     // Must deposit stable_denom coins
-    let msg = HandleMsg::BatchDeposit {
+    let msg = HandleMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
     let env = mock_env(
@@ -837,33 +837,8 @@ fn batch_deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let wrong_amount = Decimal256::percent(TICKET_PRIZE * 4);
-
-    // correct base denom, deposit different to ticket_prize
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: (wrong_amount * Uint256::one()).into(),
-        }],
-    );
-
-    let res = handle(&mut deps, env, msg.clone());
-    match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Deposit amount required for 2 tickets is {} uusd",
-                    Decimal256::percent(TICKET_PRIZE * 2u64)
-                )
-            )
-        }
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
     // Invalid ticket sequence - more number of digits
-    let msg = HandleMsg::BatchDeposit {
+    let msg = HandleMsg::Deposit {
         combinations: vec![String::from("135797"), String::from("34567")],
     };
     let env = mock_env(
@@ -888,7 +863,7 @@ fn batch_deposit() {
     }
 
     // Invalid ticket sequence - less number of digits
-    let msg = HandleMsg::BatchDeposit {
+    let msg = HandleMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("3457")],
     };
     let env = mock_env(
@@ -913,7 +888,7 @@ fn batch_deposit() {
     }
 
     // Invalid ticket sequence - only numbers allowed
-    let msg = HandleMsg::BatchDeposit {
+    let msg = HandleMsg::Deposit {
         combinations: vec![String::from("135w9"), String::from("34567")],
     };
     let env = mock_env(
@@ -938,7 +913,7 @@ fn batch_deposit() {
     }
 
     // Correct single deposit - buys one ticket
-    let msg = HandleMsg::BatchDeposit {
+    let msg = HandleMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
     let env = mock_env(
@@ -1043,6 +1018,7 @@ fn batch_deposit() {
 
     // TODO: cover more cases eg. sequential buys and repeated ticket in same buy
     // TODO: deposit fails when current lottery deposit time is expired
+    // TODO: correct base denom, deposit greater than tickets test case
 }
 
 #[test]

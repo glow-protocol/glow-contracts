@@ -50,7 +50,7 @@ pub enum HandleMsg {
     SingleDeposit {
         combination: String,
     },
-    BatchDeposit {
+    Deposit {
         combinations: Vec<String>,
     },
     Gift {

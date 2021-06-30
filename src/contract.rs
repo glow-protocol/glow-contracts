@@ -542,7 +542,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
         let epoch_state: EpochStateResponse =
             query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
         // add amount of aUST entitled from the deposit
-        let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
+        let minted_amount = Decimal256::from_uint256(deposit_amount) / epoch_state.exchange_rate;
 
         state.shares_supply = state.shares_supply.add(minted_amount);
         state.lottery_deposits = state
@@ -625,6 +625,9 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     state.lottery_deposits = state
         .lottery_deposits
         .sub(depositor.deposit_amount * config.split_factor);
+
+    state.total_deposits = state.total_deposits.sub(depositor.deposit_amount);
+
     depositor.deposit_amount = Decimal256::zero();
 
     // Calculate amount of pool shares to be redeemed
@@ -671,7 +674,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     state.total_tickets = state.total_tickets.sub(Uint256::from(tickets_amount));
     state.shares_supply = state.shares_supply.sub(redeem_amount_shares);
     state.deposit_shares = state.deposit_shares.sub(amount_deposit_shares);
-    state.total_deposits = state.total_deposits.sub(redeem_amount); //TODO: maybe not be needed
+    state.total_deposits = Decimal256::zero(); //TODO: var may not be needed
     store_state(&mut deps.storage, &state)?;
 
     // Message for redeem amount operation of aUST
@@ -680,7 +683,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         send: vec![],
         msg: to_binary(&Cw20HandleMsg::Send {
             contract: deps.api.human_address(&config.anchor_contract)?,
-            amount: redeem_amount.into(),
+            amount: (redeem_amount * Uint256::one()).into(),
             msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
         })?,
     });

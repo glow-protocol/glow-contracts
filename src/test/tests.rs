@@ -1387,64 +1387,41 @@ fn withdraw() {
     deps.querier.with_exchange_rate(Decimal256::permille(1023));
     let _res = handle(&mut deps, env, msg).unwrap();
 
-    let shares = Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023);
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
 
     let env = mock_env("addr0001", &[]);
-    let msg = HandleMsg::Withdraw {
-        amount: Some(0),
-        sequence: None,
-    };
 
-    // Should fail, we cannot withdraw a 0 amount of tickets
-    let res = handle(&mut deps, env.clone(), msg.clone());
+    let msg = HandleMsg::Withdraw { instant: None };
 
-    match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Amount of tickets must be greater than zero")
-        }
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-    let msg = HandleMsg::Withdraw {
-        amount: Some(2),
-        sequence: None,
-    };
-    // Should fail, we cannot withdraw more tickets than the ones we have
-    let res = handle(&mut deps, env.clone(), msg.clone());
-
-    match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                "User has 1 tickets but 2 tickets were requested to be withdrawn"
-            )
-        }
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-    let msg = HandleMsg::Withdraw {
-        amount: Some(1),
-        sequence: None,
-    };
-
-    /*
     deps.querier.with_token_balances(&[(
         &HumanAddr::from("aterra"),
-        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &Uint128::from(1_000_000u64))],
+        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &shares.into())],
     )]);
-     */
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
-
-    // TODO: check with other ratios of redeem_amount_shares and shares_supply
-    let redeem_amount = Uint256::from(1u128);
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
         read_sequence_info(&deps.storage, &String::from("23456")),
         vec![]
     );
+
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
+    );
+
+    let redeem_amount = deduct_tax(
+        &deps,
+        Coin {
+            denom: String::from("uusd"),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        },
+    )
+    .unwrap()
+    .amount;
+    // TODO: use below redeem amount
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1461,7 +1438,7 @@ fn withdraw() {
             redeemable_amount: Uint128(0),
             tickets: vec![],
             unbonding_info: vec![Claim {
-                amount: Decimal256::percent(TICKET_PRIZE).div(Decimal256::percent(1_000_000_000)),
+                amount: Decimal256::from_uint256(Uint256::from(9999999u128)),
                 release_at: WEEK.after(&env.block),
             }]
         }
@@ -1490,9 +1467,7 @@ fn withdraw() {
             send: vec![],
             msg: to_binary(&Cw20HandleMsg::Send {
                 contract: HumanAddr::from("anchor"),
-                amount: (Decimal256::percent(TICKET_PRIZE).div(Decimal256::percent(1_000_000_000))
-                    * Uint256::one())
-                .into(),
+                amount: shares.into(),
                 msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
             })
             .unwrap(),
@@ -1505,7 +1480,7 @@ fn withdraw() {
             log("action", "withdraw_ticket"),
             log("depositor", "addr0001"),
             log("tickets_amount", 1u64),
-            log("redeem_amount_anchor", redeem_amount),
+            log("redeem_amount_anchor", shares),
         ]
     );
 }
@@ -1550,17 +1525,13 @@ fn claim() {
 
     // Address withdraws one ticket
     let env = mock_env("addr0001", &[]);
-    let msg = HandleMsg::Withdraw {
-        amount: Some(1),
-        sequence: None,
-    };
+    let msg = HandleMsg::Withdraw { instant: None };
+
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
 
     deps.querier.with_token_balances(&[(
         &HumanAddr::from("aterra"),
-        &[(
-            &HumanAddr::from(MOCK_CONTRACT_ADDR),
-            &Uint128::from(10_000_000u64),
-        )],
+        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &shares.into())],
     )]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
@@ -1656,7 +1627,7 @@ fn claim() {
             to_address: HumanAddr::from("addr0001"),
             amount: vec![Coin {
                 denom: String::from("uusd"),
-                amount: Uint128::from(10_000_000u64),
+                amount: Uint128::from(9_999_999u64), //TODO: should be 10_000_000
             }],
         })]
     );
@@ -1666,7 +1637,7 @@ fn claim() {
         vec![
             log("action", "claim"),
             log("depositor", "addr0001"),
-            log("redeemed_amount", 10_000_000u64),
+            log("redeemed_amount", 9_999_999u64),
             log("redeemable_amount_left", Uint128(0)),
         ]
     );

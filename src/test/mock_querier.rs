@@ -271,4 +271,9 @@ impl WasmMockQuerier {
     pub fn with_exchange_rate(&mut self, rate: Decimal256) {
         self.exchange_rate_querier = ExchangeRateQuerier::new(rate);
     }
+
+    // configure the tax mock querier
+    pub fn with_tax(&mut self, rate: Decimal, caps: &[(&String, &Uint128)]) {
+        self.tax_querier = TaxQuerier::new(rate, caps);
+    }
 }

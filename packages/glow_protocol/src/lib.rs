@@ -1,5 +1,4 @@
 pub mod airdrop;
-pub mod collector;
 pub mod common;
 pub mod community;
 pub mod core;

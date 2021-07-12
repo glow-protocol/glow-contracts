@@ -18,8 +18,11 @@ use glow_protocol::gov::{
     PollsResponse, QueryMsg, StakerResponse, VoteOption, VoterInfo, VotersResponse,
     VotersResponseItem,
 };
+use terraswap::asset::{Asset, AssetInfo};
+use terraswap::pair::HandleMsg as TerraswapHandleMsg;
 
 const VOTING_TOKEN: &str = "voting_token";
+const TERRASWAP_FACTORY: &str = "terraswap_factory";
 const TEST_CREATOR: &str = "creator";
 const TEST_VOTER: &str = "voter1";
 const TEST_VOTER_2: &str = "voter2";
@@ -48,6 +51,7 @@ fn mock_init(mut deps: &mut Extern<MockStorage, MockApi, WasmMockQuerier>) {
 
     let msg = HandleMsg::RegisterContracts {
         glow_token: HumanAddr::from(VOTING_TOKEN),
+        terraswap_factory: HumanAddr::from(TERRASWAP_FACTORY),
     };
     let _res =
         handle(&mut deps, env, msg).expect("contract successfully handles RegisterContracts");
@@ -86,6 +90,7 @@ fn proper_initialization() {
         config,
         Config {
             glow_token: CanonicalAddr::default(),
+            terraswap_factory: CanonicalAddr::default(),
             owner: deps
                 .api
                 .canonical_address(&HumanAddr::from(TEST_CREATOR))
@@ -102,6 +107,7 @@ fn proper_initialization() {
 
     let msg = HandleMsg::RegisterContracts {
         glow_token: HumanAddr::from(VOTING_TOKEN),
+        terraswap_factory: HumanAddr::from(TERRASWAP_FACTORY),
     };
     let _res = handle(&mut deps, env, msg).unwrap();
     let config: Config = config_read(&mut deps.storage).load().unwrap();
@@ -124,6 +130,60 @@ fn proper_initialization() {
             total_share: Uint128::zero(),
             total_deposit: Uint128::zero(),
         }
+    );
+}
+
+#[test]
+fn test_sweep() {
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(100u128),
+        }],
+    );
+
+    mock_init(&mut deps);
+
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128(1000000u128))],
+    );
+
+    deps.querier.with_terraswap_pairs(&[(
+        &"uusdvoting_token".to_string(),
+        &HumanAddr::from("pairvoting_token"),
+    )]);
+
+    let msg = HandleMsg::Sweep {
+        denom: "uusd".to_string(),
+    };
+
+    let env = mock_env("addr0000", &[]);
+    let res = handle(&mut deps, env, msg).unwrap();
+
+    // tax deduct 100 => 99
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("pairvoting_token"),
+            msg: to_binary(&TerraswapHandleMsg::Swap {
+                offer_asset: Asset {
+                    info: AssetInfo::NativeToken {
+                        denom: "uusd".to_string()
+                    },
+                    amount: Uint128::from(99u128),
+                },
+                max_spread: None,
+                belief_price: None,
+                to: None,
+            })
+            .unwrap(),
+            send: vec![Coin {
+                denom: "uusd".to_string(),
+                amount: Uint128::from(99u128),
+            }],
+        }),]
     );
 }
 
@@ -205,6 +265,7 @@ fn fails_contract_already_registered() {
 
     let msg = HandleMsg::RegisterContracts {
         glow_token: HumanAddr::from(VOTING_TOKEN),
+        terraswap_factory: HumanAddr::from(TERRASWAP_FACTORY),
     };
     let _res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
     let res = handle(&mut deps, env.clone(), msg.clone());

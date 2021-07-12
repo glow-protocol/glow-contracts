@@ -94,7 +94,7 @@ pub struct ConfigResponse {
     pub owner: HumanAddr,
     pub stable_denom: String,
     pub anchor_contract: HumanAddr,
-    pub collector_contract: HumanAddr,
+    pub gov_contract: HumanAddr,
     pub distributor_contract: HumanAddr,
     pub lottery_interval: Duration,
     pub block_time: Duration,

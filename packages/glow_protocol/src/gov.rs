@@ -23,6 +23,12 @@ pub enum HandleMsg {
     Receive(Cw20ReceiveMsg),
     RegisterContracts {
         glow_token: HumanAddr,
+        terraswap_factory: HumanAddr,
+    },
+    /// Public Message
+    /// Sweep all given denom balance to GLOW token
+    Sweep {
+        denom: String,
     },
     UpdateConfig {
         owner: Option<HumanAddr>,
@@ -108,6 +114,7 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub owner: HumanAddr,
     pub glow_token: HumanAddr,
+    pub terraswap_factory: HumanAddr,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,

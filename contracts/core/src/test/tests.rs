@@ -119,7 +119,7 @@ fn proper_initialization() {
         HumanAddr::from("distributor"),
         config_res.distributor_contract
     );
-    assert_eq!(HumanAddr::from("collector"), config_res.collector_contract);
+    assert_eq!(HumanAddr::from("collector"), config_res.gov_contract);
 
     // Test query state
     let query_res = query(&deps, QueryMsg::State { block_height: None }).unwrap();

@@ -57,7 +57,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             contract_addr: deps.api.canonical_address(&env.contract.address)?,
             owner: deps.api.canonical_address(&msg.owner)?,
             a_terra_contract: deps.api.canonical_address(&msg.aterra_contract)?,
-            collector_contract: CanonicalAddr::default(),
+            gov_contract: CanonicalAddr::default(),
             distributor_contract: CanonicalAddr::default(),
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.canonical_address(&msg.anchor_contract)?,
@@ -149,13 +149,13 @@ pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
     }
 
     // can't be registered twice
-    if config.collector_contract != CanonicalAddr::default()
+    if config.gov_contract != CanonicalAddr::default()
         || config.distributor_contract != CanonicalAddr::default()
     {
         return Err(StdError::unauthorized());
     }
 
-    config.collector_contract = deps.api.canonical_address(&collector_contract)?;
+    config.gov_contract = deps.api.canonical_address(&collector_contract)?;
     config.distributor_contract = deps.api.canonical_address(&distributor_contract)?;
     store_config(&mut deps.storage, &config)?;
 
@@ -754,7 +754,7 @@ pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
     let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
         vec![CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address,
-            to_address: deps.api.human_address(&config.collector_contract)?,
+            to_address: deps.api.human_address(&config.gov_contract)?,
             amount: vec![deduct_tax(
                 &deps,
                 Coin {
@@ -864,7 +864,7 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(
         owner: deps.api.human_address(&config.owner)?,
         stable_denom: config.stable_denom,
         anchor_contract: deps.api.human_address(&config.anchor_contract)?,
-        collector_contract: deps.api.human_address(&config.collector_contract)?,
+        gov_contract: deps.api.human_address(&config.gov_contract)?,
         distributor_contract: deps.api.human_address(&config.distributor_contract)?,
         lottery_interval: config.lottery_interval,
         block_time: config.block_time,

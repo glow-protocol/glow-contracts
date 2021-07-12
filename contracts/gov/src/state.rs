@@ -22,6 +22,7 @@ static PREFIX_BANK: &[u8] = b"bank";
 pub struct Config {
     pub owner: CanonicalAddr,
     pub glow_token: CanonicalAddr,
+    pub terraswap_factory: CanonicalAddr,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,

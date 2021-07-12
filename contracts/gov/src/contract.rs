@@ -7,7 +7,7 @@ use crate::state::{
 };
 
 use cosmwasm_std::{
-    from_binary, log, to_binary, Api, Binary, CanonicalAddr, CosmosMsg, Decimal, Env, Extern,
+    from_binary, log, to_binary, Api, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Env, Extern,
     HandleResponse, HandleResult, HumanAddr, InitResponse, InitResult, Querier, StdError,
     StdResult, Storage, Uint128, WasmMsg,
 };
@@ -19,6 +19,10 @@ use glow_protocol::gov::{
     PollsResponse, QueryMsg, StateResponse, VoteOption, VoterInfo, VotersResponse,
     VotersResponseItem,
 };
+
+use terraswap::asset::{Asset, AssetInfo, PairInfo};
+use terraswap::pair::HandleMsg as TerraswapHandleMsg;
+use terraswap::querier::{query_balance, query_pair_info};
 
 const MIN_TITLE_LENGTH: usize = 4;
 const MAX_TITLE_LENGTH: usize = 64;
@@ -37,6 +41,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 
     let config = Config {
         glow_token: CanonicalAddr::default(),
+        terraswap_factory: CanonicalAddr::default(),
         owner: deps.api.canonical_address(&env.message.sender)?,
         quorum: msg.quorum,
         threshold: msg.threshold,
@@ -67,7 +72,11 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     match msg {
         HandleMsg::Receive(msg) => receive_cw20(deps, env, msg),
-        HandleMsg::RegisterContracts { glow_token } => register_contracts(deps, glow_token),
+        HandleMsg::RegisterContracts {
+            glow_token,
+            terraswap_factory,
+        } => register_contracts(deps, glow_token, terraswap_factory),
+        HandleMsg::Sweep { denom } => sweep(deps, env, denom),
         HandleMsg::UpdateConfig {
             owner,
             quorum,
@@ -100,21 +109,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::ExpirePoll { poll_id } => expire_poll(deps, env, poll_id),
         HandleMsg::SnapshotPoll { poll_id } => snapshot_poll(deps, env, poll_id),
     }
-}
-
-pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    glow_token: HumanAddr,
-) -> HandleResult {
-    let mut config: Config = config_read(&deps.storage).load()?;
-    if config.glow_token != CanonicalAddr::default() {
-        return Err(StdError::unauthorized());
-    }
-
-    config.glow_token = deps.api.canonical_address(&glow_token)?;
-    config_store(&mut deps.storage).save(&config)?;
-
-    Ok(HandleResponse::default())
 }
 
 pub fn receive_cw20<S: Storage, A: Api, Q: Querier>(
@@ -152,6 +146,86 @@ pub fn receive_cw20<S: Storage, A: Api, Q: Querier>(
     } else {
         Err(StdError::generic_err("data should be given"))
     }
+}
+
+pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    glow_token: HumanAddr,
+    terraswap_factory: HumanAddr,
+) -> HandleResult {
+    let mut config: Config = config_read(&deps.storage).load()?;
+    if config.glow_token != CanonicalAddr::default() {
+        return Err(StdError::unauthorized());
+    }
+
+    config.glow_token = deps.api.canonical_address(&glow_token)?;
+    config.terraswap_factory = deps.api.canonical_address(&terraswap_factory)?;
+    config_store(&mut deps.storage).save(&config)?;
+
+    Ok(HandleResponse::default())
+}
+
+/// Sweep
+/// Anyone can execute sweep function to swap
+/// asset native denom => GLOW token
+pub fn sweep<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    denom: String,
+) -> HandleResult {
+    let config: Config = config_read(&deps.storage).load()?;
+    let glow_token = deps.api.human_address(&config.glow_token)?;
+    let terraswap_factory_raw = deps.api.human_address(&config.terraswap_factory)?;
+
+    let pair_info: PairInfo = query_pair_info(
+        &deps,
+        &terraswap_factory_raw,
+        &[
+            AssetInfo::NativeToken {
+                denom: denom.to_string(),
+            },
+            AssetInfo::Token {
+                contract_addr: glow_token.clone(),
+            },
+        ],
+    )?;
+
+    let amount = query_balance(&deps, &env.contract.address, denom.to_string())?;
+    let swap_asset = Asset {
+        info: AssetInfo::NativeToken {
+            denom: denom.to_string(),
+        },
+        amount,
+    };
+
+    // deduct tax first
+    let amount = (swap_asset.deduct_tax(&deps)?).amount;
+    Ok(HandleResponse {
+        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: pair_info.contract_addr,
+            msg: to_binary(&TerraswapHandleMsg::Swap {
+                offer_asset: Asset {
+                    amount,
+                    ..swap_asset
+                },
+                max_spread: None,
+                belief_price: None,
+                to: None,
+            })?,
+            send: vec![Coin {
+                denom: denom.to_string(),
+                amount,
+            }],
+        })],
+        log: vec![
+            log("action", "sweep"),
+            log(
+                "collected_rewards",
+                format!("{:?}{:?}", amount.to_string(), denom),
+            ),
+        ],
+        data: None,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -717,6 +791,7 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
     Ok(ConfigResponse {
         owner: deps.api.human_address(&config.owner)?,
         glow_token: deps.api.human_address(&config.glow_token)?,
+        terraswap_factory: deps.api.human_address(&config.terraswap_factory)?,
         quorum: config.quorum,
         threshold: config.threshold,
         voting_period: config.voting_period,

@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InitMsg",
+  "type": "object",
+  "required": [
+    "glow_token",
+    "gov_contract",
+    "spend_limit",
+    "whitelist"
+  ],
+  "properties": {
+    "glow_token": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "gov_contract": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "spend_limit": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "whitelist": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/HumanAddr"
+      }
+    }
+  },
+  "definitions": {
+    "HumanAddr": {
+      "type": "string"
+    },
+    "Uint128": {
+      "type": "string"
+    }
+  }
+}

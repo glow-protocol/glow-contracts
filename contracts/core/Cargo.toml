@@ -34,7 +34,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 cw20 = "0.2"
 cw0 = "0.2"
 terraswap = "1.2.0"
-moneymarket = { git = "https://github.com/anchor-protocol/money-market-contracts" }
+moneymarket = "0.1.0"
 glow-protocol = { version = "0.1.0", path = "../../packages/glow_protocol" }
 cosmwasm-std = { version = "0.10.1", features = ["iterator"] }
 cosmwasm-storage = { version = "0.10.1", features = ["iterator"] }

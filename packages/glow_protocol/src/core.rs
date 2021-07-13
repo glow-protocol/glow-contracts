@@ -63,6 +63,7 @@ pub enum HandleMsg {
     Claim {
         amount: Option<Uint128>,
     },
+    ClaimRewards {},
     ExecuteLottery {},
     /// (internal) Called internally by ExecuteLottery
     _HandlePrize {},

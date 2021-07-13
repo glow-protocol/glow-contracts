@@ -458,6 +458,8 @@ fn single_deposit() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("13579")],
             unbonding_info: vec![]
         }
@@ -472,13 +474,17 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::one(),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::percent(TICKET_PRIZE),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE) * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares,
             deposit_shares: minted_deposit_shares,
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block)
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -554,6 +560,8 @@ fn single_deposit() {
             shares: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE))
                 .mul(Decimal256::percent(200)),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("23456")],
             unbonding_info: vec![]
         }
@@ -564,6 +572,7 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 2),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares * Decimal256::percent(200),
@@ -571,7 +580,10 @@ fn single_deposit() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block)
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -639,6 +651,8 @@ fn single_deposit() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("98765")],
             unbonding_info: vec![]
         }
@@ -649,6 +663,7 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::from(3u64),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 3),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 3)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares * Decimal256::percent(300),
@@ -656,7 +671,10 @@ fn single_deposit() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block)
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -728,6 +746,8 @@ fn single_deposit() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("23456")],
             unbonding_info: vec![]
         }
@@ -738,6 +758,7 @@ fn single_deposit() {
         State {
             total_tickets: Uint256::from(4u64),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 4),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 4)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares * Decimal256::percent(400),
@@ -745,7 +766,10 @@ fn single_deposit() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block)
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -966,6 +990,8 @@ fn batch_deposit() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE * 2u64),
             shares: Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
             unbonding_info: vec![]
         }
@@ -978,6 +1004,7 @@ fn batch_deposit() {
         State {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares,
@@ -985,7 +1012,10 @@ fn batch_deposit() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block)
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345, //TODO: hardcoded. why this value?
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -1260,6 +1290,8 @@ fn gift_tickets() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE * 2u64),
             shares: Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
             unbonding_info: vec![]
         }
@@ -1272,6 +1304,7 @@ fn gift_tickets() {
         State {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::percent(TICKET_PRIZE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRIZE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             shares_supply: minted_shares,
@@ -1279,7 +1312,10 @@ fn gift_tickets() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block)
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -1404,6 +1440,8 @@ fn withdraw() {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
                 amount: Decimal256::from_uint256(Uint256::from(9999999u128)),
@@ -1417,13 +1455,17 @@ fn withdraw() {
         State {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block)
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -1582,6 +1624,8 @@ fn claim() {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![]
         }
@@ -1898,6 +1942,8 @@ fn handle_prize_no_winners() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("11111")],
             unbonding_info: vec![]
         }
@@ -2013,6 +2059,8 @@ fn handle_prize_one_winner() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }
@@ -2139,6 +2187,8 @@ fn handle_prize_winners_diff_ranks() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }
@@ -2170,6 +2220,8 @@ fn handle_prize_winners_diff_ranks() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00100")],
             unbonding_info: vec![]
         }
@@ -2304,6 +2356,8 @@ fn handle_prize_winners_same_rank() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }
@@ -2335,6 +2389,8 @@ fn handle_prize_winners_same_rank() {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
             redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }

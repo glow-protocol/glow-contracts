@@ -16,6 +16,8 @@ use glow_protocol::core::{
     LotteryInfoResponse, QueryMsg, StateResponse,
 };
 
+use glow_protocol::distributor::HandleMsg as FaucetHandleMsg;
+
 use cosmwasm_bignumber::{Decimal256, Uint256};
 
 use cw0::Duration;
@@ -76,6 +78,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         &State {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
@@ -83,6 +86,9 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             current_balance: Uint256::from(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
+            last_reward_updated: 0,
+            global_reward_index: Default::default(),
+            glow_emission_rate: Default::default(),
         },
     )?;
 
@@ -108,6 +114,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Sponsor { award } => sponsor(deps, env, award),
         HandleMsg::Withdraw { instant } => withdraw(deps, env, instant),
         HandleMsg::Claim { amount } => claim(deps, env, amount),
+        HandleMsg::ClaimRewards {} => claim_rewards(deps, env),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
         HandleMsg::_HandlePrize {} => _handle_prize(deps, env),
         HandleMsg::ExecuteEpochOps {} => execute_epoch_operations(deps, env),
@@ -227,11 +234,6 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     depositor_info.shares = depositor_info.shares.add(minted_amount);
     depositor_info.tickets.push(combination.clone());
 
-    // Update depositor information
-    store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
-    // Store ticket sequence in bucket
-    store_sequence_info(&mut deps.storage, depositor, &combination)?;
-
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::one());
     state.shares_supply = state.shares_supply.add(minted_amount);
@@ -241,6 +243,17 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     state.lottery_deposits = state
         .lottery_deposits
         .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
+    state.total_deposits = state
+        .total_deposits
+        .add(Decimal256::from_uint256(deposit_amount));
+
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor_info);
+
+    // Update state
+    store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
+    store_sequence_info(&mut deps.storage, depositor, &combination)?;
     store_state(&mut deps.storage, &state)?;
 
     Ok(HandleResponse {
@@ -340,9 +353,6 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
         store_sequence_info(&mut deps.storage, depositor.clone(), &combination)?;
     }
 
-    // Update depositor information
-    store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
-
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
     state.shares_supply = state.shares_supply.add(minted_amount);
@@ -352,6 +362,17 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     state.lottery_deposits = state
         .lottery_deposits
         .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
+
+    state.total_deposits = state
+        .total_deposits
+        .add(Decimal256::from_uint256(deposit_amount));
+
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor_info);
+
+    // Update depositor and state information
+    store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
     store_state(&mut deps.storage, &state)?;
 
     Ok(HandleResponse {
@@ -406,7 +427,6 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
     }
 
     let amount_tickets = combinations.len() as u64;
-
     let required_amount = config.ticket_prize * Uint256::from(amount_tickets);
 
     if deposit_amount != required_amount {
@@ -457,9 +477,6 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
         store_sequence_info(&mut deps.storage, recipient.clone(), &combination)?;
     }
 
-    // Update depositor information
-    store_depositor_info(&mut deps.storage, &recipient, &depositor_info)?;
-
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
     state.shares_supply = state.shares_supply.add(minted_amount);
@@ -469,6 +486,16 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
     state.lottery_deposits = state
         .lottery_deposits
         .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
+
+    state.total_deposits = state
+        .total_deposits
+        .add(Decimal256::from_uint256(deposit_amount));
+
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor_info);
+
+    // Update depositor and state information
+    store_depositor_info(&mut deps.storage, &recipient, &depositor_info)?;
     store_state(&mut deps.storage, &state)?;
 
     Ok(HandleResponse {
@@ -518,8 +545,6 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
     }
 
     let mut messages: Vec<CosmosMsg> = vec![];
-
-    // TODO: should I deduct taxes in the values I record in state? ux decision
 
     if let Some(true) = award {
         state.award_available = state
@@ -599,6 +624,11 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         .lottery_deposits
         .sub(depositor.deposit_amount * config.split_factor);
 
+    // Compute GLOW reward
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
+    state.total_deposits = state.total_deposits.sub(depositor.deposit_amount);
     depositor.deposit_amount = Decimal256::zero();
 
     // Calculate amount of pool shares to be redeemed
@@ -638,6 +668,8 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         amount: Decimal256::from_uint256(Uint256::from(net_coin_amount.amount)),
         release_at: config.unbonding_period.after(&env.block),
     });
+
+    // TODO: compute reward and compute_depositor_reward
 
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
@@ -713,6 +745,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     }
 
     // TODO: add logic when claim amount is less than redeemable_amount
+    // TODO: should I compute here depositor reward as well?
 
     depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
@@ -780,6 +813,74 @@ pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+pub fn claim_rewards<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> HandleResult {
+    let config: Config = read_config(&deps.storage)?;
+    let mut state: State = read_state(&deps.storage)?;
+
+    let depositor_address = env.message.sender;
+    let depositor_raw = deps.api.canonical_address(&depositor_address)?;
+    let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &depositor_raw);
+
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
+    let claim_amount = depositor.pending_rewards * Uint256::one();
+    depositor.pending_rewards = Decimal256::zero();
+
+    store_state(&mut deps.storage, &state)?;
+    store_depositor_info(&mut deps.storage, &depositor_raw, &depositor)?;
+
+    let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.human_address(&config.distributor_contract)?,
+            send: vec![],
+            msg: to_binary(&FaucetHandleMsg::Spend {
+                recipient: depositor_address,
+                amount: claim_amount.into(),
+            })?,
+        })]
+    } else {
+        vec![]
+    };
+
+    Ok(HandleResponse {
+        messages,
+        log: vec![
+            log("action", "claim_rewards"),
+            log("claim_amount", claim_amount),
+        ],
+        data: None,
+    })
+}
+
+/// Compute distributed reward and update global reward index
+pub fn compute_reward(state: &mut State, block_height: u64) {
+    // TODO: why can this function be called twice in the same block?
+    if state.last_reward_updated >= block_height {
+        return;
+    }
+
+    let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
+    let reward_accrued = passed_blocks * state.glow_emission_rate;
+
+    if !reward_accrued.is_zero() && !state.total_deposits.is_zero() {
+        state.global_reward_index += reward_accrued / state.total_deposits;
+    }
+
+    state.last_reward_updated = block_height;
+}
+
+/// Compute reward amount a borrower received
+pub(crate) fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
+    depositor.pending_rewards +=
+        depositor.deposit_amount * (state.global_reward_index - depositor.reward_index);
+    depositor.reward_index = state.global_reward_index;
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -794,6 +895,8 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     unbonding_period: Option<u64>,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
+
+    // TODO: restrict the fields that can be changed
 
     // check permission
     if deps.api.canonical_address(&env.message.sender)? != config.owner {

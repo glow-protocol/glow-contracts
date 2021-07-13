@@ -25,8 +25,8 @@ pub struct Config {
     pub a_terra_contract: CanonicalAddr,
     pub gov_contract: CanonicalAddr,
     pub distributor_contract: CanonicalAddr,
-    pub stable_denom: String,
     pub anchor_contract: CanonicalAddr,
+    pub stable_denom: String,
     pub lottery_interval: Duration, // number of blocks (or time) between lotteries
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
     pub ticket_prize: Decimal256, // prize of a ticket in stable_denom
@@ -40,6 +40,7 @@ pub struct Config {
 pub struct State {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
+    pub total_deposits: Decimal256,
     pub lottery_deposits: Decimal256,
     pub shares_supply: Decimal256,
     pub deposit_shares: Decimal256,
@@ -47,6 +48,9 @@ pub struct State {
     pub current_balance: Uint256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
+    pub last_reward_updated: u64,
+    pub global_reward_index: Decimal256,
+    pub glow_emission_rate: Decimal256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -54,6 +58,8 @@ pub struct DepositorInfo {
     pub deposit_amount: Decimal256,
     pub shares: Decimal256,
     pub redeemable_amount: Uint128,
+    pub reward_index: Decimal256,
+    pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }
@@ -197,6 +203,8 @@ pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
             redeemable_amount: Uint128::zero(),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![],
         },

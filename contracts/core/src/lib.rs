@@ -4,6 +4,7 @@ pub mod state;
 mod claims;
 mod prize_strategy;
 mod querier;
+mod random;
 
 #[cfg(test)]
 mod test;

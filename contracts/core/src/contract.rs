@@ -5,7 +5,9 @@ use cosmwasm_std::{
 };
 
 use crate::prize_strategy::{_handle_prize, execute_lottery, is_valid_sequence};
-use crate::querier::{query_balance, query_exchange_rate, query_token_balance};
+use crate::querier::{
+    query_balance, query_exchange_rate, query_glow_emission_rate, query_token_balance,
+};
 use crate::state::{
     read_config, read_depositor_info, read_depositors, read_lottery_info, read_sequence_info,
     read_state, sequence_bucket, store_config, store_depositor_info, store_sequence_info,
@@ -669,8 +671,6 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         release_at: config.unbonding_period.after(&env.block),
     });
 
-    // TODO: compute reward and compute_depositor_reward
-
     store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
 
     // Update global state
@@ -774,13 +774,21 @@ pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
     env: Env,
 ) -> HandleResult {
     let config: Config = read_config(&deps.storage)?;
-    /*
-    if config.overseer_contract != deps.api.canonical_address(&env.message.sender)? {
-        return Err(StdError::unauthorized());
-    }
-     */
 
     let mut state: State = read_state(&deps.storage)?;
+
+    // Compute global Glow rewards
+    compute_reward(&mut state, env.block.height);
+
+    // Query updated Glow emission rate and update state
+    state.glow_emission_rate = query_glow_emission_rate(
+        &deps,
+        &deps.api.human_address(&config.distributor_contract)?,
+        state.award_available,
+        config.target_award,
+        state.glow_emission_rate,
+    )?
+    .emission_rate;
 
     // Compute total_reserves to fund collector contract
     let total_reserves = state.total_reserve * Uint256::one();
@@ -800,7 +808,8 @@ pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
         vec![]
     };
 
-    state.total_reserve = state.total_reserve - Decimal256::from_uint256(total_reserves);
+    // Empty total reserve and store state
+    state.total_reserve = Decimal256::zero();
     store_state(&mut deps.storage, &state)?;
 
     Ok(HandleResponse {
@@ -808,6 +817,7 @@ pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
         log: vec![
             log("action", "execute_epoch_operations"),
             log("total_reserves", total_reserves),
+            log("glow_emission_rate", state.glow_emission_rate),
         ],
         data: None,
     })

@@ -6,6 +6,7 @@ use cosmwasm_std::{
 use cosmwasm_storage::to_length_prefixed;
 use cw20::TokenInfoResponse;
 use glow_protocol::core::Claim;
+use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 use terra_cosmwasm::TerraQuerier;
 
@@ -70,6 +71,26 @@ pub fn query_token_balance<S: Storage, A: Api, Q: Querier>(
 
     let balance: Uint128 = from_binary(&res)?;
     Ok(balance.into())
+}
+
+pub fn query_glow_emission_rate<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    distributor: &HumanAddr,
+    current_award: Decimal256,
+    target_award: Decimal256,
+    current_emission_rate: Decimal256,
+) -> StdResult<GlowEmissionRateResponse> {
+    let glow_emission_rate: GlowEmissionRateResponse =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: HumanAddr::from(distributor),
+            msg: to_binary(&DistributorQueryMsg::GlowEmissionRate {
+                current_award,
+                target_award,
+                current_emission_rate,
+            })?,
+        }))?;
+
+    Ok(glow_emission_rate)
 }
 
 #[allow(dead_code)]

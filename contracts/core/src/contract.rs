@@ -83,8 +83,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
-            award_available: Decimal256::from_uint256(initial_deposit),
-            current_balance: Uint256::from(initial_deposit),
+            award_available: Decimal256::from_uint256(initial_deposit), //TODO: consider letting part of the initial deposit as idle balance
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
             last_reward_updated: 0,
@@ -117,7 +116,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Claim { amount } => claim(deps, env, amount),
         HandleMsg::ClaimRewards {} => claim_rewards(deps, env),
         HandleMsg::ExecuteLottery {} => execute_lottery(deps, env),
-        HandleMsg::_HandlePrize {} => _handle_prize(deps, env),
+        HandleMsg::_HandlePrize { balance } => _handle_prize(deps, env, balance),
         HandleMsg::ExecuteEpochOps {} => execute_epoch_operations(deps, env),
         HandleMsg::UpdateConfig {
             owner,
@@ -996,7 +995,6 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
         shares_supply: state.shares_supply,
         deposit_shares: state.deposit_shares,
         award_available: state.award_available,
-        current_balance: state.current_balance,
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,
     })

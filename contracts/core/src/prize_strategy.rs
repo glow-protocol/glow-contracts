@@ -47,12 +47,12 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
         &deps.api.human_address(&config.contract_addr)?,
     )?;
 
-    // Get lottery deposits of aUST
+    // Get lottery related deposits of aUST
     let lottery_aterra =
         (Decimal256::from_uint256(total_aterra_balance) - state.deposit_shares) * Uint256::one();
 
     // Get contract current UST balance (used in _handle_prize)
-    state.current_balance = query_balance(
+    let balance = query_balance(
         &deps,
         &deps.api.human_address(&config.contract_addr)?,
         "uusd".to_string(),
@@ -88,7 +88,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     let handle_prize_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: deps.api.human_address(&config.contract_addr)?,
         send: vec![],
-        msg: to_binary(&HandleMsg::_HandlePrize {})?,
+        msg: to_binary(&HandleMsg::_HandlePrize { balance })?,
     });
 
     msgs.push(handle_prize_msg);
@@ -107,6 +107,7 @@ pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
 pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    balance: Uint256,
 ) -> HandleResult {
     if env.message.sender != env.contract.address {
         return Err(StdError::unauthorized());
@@ -116,7 +117,6 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     let config = read_config(&deps.storage)?;
 
     // TODO: Get random sequence here
-    // TODO: deduct terra taxes and oracle fees
     let winning_sequence = String::from("00000");
 
     // Get contract current uusd balance
@@ -126,43 +126,20 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
         String::from("uusd"),
     )?;
 
-    let mut outstanding_interest = Decimal256::zero();
-
-    // Get delta after aUST redeem operation
-    // TODO: what if there is no aUST, like at genesis? it would be fail, but should it?
-    if state.current_balance > curr_balance {
-        return Err(StdError::generic_err(
-            "aUST redemption net negative. no balance to award",
-        ));
-    }
-
-    let balance_delta = Decimal256::from_uint256(curr_balance - state.current_balance);
-
-    /*
-    // Minus total_lottery_deposits and we get outstanding_interest
-    if state.lottery_deposits > balance_delta {
-        return Err(StdError::generic_err(
-            "Outstanding interest shouldn't be negative",
-        ));
-    }
-     */
-
-    // Check outstanding_interest is positive. This might not be true if lottery_interval is too small.
-    if balance_delta > state.lottery_deposits {
-        outstanding_interest = balance_delta - state.lottery_deposits
-    }
-
-    /*If not, the protocol eats the losses in fees.
-    else {
-        // TODO: check contract balance is enough to absorb the losses in fees. Also, related to epoch_ops
-    }
-     */
+    // Calculate outstanding_interest from the lottery aUST deposits during the lottery interval
+    let outstanding_interest = if curr_balance > balance + state.lottery_deposits * Uint256::one() {
+        // Redemption of lottery aUST shares is net positive
+        let balance_delta = Decimal256::from_uint256(curr_balance - balance);
+        // Balance delta minus than the base lottery deposits
+        balance_delta - state.lottery_deposits
+    } else {
+        Decimal256::zero()
+    };
 
     // Add outstanding_interest to previous available award
     state.award_available = state.award_available.add(outstanding_interest);
 
     let prize = state.award_available;
-
     if prize.is_zero() {
         return Err(StdError::generic_err(
             "There is no UST balance to fund the prize",
@@ -217,7 +194,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     let reinvest_amount = state.lottery_deposits * Uint256::one();
     let mut messages: Vec<CosmosMsg> = vec![];
 
-    // TODO: deduct taxes
+    // The protocol assumes the taxes on the reinvested amount on Anchor contract
     if !reinvest_amount.is_zero() {
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.human_address(&config.anchor_contract)?,
@@ -228,8 +205,6 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         }))
     }
-
-    // TODO: consider sending reserve commission here directly to collector
 
     Ok(HandleResponse {
         messages,

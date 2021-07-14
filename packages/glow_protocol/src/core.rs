@@ -67,7 +67,9 @@ pub enum HandleMsg {
     ClaimRewards {},
     ExecuteLottery {},
     /// (internal) Called internally by ExecuteLottery
-    _HandlePrize {},
+    _HandlePrize {
+        balance: Uint256,
+    },
     ExecuteEpochOps {},
 }
 
@@ -117,7 +119,6 @@ pub struct StateResponse {
     pub shares_supply: Decimal256,
     pub deposit_shares: Decimal256,
     pub award_available: Decimal256,
-    pub current_balance: Uint256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
 }

@@ -133,10 +133,6 @@ fn proper_initialization() {
         state_res.award_available,
         Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
     );
-    assert_eq!(
-        state_res.current_balance,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT)
-    );
     assert_eq!(state_res.current_lottery, 0);
     assert_eq!(state_res.next_lottery_time, WEEK.after(&env.block));
 }
@@ -480,7 +476,6 @@ fn single_deposit() {
             shares_supply: minted_shares,
             deposit_shares: minted_deposit_shares,
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
-            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&env.block),
             last_reward_updated: 12345,
@@ -579,7 +574,6 @@ fn single_deposit() {
             shares_supply: minted_shares * Decimal256::percent(200),
             deposit_shares: minted_deposit_shares * Decimal256::percent(200),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
-            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&env.block),
             last_reward_updated: 12345,
@@ -670,7 +664,6 @@ fn single_deposit() {
             shares_supply: minted_shares * Decimal256::percent(300),
             deposit_shares: minted_deposit_shares * Decimal256::percent(300),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
-            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&env.block),
             last_reward_updated: 12345,
@@ -765,7 +758,6 @@ fn single_deposit() {
             shares_supply: minted_shares * Decimal256::percent(400),
             deposit_shares: minted_deposit_shares * Decimal256::percent(400),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
-            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&env.block),
             last_reward_updated: 12345,
@@ -1011,7 +1003,6 @@ fn batch_deposit() {
             shares_supply: minted_shares,
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
-            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&env.block),
             last_reward_updated: 12345, //TODO: hardcoded. why this value?
@@ -1311,7 +1302,6 @@ fn gift_tickets() {
             shares_supply: minted_shares,
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
-            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&env.block),
             last_reward_updated: 12345,
@@ -1461,7 +1451,6 @@ fn withdraw() {
             shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
-            current_balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&env.block),
             last_reward_updated: 12345,
@@ -1761,14 +1750,13 @@ fn execute_lottery() {
 
     // Directly check next_lottery_time has been set up for next week
     let next_lottery_time = read_state(&deps.storage).unwrap().next_lottery_time;
-    let current_balance = read_state(&deps.storage).unwrap().current_balance;
 
     assert_eq!(
         next_lottery_time,
         Expiration::AtTime(env.block.time).add(WEEK).unwrap()
     );
 
-    assert_eq!(current_balance, Uint256::from(100_000_000u128));
+    let current_balance = Uint256::from(100_000_000u128);
 
     assert_eq!(
         res.messages,
@@ -1786,7 +1774,10 @@ fn execute_lottery() {
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: HumanAddr::from(MOCK_CONTRACT_ADDR),
                 send: vec![],
-                msg: to_binary(&HandleMsg::_HandlePrize {}).unwrap(),
+                msg: to_binary(&HandleMsg::_HandlePrize {
+                    balance: current_balance
+                })
+                .unwrap(),
             })
         ]
     );
@@ -1823,7 +1814,9 @@ fn handle_prize_no_tickets() {
 
     let env = mock_env("addr0001", &[]);
 
-    let msg = HandleMsg::_HandlePrize {};
+    let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
+
+    let msg = HandleMsg::_HandlePrize { balance };
     let res = handle(&mut deps, env, msg.clone());
 
     match res {
@@ -1832,7 +1825,7 @@ fn handle_prize_no_tickets() {
     }
 
     let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {};
+    let msg = HandleMsg::_HandlePrize { balance };
 
     /* The contract does not have UST balance, should fail
     let res = handle(&mut deps, env.clone(), msg.clone());
@@ -1910,7 +1903,7 @@ fn handle_prize_no_winners() {
         HumanAddr::from(MOCK_CONTRACT_ADDR),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(150_000_000_000u128),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
 
@@ -1950,17 +1943,14 @@ fn handle_prize_no_winners() {
         }
     );
 
+    let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
+
     // Run lottery, one winner (5 hits) - should run correctly
     let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {};
+    let msg = HandleMsg::_HandlePrize { balance };
     let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
-
-    // total prize = balance - old_balance - lottery_deposits
-    let total_prize = Decimal256::from_uint256(Uint256::from(150_000_000_000u128))
-        - (Decimal256::percent(TICKET_PRIZE) * Decimal256::percent(SPLIT_FACTOR));
-
     let awarded_prize = Decimal256::zero();
 
     assert_eq!(
@@ -1974,9 +1964,11 @@ fn handle_prize_no_winners() {
     );
 
     let state = read_state(&deps.storage).unwrap();
-
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
+
+    // total prize = balance - old_balance - lottery_deposits
+    let total_prize = Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
     // From the initialization of the contract
     assert_eq!(state.award_available, total_prize - awarded_prize);
@@ -2000,7 +1992,7 @@ fn handle_prize_no_winners() {
         res.log,
         vec![
             log("action", "handle_prize"),
-            log("accrued_interest", Uint256::from(149_892_500_000u128)),
+            log("accrued_interest", Uint128::zero()),
             log("total_awarded_prize", awarded_prize),
             log("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
@@ -2027,7 +2019,7 @@ fn handle_prize_one_winner() {
         HumanAddr::from(MOCK_CONTRACT_ADDR),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(150_000_000_000u128),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
 
@@ -2069,14 +2061,15 @@ fn handle_prize_one_winner() {
 
     // Run lottery, one winner (5 hits) - should run correctly
     let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {};
+    let msg = HandleMsg::_HandlePrize {
+        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+    };
     let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
 
     // total prize = balance - lottery_deposits
-    let total_prize = Decimal256::from_uint256(Uint256::from(150_000_000_000u128))
-        - (Decimal256::percent(TICKET_PRIZE) * Decimal256::percent(SPLIT_FACTOR));
+    let total_prize = Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
     let awarded_prize = total_prize * Decimal256::percent(50);
 
@@ -2128,12 +2121,14 @@ fn handle_prize_one_winner() {
         res.log,
         vec![
             log("action", "handle_prize"),
-            log("accrued_interest", Uint256::from(149_892_500_000u128)),
+            log("accrued_interest", Uint128::zero()),
             log("total_awarded_prize", awarded_prize),
             log("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
     );
 }
+
+//TODO: Test lottery from ExecuteLottery, not directly from _HandlePrize
 
 #[test]
 fn handle_prize_winners_diff_ranks() {
@@ -2155,7 +2150,7 @@ fn handle_prize_winners_diff_ranks() {
         HumanAddr::from(MOCK_CONTRACT_ADDR),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(150_000_000_000u128),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
 
@@ -2230,14 +2225,15 @@ fn handle_prize_winners_diff_ranks() {
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
     let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {};
+    let msg = HandleMsg::_HandlePrize {
+        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+    };
     let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
 
     // total prize = balance  - lottery_deposits
-    let total_prize = Decimal256::from_uint256(Uint256::from(150_000_000_000u128))
-        - (Decimal256::percent(2 * TICKET_PRIZE) * Decimal256::percent(SPLIT_FACTOR));
+    let total_prize = Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
     let awarded_prize_0 = total_prize * Decimal256::percent(50);
     let awarded_prize_1 = total_prize * Decimal256::percent(30);
@@ -2296,7 +2292,7 @@ fn handle_prize_winners_diff_ranks() {
         res.log,
         vec![
             log("action", "handle_prize"),
-            log("accrued_interest", Uint256::from(149_885_000_000u128)),
+            log("accrued_interest", Uint128::zero()),
             log("total_awarded_prize", awarded_prize),
             log("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
@@ -2324,7 +2320,7 @@ fn handle_prize_winners_same_rank() {
         HumanAddr::from(MOCK_CONTRACT_ADDR),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(150_000_000_000u128),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
 
@@ -2399,14 +2395,15 @@ fn handle_prize_winners_same_rank() {
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
     let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {};
+    let msg = HandleMsg::_HandlePrize {
+        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+    };
     let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
 
-    // total prize = balance - lottery_deposits
-    let total_prize = Decimal256::from_uint256(Uint256::from(150_000_000_000u128))
-        - (Decimal256::percent(2 * TICKET_PRIZE) * Decimal256::percent(SPLIT_FACTOR));
+    // total prize
+    let total_prize = Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
     let awarded_prize = total_prize * Decimal256::percent(50);
     let awarded_prize_each = awarded_prize * Decimal256::percent(50); //divide by two
@@ -2461,7 +2458,7 @@ fn handle_prize_winners_same_rank() {
         res.log,
         vec![
             log("action", "handle_prize"),
-            log("accrued_interest", Uint256::from(149_885_000_000u128)),
+            log("accrued_interest", Uint128::zero()),
             log("total_awarded_prize", awarded_prize),
             log("reinvested_amount", lottery_deposits * Uint256::one()),
         ]

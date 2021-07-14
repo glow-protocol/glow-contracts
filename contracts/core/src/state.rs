@@ -46,7 +46,6 @@ pub struct State {
     pub shares_supply: Decimal256,
     pub deposit_shares: Decimal256,
     pub award_available: Decimal256,
-    pub current_balance: Uint256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub last_reward_updated: u64,

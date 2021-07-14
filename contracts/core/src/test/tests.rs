@@ -47,6 +47,7 @@ fn initialize<S: Storage, A: Api, Q: Querier>(
             Decimal256::percent(30),
             Decimal256::percent(50),
         ],
+        target_award: Decimal256::zero(),
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         unbonding_period: WEEK_TIME,

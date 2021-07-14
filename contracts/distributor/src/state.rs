@@ -1,6 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use cosmwasm_bignumber::Decimal256;
 use cosmwasm_std::{CanonicalAddr, StdResult, Storage, Uint128};
 use cosmwasm_storage::{singleton, singleton_read};
 
@@ -12,6 +13,10 @@ pub struct Config {
     pub glow_token: CanonicalAddr,     // glow token address
     pub whitelist: Vec<CanonicalAddr>, // whitelist addresses are allowed to spend contract glow token balance
     pub spend_limit: Uint128,          // spend limit per each `spend` request
+    pub emission_cap: Decimal256,
+    pub emission_floor: Decimal256,
+    pub increment_multiplier: Decimal256,
+    pub decrement_multiplier: Decimal256,
 }
 
 pub fn store_config<S: Storage>(storage: &mut S, config: &Config) -> StdResult<()> {

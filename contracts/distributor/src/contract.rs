@@ -1,12 +1,15 @@
 use crate::state::{read_config, store_config, Config};
 
+use cosmwasm_bignumber::Decimal256;
 use cosmwasm_std::{
     log, to_binary, Api, Binary, CanonicalAddr, CosmosMsg, Env, Extern, HandleResponse,
     HandleResult, HumanAddr, InitResponse, MigrateResponse, MigrateResult, Querier, StdError,
     StdResult, Storage, Uint128, WasmMsg,
 };
 
-use glow_protocol::distributor::{ConfigResponse, HandleMsg, InitMsg, MigrateMsg, QueryMsg};
+use glow_protocol::distributor::{
+    ConfigResponse, GlowEmissionRateResponse, HandleMsg, InitMsg, MigrateMsg, QueryMsg,
+};
 
 use cw20::Cw20HandleMsg;
 
@@ -28,6 +31,10 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             glow_token: deps.api.canonical_address(&msg.glow_token)?,
             whitelist,
             spend_limit: msg.spend_limit,
+            emission_cap: msg.emission_cap,
+            emission_floor: msg.emission_floor,
+            increment_multiplier: msg.increment_multiplier,
+            decrement_multiplier: msg.decrement_multiplier,
         },
     )?;
 
@@ -40,17 +47,36 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
     match msg {
-        HandleMsg::UpdateConfig { spend_limit } => update_config(deps, env, spend_limit),
+        HandleMsg::UpdateConfig {
+            spend_limit,
+            emission_cap,
+            emission_floor,
+            increment_multiplier,
+            decrement_multiplier,
+        } => update_config(
+            deps,
+            env,
+            spend_limit,
+            emission_cap,
+            emission_floor,
+            increment_multiplier,
+            decrement_multiplier,
+        ),
         HandleMsg::Spend { recipient, amount } => spend(deps, env, recipient, amount),
         HandleMsg::AddDistributor { distributor } => add_distributor(deps, env, distributor),
         HandleMsg::RemoveDistributor { distributor } => remove_distributor(deps, env, distributor),
     }
 }
 
+// TODO: Should we let update_config change gov_contract address? Should gov_contract be renamed to owner?
 pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     spend_limit: Option<Uint128>,
+    emission_cap: Option<Decimal256>,
+    emission_floor: Option<Decimal256>,
+    increment_multiplier: Option<Decimal256>,
+    decrement_multiplier: Option<Decimal256>,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
     if config.gov_contract != deps.api.canonical_address(&env.message.sender)? {
@@ -59,6 +85,22 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
 
     if let Some(spend_limit) = spend_limit {
         config.spend_limit = spend_limit;
+    }
+
+    if let Some(emission_cap) = emission_cap {
+        config.emission_cap = emission_cap;
+    }
+
+    if let Some(emission_floor) = emission_floor {
+        config.emission_floor = emission_floor;
+    }
+
+    if let Some(increment_multiplier) = increment_multiplier {
+        config.increment_multiplier = increment_multiplier;
+    }
+
+    if let Some(decrement_multiplier) = decrement_multiplier {
+        config.decrement_multiplier = decrement_multiplier;
     }
 
     store_config(&mut deps.storage, &config)?;
@@ -189,27 +231,69 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::GlowEmissionRate {
+            current_award,
+            target_award,
+            current_emission_rate,
+        } => to_binary(&query_glow_emission_rate(
+            deps,
+            current_award,
+            target_award,
+            current_emission_rate,
+        )?),
     }
 }
 
 pub fn query_config<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
 ) -> StdResult<ConfigResponse> {
-    let state = read_config(&deps.storage)?;
+    let config = read_config(&deps.storage)?;
     let resp = ConfigResponse {
-        gov_contract: deps.api.human_address(&state.gov_contract)?,
-        glow_token: deps.api.human_address(&state.glow_token)?,
-        whitelist: state
+        gov_contract: deps.api.human_address(&config.gov_contract)?,
+        glow_token: deps.api.human_address(&config.glow_token)?,
+        whitelist: config
             .whitelist
             .into_iter()
             .map(|w| deps.api.human_address(&w))
             .collect::<StdResult<Vec<HumanAddr>>>()?,
-        spend_limit: state.spend_limit,
+        spend_limit: config.spend_limit,
+        emission_cap: config.emission_cap,
+        emission_floor: config.emission_floor,
+        increment_multiplier: config.increment_multiplier,
+        decrement_multiplier: config.decrement_multiplier,
     };
 
     Ok(resp)
 }
 
+fn query_glow_emission_rate<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    current_award: Decimal256,
+    target_award: Decimal256,
+    current_emission_rate: Decimal256,
+) -> StdResult<GlowEmissionRateResponse> {
+    let config: Config = read_config(&deps.storage)?;
+
+    let emission_rate = if current_award < target_award {
+        current_emission_rate * config.increment_multiplier
+    } else if current_award > target_award {
+        current_emission_rate * config.decrement_multiplier
+    } else {
+        current_emission_rate
+    };
+
+    let emission_rate = if emission_rate > config.emission_cap {
+        config.emission_cap
+    } else if emission_rate < config.emission_floor {
+        config.emission_floor
+    } else {
+        emission_rate
+    };
+
+    Ok(GlowEmissionRateResponse { emission_rate })
+}
+
+// TODO: should we restrict/avoid migrations in this contract?
 pub fn migrate<S: Storage, A: Api, Q: Querier>(
     _deps: &mut Extern<S, A, Q>,
     _env: Env,

@@ -18,6 +18,10 @@ fn proper_initialization() {
             HumanAddr::from("addr3"),
         ],
         spend_limit: Uint128::from(1000000u128),
+        emission_cap: Default::default(),
+        emission_floor: Default::default(),
+        increment_multiplier: Default::default(),
+        decrement_multiplier: Default::default(),
     };
 
     let env = mock_env("addr0000", &[]);
@@ -53,6 +57,10 @@ fn update_config() {
             HumanAddr::from("addr3"),
         ],
         spend_limit: Uint128::from(1000000u128),
+        emission_cap: Default::default(),
+        emission_floor: Default::default(),
+        increment_multiplier: Default::default(),
+        decrement_multiplier: Default::default(),
     };
 
     let env = mock_env("addr0000", &[]);
@@ -76,6 +84,10 @@ fn update_config() {
 
     let msg = HandleMsg::UpdateConfig {
         spend_limit: Some(Uint128::from(500000u128)),
+        emission_cap: None,
+        emission_floor: None,
+        increment_multiplier: None,
+        decrement_multiplier: None,
     };
     let env = mock_env("addr0000", &[]);
     let res = handle(&mut deps, env, msg.clone());
@@ -99,6 +111,10 @@ fn update_config() {
                 HumanAddr::from("addr3"),
             ],
             spend_limit: Uint128::from(500000u128),
+            emission_cap: Default::default(),
+            emission_floor: Default::default(),
+            increment_multiplier: Default::default(),
+            decrement_multiplier: Default::default()
         }
     );
 }
@@ -116,6 +132,10 @@ fn test_add_remove_distributor() {
             HumanAddr::from("addr3"),
         ],
         spend_limit: Uint128::from(1000000u128),
+        emission_cap: Default::default(),
+        emission_floor: Default::default(),
+        increment_multiplier: Default::default(),
+        decrement_multiplier: Default::default(),
     };
 
     let env = mock_env("addr0000", &[]);
@@ -167,6 +187,10 @@ fn test_add_remove_distributor() {
                 HumanAddr::from("addr4"),
             ],
             spend_limit: Uint128::from(1000000u128),
+            emission_cap: Default::default(),
+            emission_floor: Default::default(),
+            increment_multiplier: Default::default(),
+            decrement_multiplier: Default::default()
         }
     );
 
@@ -189,6 +213,10 @@ fn test_add_remove_distributor() {
                 HumanAddr::from("addr4"),
             ],
             spend_limit: Uint128::from(1000000u128),
+            emission_cap: Default::default(),
+            emission_floor: Default::default(),
+            increment_multiplier: Default::default(),
+            decrement_multiplier: Default::default()
         }
     );
 }
@@ -206,6 +234,10 @@ fn test_spend() {
             HumanAddr::from("addr3"),
         ],
         spend_limit: Uint128::from(1000000u128),
+        emission_cap: Default::default(),
+        emission_floor: Default::default(),
+        increment_multiplier: Default::default(),
+        decrement_multiplier: Default::default(),
     };
 
     let env = mock_env("addr0000", &[]);

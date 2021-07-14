@@ -31,8 +31,9 @@ pub struct Config {
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
     pub ticket_prize: Decimal256, // prize of a ticket in stable_denom
     pub prize_distribution: Vec<Decimal256>, // [0, 0, 0.05, 0.15, 0.3, 0.5]
+    pub target_award: Decimal256,
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
-    pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
+    pub split_factor: Decimal256,   // what % of interest goes to saving and which one lotto pool
     pub unbonding_period: Duration,
 }
 

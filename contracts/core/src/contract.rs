@@ -104,9 +104,9 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 ) -> HandleResult {
     match msg {
         HandleMsg::RegisterContracts {
-            collector_contract,
+            gov_contract,
             distributor_contract,
-        } => register_contracts(deps, env, collector_contract, distributor_contract),
+        } => register_contracts(deps, env, gov_contract, distributor_contract),
         HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::Deposit { combinations } => deposit(deps, env, combinations),
         HandleMsg::Gift {
@@ -147,7 +147,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    collector_contract: HumanAddr,
+    gov_contract: HumanAddr,
     distributor_contract: HumanAddr,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
@@ -164,7 +164,7 @@ pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::unauthorized());
     }
 
-    config.gov_contract = deps.api.canonical_address(&collector_contract)?;
+    config.gov_contract = deps.api.canonical_address(&gov_contract)?;
     config.distributor_contract = deps.api.canonical_address(&distributor_contract)?;
     store_config(&mut deps.storage, &config)?;
 
@@ -790,7 +790,7 @@ pub fn execute_epoch_operations<S: Storage, A: Api, Q: Querier>(
     )?
     .emission_rate;
 
-    // Compute total_reserves to fund collector contract
+    // Compute total_reserves to fund gov contract
     let total_reserves = state.total_reserve * Uint256::one();
     let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
         vec![CosmosMsg::Bank(BankMsg::Send {

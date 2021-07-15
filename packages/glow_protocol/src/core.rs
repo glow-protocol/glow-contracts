@@ -26,12 +26,9 @@ pub struct InitMsg {
 pub enum HandleMsg {
     /// Register Contracts contract address
     RegisterContracts {
-        /// The contract has the logics for
-        /// GLOW distribution to depositors
-        /// distribution_model: HumanAddr,
-        /// Collector contract to send the reserve fees
-        collector_contract: HumanAddr,
-        /// Faucet contract to drip GLOW token to users
+        /// Gov contract accrues protocol fees and distributes them to Glow stakers
+        gov_contract: HumanAddr,
+        /// Faucet contract to drip GLOW token to users and update Glow emission rate
         distributor_contract: HumanAddr,
     },
     /// Update contract configuration

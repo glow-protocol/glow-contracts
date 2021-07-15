@@ -79,7 +79,7 @@ fn proper_initialization() {
 
     // Register contracts
     let msg = HandleMsg::RegisterContracts {
-        collector_contract: HumanAddr::from("collector"),
+        gov_contract: HumanAddr::from("gov"),
         distributor_contract: HumanAddr::from("distributor"),
     };
     let env = mock_env("owner", &[]);
@@ -87,7 +87,7 @@ fn proper_initialization() {
 
     // Cannot register contracts again
     let msg = HandleMsg::RegisterContracts {
-        collector_contract: HumanAddr::from("collector"),
+        gov_contract: HumanAddr::from("gov"),
         distributor_contract: HumanAddr::from("distributor"),
     };
     let env = mock_env("owner", &[]);
@@ -120,7 +120,7 @@ fn proper_initialization() {
         HumanAddr::from("distributor"),
         config_res.distributor_contract
     );
-    assert_eq!(HumanAddr::from("collector"), config_res.gov_contract);
+    assert_eq!(HumanAddr::from("gov"), config_res.gov_contract);
 
     // Test query state
     let query_res = query(&deps, QueryMsg::State { block_height: None }).unwrap();
@@ -159,7 +159,7 @@ fn update_config() {
 
     // Register contracts
     let msg = HandleMsg::RegisterContracts {
-        collector_contract: HumanAddr::from("collector"),
+        gov_contract: HumanAddr::from("gov"),
         distributor_contract: HumanAddr::from("distributor"),
     };
     let env = mock_env("owner", &[]);
@@ -2464,6 +2464,12 @@ fn handle_prize_winners_same_rank() {
         ]
     );
 }
+
+#[test]
+fn claim_rewards_one_depositor() {}
+
+#[test]
+fn claim_rewards_multiple_depositors() {}
 
 // TODO: Refactor tests
 // TODO: Test prize_strategy functions combinations (without wasm)

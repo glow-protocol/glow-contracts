@@ -89,8 +89,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
             last_reward_updated: 0,
-            global_reward_index: Default::default(),
-            glow_emission_rate: Default::default(),
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: msg.initial_emission_rate,
         },
     )?;
 
@@ -1069,6 +1069,8 @@ pub fn query_depositor<S: Storage, A: Api, Q: Querier>(
         deposit_amount: depositor.deposit_amount,
         shares: depositor.shares,
         redeemable_amount: depositor.redeemable_amount,
+        reward_index: depositor.reward_index,
+        pending_rewards: depositor.pending_rewards,
         tickets: depositor.tickets,
         unbonding_info: depositor.unbonding_info,
     })

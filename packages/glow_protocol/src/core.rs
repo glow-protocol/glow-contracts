@@ -19,6 +19,7 @@ pub struct InitMsg {
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
     pub unbonding_period: u64,
+    pub initial_emission_rate: Decimal256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -137,6 +138,8 @@ pub struct DepositorInfoResponse {
     pub deposit_amount: Decimal256,
     pub shares: Decimal256,
     pub redeemable_amount: Uint128,
+    pub reward_index: Decimal256,
+    pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }

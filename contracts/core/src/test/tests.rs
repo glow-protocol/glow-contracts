@@ -1,7 +1,7 @@
 use crate::contract::{handle, init, query, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
 use crate::state::{
-    read_depositor_info, read_lottery_info, read_sequence_info, read_state, DepositorInfo,
-    LotteryInfo, State,
+    read_depositor_info, read_lottery_info, read_sequence_info, read_state, store_state,
+    DepositorInfo, LotteryInfo, State,
 };
 use crate::test::mock_querier::mock_dependencies;
 
@@ -12,10 +12,12 @@ use cosmwasm_std::{
     InitResponse, Querier, StdError, Storage, Uint128, WasmMsg,
 };
 use cw20::Cw20HandleMsg;
-use glow_protocol::core::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, StateResponse};
+use glow_protocol::core::{
+    Claim, ConfigResponse, DepositorInfoResponse, HandleMsg, InitMsg, QueryMsg, StateResponse,
+};
+use glow_protocol::distributor::HandleMsg as FaucetHandleMsg;
 
 use cw0::{Duration, Expiration, HOUR, WEEK};
-use glow_protocol::core::Claim;
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use moneymarket::querier::deduct_tax;
 use std::ops::{Add, Div, Mul};
@@ -51,6 +53,7 @@ fn initialize<S: Storage, A: Api, Q: Querier>(
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         unbonding_period: WEEK_TIME,
+        initial_emission_rate: Decimal256::zero(),
     };
 
     init(&mut deps, env.clone(), msg).unwrap()
@@ -927,7 +930,7 @@ fn batch_deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Correct single deposit - buys one ticket
+    // Correct deposit - buys two tickets
     let msg = HandleMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
@@ -2466,10 +2469,102 @@ fn handle_prize_winners_same_rank() {
 }
 
 #[test]
-fn claim_rewards_one_depositor() {}
+fn claim_rewards_one_depositor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env);
+
+    // Register contracts required as ClaimRewards queries Distributor
+    let msg = HandleMsg::RegisterContracts {
+        gov_contract: HumanAddr::from("gov"),
+        distributor_contract: HumanAddr::from("distributor"),
+    };
+    let env = mock_env("owner", &[]);
+    let _res = handle(&mut deps, env, msg).unwrap();
+
+    let env = mock_env("addr0000", &[]);
+
+    let mut state = read_state(&deps.storage).unwrap();
+    state.glow_emission_rate = Decimal256::one();
+    store_state(&mut deps.storage, &state).unwrap();
+
+    // User has no deposits, so no claimable rewards and empty msg returned
+    let msg = HandleMsg::ClaimRewards {};
+    let res = handle(&mut deps, env.clone(), msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // Deposit of 20_000_000 uusd
+    let msg = HandleMsg::Deposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+
+    let _res = handle(&mut deps, env, msg.clone());
+
+    // User has deposits but zero blocks have passed, so no rewards accrued
+    let mut env = mock_env("addr0000", &[]);
+    let msg = HandleMsg::ClaimRewards {};
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // After 100 blocks
+    env.block.height += 100;
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("distributor"),
+            send: vec![],
+            msg: to_binary(&FaucetHandleMsg::Spend {
+                recipient: HumanAddr::from("addr0000"),
+                amount: Uint128(100u128),
+            })
+            .unwrap(),
+        })]
+    );
+
+    let res: DepositorInfoResponse = from_binary(
+        &query(
+            &deps,
+            QueryMsg::Depositor {
+                address: HumanAddr::from("addr0000"),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+    assert_eq!(
+        res.reward_index,
+        Decimal256::percent(10000u64) / (Decimal256::percent(TICKET_PRIZE * 2u64))
+    );
+}
 
 #[test]
 fn claim_rewards_multiple_depositors() {}
 
 // TODO: Refactor tests
 // TODO: Test prize_strategy functions combinations (without wasm)
+// TODO: Include RegisterContracts in the initialize function? If not manually included after calling initialize in the rest of tests

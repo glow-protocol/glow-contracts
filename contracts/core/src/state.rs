@@ -233,6 +233,8 @@ pub fn read_depositors<S: Storage, A: Api, Q: Querier>(
                 deposit_amount: v.deposit_amount,
                 shares: v.shares,
                 redeemable_amount: v.redeemable_amount,
+                reward_index: v.reward_index,
+                pending_rewards: v.pending_rewards,
                 tickets: v.tickets,
                 unbonding_info: v.unbonding_info,
             })

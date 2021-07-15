@@ -220,6 +220,10 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     let depositor = deps.api.canonical_address(&env.message.sender)?;
     let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor);
 
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor_info);
+
     // query exchange_rate from anchor money market
     let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
@@ -248,10 +252,6 @@ pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
     state.total_deposits = state
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
-
-    // Compute Glow depositor rewards
-    compute_reward(&mut state, env.block.height);
-    compute_depositor_reward(&state, &mut depositor_info);
 
     // Update state
     store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
@@ -331,6 +331,10 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     let depositor = deps.api.canonical_address(&env.message.sender)?;
     let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor);
 
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor_info);
+
     // query exchange_rate from anchor money market
     let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
@@ -368,10 +372,6 @@ pub fn deposit<S: Storage, A: Api, Q: Querier>(
     state.total_deposits = state
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
-
-    // Compute Glow depositor rewards
-    compute_reward(&mut state, env.block.height);
-    compute_depositor_reward(&state, &mut depositor_info);
 
     // Update depositor and state information
     store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
@@ -457,6 +457,10 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
     let recipient = deps.api.canonical_address(&to)?;
     let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &recipient);
 
+    // Compute Glow rewards of recipient
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor_info);
+
     // query exchange_rate from anchor money market
     let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
@@ -492,9 +496,6 @@ pub fn gift_tickets<S: Storage, A: Api, Q: Querier>(
     state.total_deposits = state
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
-
-    compute_reward(&mut state, env.block.height);
-    compute_depositor_reward(&state, &mut depositor_info);
 
     // Update depositor and state information
     store_depositor_info(&mut deps.storage, &recipient, &depositor_info)?;
@@ -605,6 +606,10 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("User has no deposits to withdraw"));
     }
 
+    // Compute GLOW reward
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
     let tickets = depositor.tickets.clone();
     let tickets_amount = depositor.tickets.len() as u128;
 
@@ -625,10 +630,6 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     state.lottery_deposits = state
         .lottery_deposits
         .sub(depositor.deposit_amount * config.split_factor);
-
-    // Compute GLOW reward
-    compute_reward(&mut state, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
 
     state.total_deposits = state.total_deposits.sub(depositor.deposit_amount);
     depositor.deposit_amount = Decimal256::zero();
@@ -869,7 +870,6 @@ pub fn claim_rewards<S: Storage, A: Api, Q: Querier>(
 
 /// Compute distributed reward and update global reward index
 pub fn compute_reward(state: &mut State, block_height: u64) {
-    // TODO: why can this function be called twice in the same block?
     if state.last_reward_updated >= block_height {
         return;
     }

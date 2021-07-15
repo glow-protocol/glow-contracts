@@ -370,6 +370,7 @@ fn single_deposit() {
             amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
+
     let res = handle(&mut deps, env, msg.clone());
     match res {
         Err(StdError::GenericErr { msg, .. }) => {
@@ -2563,7 +2564,126 @@ fn claim_rewards_one_depositor() {
 }
 
 #[test]
-fn claim_rewards_multiple_depositors() {}
+fn claim_rewards_multiple_depositors() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env);
+
+    // Register contracts required as ClaimRewards queries Distributor
+    let msg = HandleMsg::RegisterContracts {
+        gov_contract: HumanAddr::from("gov"),
+        distributor_contract: HumanAddr::from("distributor"),
+    };
+    let env = mock_env("owner", &[]);
+    let _res = handle(&mut deps, env, msg).unwrap();
+
+    let mut state = read_state(&deps.storage).unwrap();
+    state.glow_emission_rate = Decimal256::one();
+    store_state(&mut deps.storage, &state).unwrap();
+
+    // USER 0 Deposits 20_000_000 uusd
+    let msg = HandleMsg::Deposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+
+    let _res = handle(&mut deps, env, msg.clone());
+
+    // USER 1 Deposits another 20_000_000 uusd
+    let msg = HandleMsg::Deposit {
+        combinations: vec![String::from("00000"), String::from("11111")],
+    };
+    let env = mock_env(
+        "addr1111",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+    let _res = handle(&mut deps, env, msg.clone());
+
+    let mut env = mock_env("addr0000", &[]);
+
+    // After 100 blocks
+    env.block.height += 100;
+
+    let state = read_state(&deps.storage).unwrap();
+    println!("Global reward index: {:?}", state.global_reward_index);
+    println!("Emission rate {:?}", state.glow_emission_rate);
+    println!("Last reward updated {:?}", state.last_reward_updated);
+    println!("Current height {:?}", env.block.height);
+
+    let msg = HandleMsg::ClaimRewards {};
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    println!("{:?}", res.log);
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: HumanAddr::from("distributor"),
+            send: vec![],
+            msg: to_binary(&FaucetHandleMsg::Spend {
+                recipient: HumanAddr::from("addr0000"),
+                amount: Uint128(50u128),
+            })
+            .unwrap(),
+        })]
+    );
+
+    // Checking USER 0 state is correct
+    let res: DepositorInfoResponse = from_binary(
+        &query(
+            &deps,
+            QueryMsg::Depositor {
+                address: HumanAddr::from("addr0000"),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+    assert_eq!(
+        res.reward_index,
+        Decimal256::percent(10000u64) / (Decimal256::percent(TICKET_PRIZE * 4u64))
+    );
+
+    // Checking USER 1 state is correct
+    let res: DepositorInfoResponse = from_binary(
+        &query(
+            &deps,
+            QueryMsg::Depositor {
+                address: HumanAddr::from("addr1111"),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+    assert_eq!(res.reward_index, Decimal256::zero());
+
+    //TODO: Add a subsequent deposit at a later env.block.heigh and test again
+}
 
 // TODO: Refactor tests
 // TODO: Test prize_strategy functions combinations (without wasm)

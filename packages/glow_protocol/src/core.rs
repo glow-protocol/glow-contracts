@@ -18,6 +18,7 @@ pub struct InitMsg {
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
+    pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: u64,
     pub initial_emission_rate: Decimal256,
 }
@@ -105,6 +106,7 @@ pub struct ConfigResponse {
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
+    pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
 }
 

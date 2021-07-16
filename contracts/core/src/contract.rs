@@ -72,6 +72,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             target_award: msg.target_award,
             reserve_factor: msg.reserve_factor,
             split_factor: msg.split_factor,
+            instant_withdrawal_fee: msg.instant_withdrawal_fee,
             unbonding_period: Duration::Time(msg.unbonding_period),
         },
     )?;
@@ -593,7 +594,7 @@ pub fn sponsor<S: Storage, A: Api, Q: Querier>(
 pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    _instant: Option<bool>,
+    instant: Option<bool>,
 ) -> HandleResult {
     let config = read_config(&deps.storage)?;
     let mut state = read_state(&deps.storage)?;
@@ -602,7 +603,7 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     let mut depositor: DepositorInfo = read_depositor_info(&deps.storage, &sender_raw);
 
     // Depositor does not have deposits in the pool
-    if depositor.shares.is_zero() {
+    if depositor.shares.is_zero() || state.shares_supply.is_zero() {
         return Err(StdError::generic_err("User has no deposits to withdraw"));
     }
 
@@ -653,32 +654,18 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
     // Calculate amount of aUST to be redeemed
     let redeem_amount = withdraw_ratio * Decimal256::from_uint256(contract_a_balance);
 
-    // Calculate amount of UST expected to be redeemed
-    // query exchange_rate from anchor money market
+    // Calculate expected amount of UST expected to be redeemed from anchor money market
     let epoch_state: EpochStateResponse =
         query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
 
-    // Amount of UST expected to be redeemed
-    let redeem_stable = redeem_amount * epoch_state.exchange_rate;
-
-    // Discount tx taxes
-    let net_coin_amount = deduct_tax(deps, coin((redeem_stable * Uint256::one()).into(), "uusd"))?;
-
-    // TODO: if net_coin.amount < unbonding_amount {return unbonding_amount} -> subsidize, ux Qs
-
-    // Place amount in unbonding state as a claim
-    depositor.unbonding_info.push(Claim {
-        amount: Decimal256::from_uint256(Uint256::from(net_coin_amount.amount)),
-        release_at: config.unbonding_period.after(&env.block),
-    });
-
-    store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
+    let mut redeem_stable = redeem_amount * epoch_state.exchange_rate;
 
     // Update global state
     state.total_tickets = state.total_tickets.sub(Uint256::from(tickets_amount));
     state.shares_supply = state.shares_supply.sub(redeem_amount_shares);
     state.deposit_shares = state.deposit_shares.sub(amount_deposit_shares);
-    store_state(&mut deps.storage, &state)?;
+
+    let mut msgs: Vec<CosmosMsg> = vec![];
 
     // Message for redeem amount operation of aUST
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -690,14 +677,60 @@ pub fn withdraw<S: Storage, A: Api, Q: Querier>(
             msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
         })?,
     });
+    msgs.push(redeem_msg);
+
+    let mut withdrawal_fee = Decimal256::zero();
+
+    // Instant withdrawal. The user incurs a fee and receive the funds with this operation
+    if let Some(true) = instant {
+        // Apply instant withdrawal fee
+        withdrawal_fee = redeem_stable * config.instant_withdrawal_fee;
+        redeem_stable = redeem_stable.sub(withdrawal_fee);
+        // Discount tx taxes
+        let net_coin_amount =
+            deduct_tax(deps, coin((redeem_stable * Uint256::one()).into(), "uusd"))?;
+
+        // Double-check if there is enough balance to send in the contract
+        let balance = query_balance(
+            deps,
+            &deps.api.human_address(&config.contract_addr)?,
+            String::from("uusd"),
+        )?;
+
+        if net_coin_amount.amount > balance.into() {
+            return Err(StdError::generic_err(
+                "Not enough funds to execute the instant withdrawal",
+            ));
+        }
+        msgs.push(CosmosMsg::Bank(BankMsg::Send {
+            from_address: env.clone().contract.address,
+            to_address: env.clone().message.sender,
+            amount: vec![net_coin_amount],
+        }));
+    } else {
+        // Discount tx taxes
+        let net_coin_amount =
+            deduct_tax(deps, coin((redeem_stable * Uint256::one()).into(), "uusd"))?;
+        // Place amount in unbonding state as a claim
+        depositor.unbonding_info.push(Claim {
+            amount: Decimal256::from_uint256(Uint256::from(net_coin_amount.amount)),
+            release_at: config.unbonding_period.after(&env.block),
+        });
+    }
+
+    store_depositor_info(&mut deps.storage, &sender_raw, &depositor)?;
+
+    store_state(&mut deps.storage, &state)?;
 
     Ok(HandleResponse {
-        messages: vec![redeem_msg],
+        messages: msgs,
         log: vec![
             log("action", "withdraw_ticket"),
             log("depositor", env.message.sender),
             log("tickets_amount", tickets_amount),
             log("redeem_amount_anchor", redeem_amount),
+            log("redeem_stable_amount", redeem_stable),
+            log("instant_withdrawal_fee", withdrawal_fee),
         ],
         data: None,
     })
@@ -986,6 +1019,7 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(
         target_award: config.target_award,
         reserve_factor: config.reserve_factor,
         split_factor: config.split_factor,
+        instant_withdrawal_fee: config.instant_withdrawal_fee,
         unbonding_period: config.unbonding_period,
     })
 }

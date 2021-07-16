@@ -21,9 +21,11 @@ use cw0::{Duration, Expiration, HOUR, WEEK};
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use moneymarket::querier::deduct_tax;
 use std::ops::{Add, Div, Mul};
+use std::str::FromStr;
 
 const TICKET_PRIZE: u64 = 1_000_000_000; // 10_000_000 as %
 const SPLIT_FACTOR: u64 = 75; // as a %
+const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const RATE: u64 = 1023; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
@@ -52,6 +54,7 @@ fn initialize<S: Storage, A: Api, Q: Querier>(
         target_award: Decimal256::zero(),
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
+        instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
     };
@@ -1484,6 +1487,11 @@ fn withdraw() {
             log("depositor", "addr0001"),
             log("tickets_amount", 1u64),
             log("redeem_amount_anchor", shares),
+            log(
+                "redeem_stable_amount",
+                Decimal256::from_str("9999999.933").unwrap()
+            ),
+            log("instant_withdrawal_fee", Decimal256::zero())
         ]
     );
 }

@@ -34,6 +34,7 @@ pub struct Config {
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256,   // what % of interest goes to saving and which one lotto pool
+    pub instant_withdrawal_fee: Decimal256, // % to be deducted as a fee for instant withdrawals
     pub unbonding_period: Duration,
 }
 

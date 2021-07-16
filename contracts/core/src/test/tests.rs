@@ -1497,6 +1497,165 @@ fn withdraw() {
 }
 
 #[test]
+#[test]
+fn instant_withdraw() {
+    // Initialize contract
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+
+    // Address buys one ticket
+    let env = mock_env(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        }],
+    );
+
+    let msg = HandleMsg::SingleDeposit {
+        combination: String::from("23456"),
+    };
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    let _res = handle(&mut deps, env, msg).unwrap();
+
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
+
+    let env = mock_env("addr0001", &[]);
+
+    let msg = HandleMsg::Withdraw {
+        instant: Some(true),
+    };
+
+    deps.querier.with_token_balances(&[(
+        &HumanAddr::from("aterra"),
+        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &shares.into())],
+    )]);
+
+    // Correct withdraw, user has 1 ticket to be withdrawn
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check address of sender was removed correctly in the sequence bucket
+    assert_eq!(
+        read_sequence_info(&deps.storage, &String::from("23456")),
+        vec![]
+    );
+
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
+    );
+
+    let _redeem_amount = deduct_tax(
+        &deps,
+        Coin {
+            denom: String::from("uusd"),
+            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+        },
+    )
+    .unwrap()
+    .amount;
+
+    // TODO: use below redeem amount instead of hardcoded unbonding info
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            &deps.storage,
+            &deps
+                .api
+                .canonical_address(&HumanAddr::from("addr0001"))
+                .unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::zero(),
+            shares: Decimal256::zero(),
+            redeemable_amount: Uint128(0),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+            tickets: vec![],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        read_state(&deps.storage).unwrap(),
+        State {
+            total_tickets: Uint256::zero(),
+            total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::zero(),
+            lottery_deposits: Decimal256::zero(),
+            shares_supply: Decimal256::zero(),
+            deposit_shares: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&env.block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: HumanAddr::from("aterra"),
+                send: vec![],
+                msg: to_binary(&Cw20HandleMsg::Send {
+                    contract: HumanAddr::from("anchor"),
+                    amount: shares.into(),
+                    msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
+                })
+                .unwrap(),
+            }),
+            CosmosMsg::Bank(BankMsg::Send {
+                from_address: env.clone().contract.address,
+                to_address: env.clone().message.sender,
+                amount: vec![Coin {
+                    denom: "uusd".to_string(),
+                    amount: Uint128::from(8999999u128)
+                }],
+            })
+        ]
+    );
+
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "withdraw_ticket"),
+            log("depositor", "addr0001"),
+            log("tickets_amount", 1u64),
+            log("redeem_amount_anchor", shares),
+            log(
+                "redeem_stable_amount",
+                Decimal256::from_str("8999999.9397").unwrap()
+            ),
+            log(
+                "instant_withdrawal_fee",
+                Decimal256::from_str("999999.9933").unwrap()
+            )
+        ]
+    );
+}
+
+#[test]
 fn claim() {
     // Initialize contract
     let mut deps = mock_dependencies(

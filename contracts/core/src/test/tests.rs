@@ -2682,7 +2682,83 @@ fn claim_rewards_multiple_depositors() {
     assert_eq!(res.pending_rewards, Decimal256::zero());
     assert_eq!(res.reward_index, Decimal256::zero());
 
-    //TODO: Add a subsequent deposit at a later env.block.heigh and test again
+    //TODO: Add a subsequent deposit at a later env.block.height and test again
+}
+
+#[test]
+fn execute_epoch_operations() {
+    let mut deps = mock_dependencies(
+        20,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
+    );
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env);
+
+    // Register contracts required as ClaimRewards queries Distributor
+    let msg = HandleMsg::RegisterContracts {
+        gov_contract: HumanAddr::from("gov"),
+        distributor_contract: HumanAddr::from("distributor"),
+    };
+    let env = mock_env("owner", &[]);
+    let _res = handle(&mut deps, env.clone(), msg).unwrap();
+
+    let mut env = mock_env("addr0000", &[]);
+
+    let mut state = read_state(&deps.storage).unwrap();
+    state.total_reserve = Decimal256::percent(50000); // 500
+    store_state(&mut deps.storage, &state).unwrap();
+
+    env.block.height += 100;
+
+    let msg = HandleMsg::ExecuteEpochOps {};
+    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    assert_eq!(
+        res.messages,
+        vec![CosmosMsg::Bank(BankMsg::Send {
+            from_address: env.contract.address,
+            to_address: HumanAddr::from("gov"),
+            amount: vec![Coin {
+                denom: "uusd".to_string(),
+                amount: Uint128::from(496u128), // 1% tax
+            }],
+        })]
+    );
+
+    let state = read_state(&deps.storage).unwrap();
+    // Glow Emission rate must be 1 as hard-coded in mock querier
+    assert_eq!(
+        state,
+        State {
+            total_tickets: Uint256::zero(),
+            total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::zero(),
+            lottery_deposits: Decimal256::zero(),
+            shares_supply: Decimal256::zero(),
+            deposit_shares: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            last_reward_updated: 12445,
+            global_reward_index: Decimal256::zero(),
+            next_lottery_time: WEEK.after(&env.block),
+            glow_emission_rate: Decimal256::one()
+        }
+    );
 }
 
 // TODO: Refactor tests

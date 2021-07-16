@@ -11,15 +11,20 @@ use cosmwasm_storage::to_length_prefixed;
 use cw20::TokenInfoResponse;
 use std::collections::HashMap;
 
+use glow_protocol::distributor::GlowEmissionRateResponse;
 use moneymarket::market::EpochStateResponse;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
-//TODO: remember to check TaxCapResponse and TaxRateResponse logic
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     /// Query exchange rate to Anchor money market contract
     EpochState { block_height: Option<u64> },
+    GlowEmissionRate {
+        current_award: Decimal256,
+        target_award: Decimal256,
+        current_emission_rate: Decimal256,
+    },
 }
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
@@ -170,6 +175,9 @@ impl WasmMockQuerier {
                             aterra_supply: Uint256::one(),
                         }))
                     }
+                    QueryMsg::GlowEmissionRate { .. } => Ok(to_binary(&GlowEmissionRateResponse {
+                        emission_rate: Decimal256::one(),
+                    })),
                 }
             }
 

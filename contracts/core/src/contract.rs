@@ -108,7 +108,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             gov_contract,
             distributor_contract,
         } => register_contracts(deps, env, gov_contract, distributor_contract),
-        HandleMsg::SingleDeposit { combination } => single_deposit(deps, env, combination),
         HandleMsg::Deposit { combinations } => deposit(deps, env, combinations),
         HandleMsg::Gift {
             combinations,
@@ -170,112 +169,6 @@ pub fn register_contracts<S: Storage, A: Api, Q: Querier>(
     store_config(&mut deps.storage, &config)?;
 
     Ok(HandleResponse::default())
-}
-
-// Single Deposit buys one ticket
-pub fn single_deposit<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    combination: String,
-) -> HandleResult {
-    let config = read_config(&deps.storage)?;
-    let mut state = read_state(&deps.storage)?;
-
-    // Check deposit is in base stable denom
-    let deposit_amount = env
-        .message
-        .sent_funds
-        .iter()
-        .find(|c| c.denom == config.stable_denom)
-        .map(|c| Uint256::from(c.amount))
-        .unwrap_or_else(Uint256::zero);
-
-    if deposit_amount.is_zero() {
-        return Err(StdError::generic_err(format!(
-            "Deposit amount must be greater than 0 {}",
-            config.stable_denom
-        )));
-    }
-
-    if deposit_amount != config.ticket_prize * Uint256::one() {
-        return Err(StdError::generic_err(format!(
-            "Deposit amount must be equal to a ticket prize: {} {}",
-            config.ticket_prize, config.stable_denom
-        )));
-    }
-
-    //TODO: add a time buffer here with block_time
-    if state.next_lottery_time.is_expired(&env.block) {
-        return Err(StdError::generic_err(
-            "Current lottery is about to start, wait until the next one begins",
-        ));
-    }
-
-    if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
-        return Err(StdError::generic_err(format!(
-            "Ticket sequence must be {} characters between 0-9",
-            SEQUENCE_DIGITS
-        )));
-    }
-
-    let depositor = deps.api.canonical_address(&env.message.sender)?;
-    let mut depositor_info: DepositorInfo = read_depositor_info(&deps.storage, &depositor);
-
-    // Compute Glow depositor rewards
-    compute_reward(&mut state, env.block.height);
-    compute_depositor_reward(&state, &mut depositor_info);
-
-    // query exchange_rate from anchor money market
-    let epoch_state: EpochStateResponse =
-        query_exchange_rate(&deps, &deps.api.human_address(&config.anchor_contract)?)?;
-
-    // Discount tx taxes
-    let net_coin_amount = deduct_tax(deps, coin(deposit_amount.into(), "uusd"))?;
-    let amount = net_coin_amount.amount;
-
-    // add amount of aUST entitled from the deposit
-    let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
-    depositor_info.deposit_amount = depositor_info
-        .deposit_amount
-        .add(Decimal256::from_uint256(deposit_amount));
-    depositor_info.shares = depositor_info.shares.add(minted_amount);
-    depositor_info.tickets.push(combination.clone());
-
-    // Update global state
-    state.total_tickets = state.total_tickets.add(Uint256::one());
-    state.shares_supply = state.shares_supply.add(minted_amount);
-    state.deposit_shares = state
-        .deposit_shares
-        .add(minted_amount - minted_amount * config.split_factor);
-    state.lottery_deposits = state
-        .lottery_deposits
-        .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
-    state.total_deposits = state
-        .total_deposits
-        .add(Decimal256::from_uint256(deposit_amount));
-
-    // Update state
-    store_depositor_info(&mut deps.storage, &depositor, &depositor_info)?;
-    store_sequence_info(&mut deps.storage, depositor, &combination)?;
-    store_state(&mut deps.storage, &state)?;
-
-    Ok(HandleResponse {
-        messages: vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.human_address(&config.anchor_contract)?,
-            send: vec![Coin {
-                denom: config.stable_denom,
-                amount,
-            }],
-            msg: to_binary(&AnchorMsg::DepositStable {})?,
-        })],
-        log: vec![
-            log("action", "single_deposit"),
-            log("depositor", env.message.sender),
-            log("deposit_amount", deposit_amount),
-            log("shares_minted", minted_amount),
-        ],
-        data: None,
-    })
 }
 
 // Deposit and get several tickets at once

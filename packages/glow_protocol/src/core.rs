@@ -44,9 +44,6 @@ pub enum HandleMsg {
         split_factor: Option<Decimal256>,
         unbonding_period: Option<u64>,
     },
-    SingleDeposit {
-        combination: String,
-    },
     Deposit {
         combinations: Vec<String>,
     },

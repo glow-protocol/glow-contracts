@@ -2095,6 +2095,85 @@ fn handle_prize_winners_same_rank() {
 }
 
 #[test]
+fn handle_prize_many_different_winning_combinations() {
+    // Initialize contract
+    let mut deps = mock_dependencies(20, &[]);
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+
+    // Add 150_000 UST to our contract balance
+    deps.querier.update_balance(
+        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let addresses_count = 500u64;
+    let addresses_range = 0..addresses_count;
+    let addresses = addresses_range
+        .map(|c| format!("addr{:0>4}", c))
+        .collect::<Vec<String>>();
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    for (index, address) in addresses.iter().enumerate() {
+        // Users buys winning ticket
+        let msg = HandleMsg::Deposit {
+            combinations: vec![String::from(format!("{:0>5}", index))],
+        };
+        let env = mock_env(
+            address.as_str(),
+            &[Coin {
+                denom: "uusd".to_string(),
+                amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+            }],
+        );
+
+        let _res = handle(&mut deps, env, msg).unwrap();
+    }
+
+    // Run lottery, one winner (5 hits) - should run correctly
+    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
+    let msg = HandleMsg::_HandlePrize {
+        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+    };
+    let _res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check lottery info was updated correctly
+
+    assert_eq!(
+        read_lottery_info(&deps.storage, 0u64).winners.len(),
+        addresses_count as usize
+    );
+
+    // println!(
+    //     "winners: {:?}",
+    //     read_lottery_info(&deps.storage, 0u64)
+    //         .winners
+    //         .iter()
+    //         .map(|w| w.0)
+    //         .collect::<Vec<u8>>()
+    // );
+
+    // println!("lottery_info: {:?}", read_lottery_info(&deps.storage, 0u64));
+    // println!(
+    //     "winners_count: {:?}",
+    //     read_lottery_info(&deps.storage, 0u64).winners.len()
+    // );
+}
+
+#[test]
 fn claim_rewards_one_depositor() {
     // Initialize contract
     let mut deps = mock_dependencies(

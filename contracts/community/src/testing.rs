@@ -10,7 +10,7 @@ fn proper_initialization() {
     let mut deps = mock_dependencies(20, &[]);
 
     let msg = InitMsg {
-        gov_contract: HumanAddr("gov".to_string()),
+        owner: HumanAddr("owner".to_string()),
         glow_token: HumanAddr("glow".to_string()),
         spend_limit: Uint128::from(1000000u128),
     };
@@ -22,17 +22,17 @@ fn proper_initialization() {
 
     // it worked, let's query the state
     let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
-    assert_eq!("gov", config.gov_contract.as_str());
+    assert_eq!("owner", config.owner.as_str());
     assert_eq!("glow", config.glow_token.as_str());
     assert_eq!(Uint128::from(1000000u128), config.spend_limit);
 }
 
 #[test]
-fn update_config() {
+fn update_spend_limit() {
     let mut deps = mock_dependencies(20, &[]);
 
     let msg = InitMsg {
-        gov_contract: HumanAddr("gov".to_string()),
+        owner: HumanAddr("owner".to_string()),
         glow_token: HumanAddr("glow".to_string()),
         spend_limit: Uint128::from(1000000u128),
     };
@@ -44,12 +44,13 @@ fn update_config() {
 
     // it worked, let's query the state
     let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
-    assert_eq!("gov", config.gov_contract.as_str());
+    assert_eq!("owner", config.owner.as_str());
     assert_eq!("glow", config.glow_token.as_str());
     assert_eq!(Uint128::from(1000000u128), config.spend_limit);
 
     let msg = HandleMsg::UpdateConfig {
         spend_limit: Some(Uint128::from(500000u128)),
+        owner: None,
     };
     let env = mock_env("addr0000", &[]);
     let res = handle(&mut deps, env, msg.clone());
@@ -59,13 +60,13 @@ fn update_config() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let env = mock_env("gov", &[]);
+    let env = mock_env("owner", &[]);
     let _res = handle(&mut deps, env, msg).unwrap();
     let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!(
         config,
         ConfigResponse {
-            gov_contract: HumanAddr::from("gov"),
+            owner: HumanAddr::from("owner"),
             glow_token: HumanAddr::from("glow"),
             spend_limit: Uint128::from(500000u128),
         }
@@ -73,11 +74,69 @@ fn update_config() {
 }
 
 #[test]
+fn transfer_ownership_gov() {
+    let mut deps = mock_dependencies(20, &[]);
+
+    let msg = InitMsg {
+        owner: HumanAddr("owner".to_string()),
+        glow_token: HumanAddr("glow".to_string()),
+        spend_limit: Uint128::from(1000000u128),
+    };
+
+    let env = mock_env("addr0000", &[]);
+
+    // we can just call .unwrap() to assert this was a success
+    let _res = init(&mut deps, env, msg).unwrap();
+
+    // it worked, let's query the state
+    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    assert_eq!("owner", config.owner.as_str());
+    assert_eq!("glow", config.glow_token.as_str());
+    assert_eq!(Uint128::from(1000000u128), config.spend_limit);
+
+    let msg = HandleMsg::UpdateConfig {
+        spend_limit: None,
+        owner: Some(HumanAddr("gov".to_string())),
+    };
+    let env = mock_env("addr0000", &[]);
+    let res = handle(&mut deps, env, msg.clone());
+
+    match res {
+        Err(StdError::Unauthorized { .. }) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let env = mock_env("owner", &[]);
+    let _res = handle(&mut deps, env, msg).unwrap();
+    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    assert_eq!(
+        config,
+        ConfigResponse {
+            owner: HumanAddr::from("gov"),
+            glow_token: HumanAddr::from("glow"),
+            spend_limit: Uint128::from(1000000u128),
+        }
+    );
+
+    let msg = HandleMsg::UpdateConfig {
+        spend_limit: None,
+        owner: Some(HumanAddr("other".to_string())),
+    };
+    let env = mock_env("addr0000", &[]);
+    let res = handle(&mut deps, env, msg.clone());
+
+    match res {
+        Err(StdError::Unauthorized { .. }) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+}
+
+#[test]
 fn test_spend() {
     let mut deps = mock_dependencies(20, &[]);
 
     let msg = InitMsg {
-        gov_contract: HumanAddr("gov".to_string()),
+        owner: HumanAddr("owner".to_string()),
         glow_token: HumanAddr("glow".to_string()),
         spend_limit: Uint128::from(1000000u128),
     };
@@ -106,7 +165,7 @@ fn test_spend() {
         amount: Uint128::from(2000000u128),
     };
 
-    let env = mock_env("gov", &[]);
+    let env = mock_env("owner", &[]);
     let res = handle(&mut deps, env, msg);
     match res {
         Err(StdError::GenericErr { msg, .. }) => {
@@ -120,7 +179,7 @@ fn test_spend() {
         amount: Uint128::from(1000000u128),
     };
 
-    let env = mock_env("gov", &[]);
+    let env = mock_env("owner", &[]);
     let res = handle(&mut deps, env, msg).unwrap();
     assert_eq!(
         res.messages,

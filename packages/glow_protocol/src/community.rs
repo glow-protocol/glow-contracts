@@ -5,9 +5,9 @@ use cosmwasm_std::{HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
-    pub gov_contract: HumanAddr, // glow gov contract
-    pub glow_token: HumanAddr,   // glow token address
-    pub spend_limit: Uint128,    // spend limit per each `spend` request
+    pub owner: HumanAddr, // owner contract, to be transferred to glow gov contract
+    pub glow_token: HumanAddr, // glow token address
+    pub spend_limit: Uint128, // spend limit per each `spend` request
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -15,6 +15,7 @@ pub struct InitMsg {
 pub enum HandleMsg {
     UpdateConfig {
         spend_limit: Option<Uint128>,
+        owner: Option<HumanAddr>,
     },
     Spend {
         recipient: HumanAddr,
@@ -35,7 +36,7 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub gov_contract: HumanAddr,
+    pub owner: HumanAddr,
     pub glow_token: HumanAddr,
     pub spend_limit: Uint128,
 }

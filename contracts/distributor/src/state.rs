@@ -9,8 +9,8 @@ static KEY_CONFIG: &[u8] = b"config";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub gov_contract: CanonicalAddr,   // glow gov address
-    pub glow_token: CanonicalAddr,     // glow token address
+    pub owner: CanonicalAddr, // owner of the contract. To be transferred to gov_contract
+    pub glow_token: CanonicalAddr, // glow token address
     pub whitelist: Vec<CanonicalAddr>, // whitelist addresses are allowed to spend contract glow token balance
     pub spend_limit: Uint128,          // spend limit per each `spend` request
     pub emission_cap: Decimal256,

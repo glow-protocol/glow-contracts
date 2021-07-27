@@ -18,7 +18,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     store_config(
         &mut deps.storage,
         &Config {
-            gov_contract: deps.api.canonical_address(&msg.gov_contract)?,
+            owner: deps.api.canonical_address(&msg.owner)?,
             glow_token: deps.api.canonical_address(&msg.glow_token)?,
             spend_limit: msg.spend_limit,
         },
@@ -33,7 +33,9 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
     match msg {
-        HandleMsg::UpdateConfig { spend_limit } => update_config(deps, env, spend_limit),
+        HandleMsg::UpdateConfig { spend_limit, owner } => {
+            update_config(deps, env, spend_limit, owner)
+        }
         HandleMsg::Spend { recipient, amount } => spend(deps, env, recipient, amount),
     }
 }
@@ -42,14 +44,19 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     spend_limit: Option<Uint128>,
+    owner: Option<HumanAddr>,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
-    if config.gov_contract != deps.api.canonical_address(&env.message.sender)? {
+    if config.owner != deps.api.canonical_address(&env.message.sender)? {
         return Err(StdError::unauthorized());
     }
 
     if let Some(spend_limit) = spend_limit {
         config.spend_limit = spend_limit;
+    }
+
+    if let Some(owner) = owner {
+        config.owner = deps.api.canonical_address(&owner)?;
     }
 
     store_config(&mut deps.storage, &config)?;
@@ -71,7 +78,7 @@ pub fn spend<S: Storage, A: Api, Q: Querier>(
     amount: Uint128,
 ) -> HandleResult {
     let config: Config = read_config(&deps.storage)?;
-    if config.gov_contract != deps.api.canonical_address(&env.message.sender)? {
+    if config.owner != deps.api.canonical_address(&env.message.sender)? {
         return Err(StdError::unauthorized());
     }
 
@@ -110,11 +117,11 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 pub fn query_config<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
 ) -> StdResult<ConfigResponse> {
-    let state = read_config(&deps.storage)?;
+    let config = read_config(&deps.storage)?;
     let resp = ConfigResponse {
-        gov_contract: deps.api.human_address(&state.gov_contract)?,
-        glow_token: deps.api.human_address(&state.glow_token)?,
-        spend_limit: state.spend_limit,
+        owner: deps.api.human_address(&config.owner)?,
+        glow_token: deps.api.human_address(&config.glow_token)?,
+        spend_limit: config.spend_limit,
     };
 
     Ok(resp)

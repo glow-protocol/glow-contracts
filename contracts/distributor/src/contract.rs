@@ -27,7 +27,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     store_config(
         &mut deps.storage,
         &Config {
-            gov_contract: deps.api.canonical_address(&msg.gov_contract)?,
+            owner: deps.api.canonical_address(&msg.owner)?,
             glow_token: deps.api.canonical_address(&msg.glow_token)?,
             whitelist,
             spend_limit: msg.spend_limit,
@@ -48,6 +48,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     match msg {
         HandleMsg::UpdateConfig {
+            owner,
             spend_limit,
             emission_cap,
             emission_floor,
@@ -56,6 +57,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         } => update_config(
             deps,
             env,
+            owner,
             spend_limit,
             emission_cap,
             emission_floor,
@@ -68,10 +70,10 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     }
 }
 
-// TODO: Should we let update_config change gov_contract address? Should gov_contract be renamed to owner?
 pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    owner: Option<HumanAddr>,
     spend_limit: Option<Uint128>,
     emission_cap: Option<Decimal256>,
     emission_floor: Option<Decimal256>,
@@ -79,8 +81,12 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     decrement_multiplier: Option<Decimal256>,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
-    if config.gov_contract != deps.api.canonical_address(&env.message.sender)? {
+    if config.owner != deps.api.canonical_address(&env.message.sender)? {
         return Err(StdError::unauthorized());
+    }
+
+    if let Some(owner) = owner {
+        config.owner = deps.api.canonical_address(&owner)?;
     }
 
     if let Some(spend_limit) = spend_limit {
@@ -118,7 +124,7 @@ pub fn add_distributor<S: Storage, A: Api, Q: Querier>(
     distributor: HumanAddr,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
-    if config.gov_contract != deps.api.canonical_address(&env.message.sender)? {
+    if config.owner != deps.api.canonical_address(&env.message.sender)? {
         return Err(StdError::unauthorized());
     }
 
@@ -152,7 +158,7 @@ pub fn remove_distributor<S: Storage, A: Api, Q: Querier>(
     distributor: HumanAddr,
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
-    if config.gov_contract != deps.api.canonical_address(&env.message.sender)? {
+    if config.owner != deps.api.canonical_address(&env.message.sender)? {
         return Err(StdError::unauthorized());
     }
 
@@ -249,7 +255,7 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<ConfigResponse> {
     let config = read_config(&deps.storage)?;
     let resp = ConfigResponse {
-        gov_contract: deps.api.human_address(&config.gov_contract)?,
+        owner: deps.api.human_address(&config.owner)?,
         glow_token: deps.api.human_address(&config.glow_token)?,
         whitelist: config
             .whitelist

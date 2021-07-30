@@ -8,9 +8,9 @@ static KEY_CONFIG: &[u8] = b"config";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub gov_contract: CanonicalAddr, // glow gov address
-    pub glow_token: CanonicalAddr,   // glow token address
-    pub spend_limit: Uint128,        // spend limit per each `spend` request
+    pub owner: CanonicalAddr, // Owner address, to be transferred to Gov Contract
+    pub glow_token: CanonicalAddr, // glow token address
+    pub spend_limit: Uint128, // spend limit per each `spend` request
 }
 
 pub fn store_config<S: Storage>(storage: &mut S, config: &Config) -> StdResult<()> {

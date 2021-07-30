@@ -832,13 +832,11 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
 ) -> HandleResult {
     let mut config: Config = read_config(&deps.storage)?;
 
-    // TODO: restrict the fields that can be changed
-
     // check permission
     if deps.api.canonical_address(&env.message.sender)? != config.owner {
         return Err(StdError::unauthorized());
     }
-    // change owner of the pool contract
+    // change owner of Glow core contract
     if let Some(owner) = owner {
         config.owner = deps.api.canonical_address(&owner)?;
     }
@@ -856,19 +854,61 @@ pub fn update_config<S: Storage, A: Api, Q: Querier>(
     }
 
     if let Some(prize_distribution) = prize_distribution {
+        if prize_distribution.len() != 5 {
+            return Err(StdError::generic_err(
+                "Prize distribution vector must contain 5 elements",
+            ));
+        }
+
+        let mut sum = Decimal256::zero();
+        for item in prize_distribution.iter() {
+            sum += *item;
+        }
+
+        if sum != Decimal256::one() {
+            return Err(StdError::generic_err(
+                "Sum of vector elements must add up to 1.",
+            ));
+        }
+
         config.prize_distribution = prize_distribution;
     }
 
     if let Some(reserve_factor) = reserve_factor {
+        if reserve_factor > Decimal256::one() {
+            return Err(StdError::generic_err(
+                "Reserve factor must be smaller than one.",
+            ));
+        }
+
         config.reserve_factor = reserve_factor;
     }
 
     if let Some(split_factor) = split_factor {
+        if split_factor > Decimal256::one() {
+            return Err(StdError::generic_err(
+                "Reserve factor must be smaller than one.",
+            ));
+        }
+
         config.split_factor = split_factor;
     }
 
     if let Some(unbonding_period) = unbonding_period {
         config.unbonding_period = Duration::Time(unbonding_period);
+    }
+
+    if let Some(unbonding_period) = unbonding_period {
+        // Note: Unbonding period COULD be smaller than lottery interval if the owner reduces the lottery interval.
+        // This check is meant to catch update_config human errors.
+        if let Duration::Time(lottery_interval) = config.lottery_interval {
+            if unbonding_period < lottery_interval {
+                return Err(StdError::generic_err(
+                    "Unbonding period cannot be shorter than lottery interval",
+                ));
+            }
+        }
+        config.block_time = Duration::Time(unbonding_period);
     }
 
     store_config(&mut deps.storage, &config)?;

@@ -44,6 +44,7 @@ rustup target add wasm32-unknown-unknown
 Each contract contains Rust unit and integration tests embedded within the contract source directories. You can run:
 
 ```sh
+cargo test
 cargo unit-test
 cargo integration-test
 ```

@@ -12,10 +12,13 @@ Glow depends on [Anchor Protocol](https://anchorprotocol.com) and [Terraswap](ht
 
 | Contract                                            | Reference                                              | Description                                                                                                                        |
 | --------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [`core`](./contracts/core)  | [doc](https://docs.mirror.finance/contracts/collector) | Gathers protocol fees incurred from CDP withdrawals and liquidations and sends to Gov                                              |
-| [`community`](../contracts/community) | [doc](https://docs.mirror.finance/contracts/community) | Manages the commuinty pool fund                                                                                                    |
-| [`gov`](./contracts/gov)              | [doc](https://docs.mirror.finance/contracts/gov)       | Allows other Mirror contracts to be controlled by decentralized governance, distributes MIR received from Collector to MIR stakers |
-| [`staking`](./contracts/taking)      | [doc](https://docs.mirror.finance/contracts/staking)   | Distributes MIR rewards from block reward to LP stakers                                                                            |
+| [`core`](./contracts/core)  | [doc](https://docs.joinglow.com/contracts/collector) | Core logic of Glow protocol, prize-linked savings accounts built on top of Anchor protocol                                          |
+| [`community`](../contracts/community) | [doc](https://docs.joinglow.com/contracts/community) | Manages the Glow Ecosystem Fund                                                                                                   |
+| [`gov`](./contracts/gov)              | [doc](https://docs.joinglow.com/contracts/gov)       | Allows Glow contracts to be controlled by decentralized governance, distributes GLOW received to GLOW stakers |
+| [`staking`](./contracts/staking)      | [doc](https://docs.joinglow.com/contracts/staking)   | Distributes GLOW rewards from block reward to LP stakers                                                                            |
+| [`distibutor`](./contracts/distributor)      | [doc](https://joinglow.com/contracts/staking)   | Distributes GLOW rewards to users of Glow protocol based on a dynamic emission rate algorithm                                                                           |
+| [`airdrop`](./contracts/airdrop)      | [doc](https://joinglow.com/contracts/staking)   | Distributes GLOW to selected address sets at token genesis event                                                                           |
+| [`vesting`](./contracts/vesting)      | [doc](https://joinglow.com/contracts/staking)   | Distributes GLOW over time to founding team, investors and contributors                                                                        |
 
 ## Development
 

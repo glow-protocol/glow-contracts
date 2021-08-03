@@ -70,6 +70,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_config<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -133,8 +134,7 @@ pub fn add_distributor<S: Storage, A: Api, Q: Querier>(
         .whitelist
         .clone()
         .into_iter()
-        .find(|w| *w == distributor_raw)
-        .is_some()
+        .any(|w| w == distributor_raw)
     {
         return Err(StdError::generic_err("Distributor already registered"));
     }
@@ -272,6 +272,7 @@ pub fn query_config<S: Storage, A: Api, Q: Querier>(
     Ok(resp)
 }
 
+#[allow(clippy::comparison_chain)]
 fn query_glow_emission_rate<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     current_award: Decimal256,

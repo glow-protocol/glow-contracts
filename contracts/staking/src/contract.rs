@@ -251,6 +251,7 @@ fn compute_reward(config: &Config, state: &mut State, block_height: u64) {
 }
 
 // withdraw reward to pending reward
+#[allow(clippy::suspicious_operation_groupings)]
 fn compute_staker_reward(state: &State, staker_info: &mut StakerInfo) -> StdResult<()> {
     let pending_reward = (staker_info.bond_amount * state.global_reward_index
         - staker_info.bond_amount * staker_info.reward_index)?;

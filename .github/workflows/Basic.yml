@@ -17,25 +17,23 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.51.0
+          toolchain: 1.52.0
           target: wasm32-unknown-unknown
           override: true
 
-      - name: Run unit tests
+      - name: Run tests
         uses: actions-rs/cargo@v1
         with:
-          command: unit-test
-          args: --locked
+          command: test
         env:
           RUST_BACKTRACE: 1
 
-      - name: Compile WASM contract
-        uses: actions-rs/cargo@v1
-        with:
-          command: wasm
-          args: --locked
-        env:
-          RUSTFLAGS: "-C link-arg=-s"
+    #  - name: Compile WASM contract
+    #    uses: actions-rs/cargo@v1
+    #    with:
+    #      command: wasm
+    #    env:
+    #      RUSTFLAGS: "-C link-arg=-s"
 
   lints:
     name: Lints
@@ -48,7 +46,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.51.0
+          toolchain: 1.52.0
           override: true
           components: rustfmt, clippy
 
@@ -66,8 +64,8 @@ jobs:
 
       # CHANGES_IN_REPO=$(git status --porcelain)
       # after this, but I don't know how
-      - name: Generate Schema
-        uses: actions-rs/cargo@v1
-        with:
-          command: schema
-          args: --locked
+      # - name: Generate Schema
+      #  uses: actions-rs/cargo@v1
+      #  with:
+      #    command: schema
+      #    args: --locked

@@ -185,7 +185,7 @@ pub fn sweep<S: Storage, A: Api, Q: Querier>(
                 denom: denom.to_string(),
             },
             AssetInfo::Token {
-                contract_addr: glow_token.clone(),
+                contract_addr: glow_token,
             },
         ],
     )?;
@@ -884,7 +884,7 @@ fn query_polls<S: Storage, A: Api, Q: Querier>(
                         };
                         data_list.push(execute_data)
                     }
-                    Some(data_list.clone())
+                    Some(data_list)
                 } else {
                     None
                 },

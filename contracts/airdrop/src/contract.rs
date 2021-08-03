@@ -15,7 +15,6 @@ use glow_protocol::airdrop::{
 };
 
 use cw20::Cw20HandleMsg;
-use hex;
 use sha3::Digest;
 use std::convert::TryInto;
 
@@ -182,6 +181,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+#[allow(clippy::comparison_chain)]
 fn bytes_cmp(a: [u8; 32], b: [u8; 32]) -> std::cmp::Ordering {
     let mut i = 0;
     while i < 32 {
@@ -194,7 +194,7 @@ fn bytes_cmp(a: [u8; 32], b: [u8; 32]) -> std::cmp::Ordering {
         i += 1;
     }
 
-    return std::cmp::Ordering::Equal;
+    std::cmp::Ordering::Equal
 }
 
 pub fn query<S: Storage, A: Api, Q: Querier>(

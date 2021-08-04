@@ -161,7 +161,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     let mut total_reserve_commission = Decimal256::zero();
 
     for (matches, winners) in map_winners.iter() {
-        let number_winners = winners.len() as u8;
+        let number_winners = winners.len() as u64;
         for winner in winners {
             let mut depositor = read_depositor_info(&deps.storage, winner);
 
@@ -230,7 +230,7 @@ fn apply_reserve_factor(awarded_amount: Decimal256, reserve_factor: Decimal256) 
 fn assign_prize(
     awardable_prize: Decimal256,
     matches: u8,
-    winners: u8,
+    winners: u64,
     distribution: &[Decimal256],
 ) -> Decimal256 {
     let number_winners = Uint256::from(winners as u64);

@@ -199,7 +199,7 @@ pub fn read_all_sequences<S: Storage, A: Api, Q: Querier>(
         }
     }
 
-    return all_sequences;
+    all_sequences
 }
 
 // pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(

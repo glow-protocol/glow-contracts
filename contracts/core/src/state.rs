@@ -139,51 +139,113 @@ pub fn read_sequence_info<S: Storage>(storage: &S, sequence: &str) -> Vec<Canoni
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 
+// pub fn read_all_sequences<S: Storage, A: Api, Q: Querier>(
+//     deps: Extern<S, A, Q>,
+//     start_after: Option<CanonicalAddr>,
+//     limit: Option<u32>,
+// ) -> StdResult<Vec<(String, Vec<CanonicalAddr>)>> {
+//     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
+//         bucket_read(PREFIX_SEQUENCE, &deps.storage);
+
+//     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+//     let start = calc_range_start(start_after);
+
+//     sequence_bucket
+//         .range(start.as_deref(), None, Order::Ascending)
+//         .take(limit)
+//         .map(|elem| {
+//             let (k, v) = elem?;
+//             let sequence = String::from_utf8(k).ok().unwrap();
+//             Ok((sequence, v))
+//         })
+//         .collect()
+// }
+
 pub fn read_all_sequences<S: Storage, A: Api, Q: Querier>(
-    deps: Extern<S, A, Q>,
-    start_after: Option<CanonicalAddr>,
-    limit: Option<u32>,
-) -> StdResult<Vec<(String, Vec<CanonicalAddr>)>> {
+    deps: &Extern<S, A, Q>,
+) -> Vec<(String, Vec<CanonicalAddr>)> {
     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
         bucket_read(PREFIX_SEQUENCE, &deps.storage);
 
-    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = calc_range_start(start_after);
+    // TODO: review limit value for optimization
+    let limit = 1000;
+    let mut start = None;
 
-    sequence_bucket
-        .range(start.as_deref(), None, Order::Ascending)
-        .take(limit)
-        .map(|elem| {
-            let (k, v) = elem?;
-            let sequence = String::from_utf8(k).ok().unwrap();
-            Ok((sequence, v))
-        })
-        .collect()
+    let mut all_sequences = vec![];
+
+    loop {
+        let mut sequences: Vec<(String, Vec<CanonicalAddr>)> = sequence_bucket
+            .range(start.as_deref(), None, Order::Ascending)
+            .take(limit)
+            .map(|elem| {
+                let (k, v) = elem.unwrap();
+                let sequence = String::from_utf8(k).ok().unwrap();
+                (sequence, v)
+            })
+            .collect();
+
+        if sequences.is_empty() {
+            break;
+        }
+
+        start = calc_sequence_range_start(Some(sequences.last().unwrap().0.as_str()));
+
+        let last_loop = sequences.len() < limit;
+
+        all_sequences.append(&mut sequences);
+
+        if last_loop {
+            break;
+        }
+    }
+
+    all_sequences
 }
+
+// pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
+//     deps: &Extern<S, A, Q>,
+//     start_after: Option<CanonicalAddr>,
+//     limit: Option<u32>,
+//     win_sequence: &str,
+// ) -> Vec<(u8, Vec<CanonicalAddr>)> {
+//     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
+//         bucket_read(PREFIX_SEQUENCE, &deps.storage);
+
+//     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+//     let start = calc_range_start(start_after);
+
+//     sequence_bucket
+//         .range(start.as_deref(), None, Order::Ascending)
+//         .take(limit)
+//         .filter_map(|elem| {
+//             let (k, v) = elem.ok()?;
+//             let sequence = String::from_utf8(k).ok()?;
+//             let number_matches = count_seq_matches(win_sequence, &sequence);
+//             if number_matches < 2 {
+//                 None
+//             } else {
+//                 Some((number_matches, v))
+//             }
+//         })
+//         .collect()
+// }
 
 pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
-    start_after: Option<CanonicalAddr>,
-    limit: Option<u32>,
     win_sequence: &str,
 ) -> Vec<(u8, Vec<CanonicalAddr>)> {
-    let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
-        bucket_read(PREFIX_SEQUENCE, &deps.storage);
+    let all_sequences = read_all_sequences(&deps);
 
-    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = calc_range_start(start_after);
-
-    sequence_bucket
-        .range(start.as_deref(), None, Order::Ascending)
-        .take(limit)
+    all_sequences
+        .iter()
         .filter_map(|elem| {
-            let (k, v) = elem.ok()?;
-            let sequence = String::from_utf8(k).ok()?;
+            let (s, v) = elem;
+            let sequence = String::from(s);
             let number_matches = count_seq_matches(win_sequence, &sequence);
             if number_matches < 2 {
                 None
             } else {
-                Some((number_matches, v))
+                Some((number_matches, v.clone()))
             }
         })
         .collect()
@@ -247,6 +309,15 @@ pub fn read_depositors<S: Storage, A: Api, Q: Querier>(
 fn calc_range_start(start_after: Option<CanonicalAddr>) -> Option<Vec<u8>> {
     start_after.map(|addr| {
         let mut v = addr.as_slice().to_vec();
+        v.push(1);
+        v
+    })
+}
+
+// this will set the first key after the provided key, by appending a 1 byte
+fn calc_sequence_range_start(start_after: Option<&str>) -> Option<Vec<u8>> {
+    start_after.map(|sequence| {
+        let mut v = sequence.as_bytes().to_vec();
         v.push(1);
         v
     })

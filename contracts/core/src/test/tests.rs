@@ -405,7 +405,7 @@ fn deposit() {
     );
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     /*
     deps.querier.update_balance(
@@ -704,7 +704,7 @@ fn gift_tickets() {
     );
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     /*
     deps.querier.update_balance(
@@ -843,10 +843,10 @@ fn withdraw() {
     };
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = handle(&mut deps, env, msg).unwrap();
 
-    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
     let env = mock_env("addr0001", &[]);
 
@@ -990,10 +990,10 @@ fn instant_withdraw() {
     };
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = handle(&mut deps, env, msg).unwrap();
 
-    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
     let env = mock_env("addr0001", &[]);
 
@@ -1148,14 +1148,14 @@ fn claim() {
     };
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = handle(&mut deps, env, msg).unwrap();
 
     // Address withdraws one ticket
     let env = mock_env("addr0001", &[]);
     let msg = HandleMsg::Withdraw { instant: None };
 
-    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
     deps.querier.with_token_balances(&[(
         &HumanAddr::from("aterra"),
@@ -2092,6 +2092,70 @@ fn handle_prize_winners_same_rank() {
             log("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
     );
+}
+
+#[test]
+fn handle_prize_many_different_winning_combinations() {
+    // Initialize contract
+    let mut deps = mock_dependencies(20, &[]);
+
+    let env = mock_env(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let _res = initialize(&mut deps, env.clone());
+
+    // Add 150_000 UST to our contract balance
+    deps.querier.update_balance(
+        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    let addresses_count = 1500u64;
+    let addresses_range = 0..addresses_count;
+    let addresses = addresses_range
+        .map(|c| format!("addr{:0>4}", c))
+        .collect::<Vec<String>>();
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    for (index, address) in addresses.iter().enumerate() {
+        // Users buys winning ticket
+        let msg = HandleMsg::Deposit {
+            combinations: vec![String::from(format!("{:0>5}", index))],
+            // combinations: vec![String::from("00000")],
+        };
+        let env = mock_env(
+            address.as_str(),
+            &[Coin {
+                denom: "uusd".to_string(),
+                amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+            }],
+        );
+
+        let _res = handle(&mut deps, env, msg).unwrap();
+    }
+
+    // Run lottery - should run correctly
+    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
+    let msg = HandleMsg::_HandlePrize {
+        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+    };
+    let _res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+
+    // Check lottery info was updated correctly
+
+    let lottery_info = read_lottery_info(&deps.storage, 0u64);
+
+    assert!(lottery_info.awarded);
 }
 
 #[test]

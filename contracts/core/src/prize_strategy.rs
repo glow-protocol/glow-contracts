@@ -14,6 +14,7 @@ use glow_protocol::core::HandleMsg;
 use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
+use std::usize;
 
 pub fn execute_lottery<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -148,7 +149,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     // Get winners and respective sequences
     let lucky_holders: Vec<(u8, Vec<CanonicalAddr>)> =
-        read_matching_sequences(&deps, None, None, &winning_sequence);
+        read_matching_sequences(&deps, &winning_sequence);
 
     let mut map_winners = HashMap::new();
     for (k, mut v) in lucky_holders.clone() {
@@ -160,7 +161,7 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
     let mut total_reserve_commission = Decimal256::zero();
 
     for (matches, winners) in map_winners.iter() {
-        let number_winners = winners.len() as u8;
+        let number_winners = winners.len() as u64;
         for winner in winners {
             let mut depositor = read_depositor_info(&deps.storage, winner);
 
@@ -188,6 +189,9 @@ pub fn _handle_prize<S: Storage, A: Api, Q: Querier>(
 
     state.current_lottery += 1;
     state.total_reserve = state.total_reserve.add(total_reserve_commission);
+    // println!("state: {:?}", state);
+    // println!("award_available: {}", state.award_available);
+    // println!("total_awarded_prize: {}", total_awarded_prize);
     state.award_available = state.award_available.sub(total_awarded_prize);
     store_state(&mut deps.storage, &state)?;
 
@@ -226,12 +230,12 @@ fn apply_reserve_factor(awarded_amount: Decimal256, reserve_factor: Decimal256) 
 fn assign_prize(
     awardable_prize: Decimal256,
     matches: u8,
-    winners: u8,
+    winners: u64,
     distribution: &[Decimal256],
 ) -> Decimal256 {
     let number_winners = Uint256::from(winners as u64);
 
-    println!("distribution element {:?}", matches);
+    // println!("distribution element {:?}", matches);
 
     awardable_prize * distribution[matches as usize] / Decimal256::from_uint256(number_winners)
 }

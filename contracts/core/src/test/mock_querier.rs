@@ -108,9 +108,17 @@ pub(crate) fn caps_to_map(caps: &[(&String, &Uint128)]) -> HashMap<String, Uint1
     owner_map
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ExchangeRateQuerier {
     exchange_rate: Decimal256,
+}
+
+impl Default for ExchangeRateQuerier {
+    fn default() -> Self {
+        ExchangeRateQuerier {
+            exchange_rate: Decimal256::permille(1023),
+        }
+    }
 }
 
 impl ExchangeRateQuerier {
@@ -171,7 +179,7 @@ impl WasmMockQuerier {
                 match from_binary(&msg).unwrap() {
                     QueryMsg::EpochState { block_height: _ } => {
                         Ok(to_binary(&EpochStateResponse {
-                            exchange_rate: Decimal256::permille(1023), // Current anchor rate,
+                            exchange_rate: self.exchange_rate_querier.exchange_rate, // Current anchor rate,
                             aterra_supply: Uint256::one(),
                         }))
                     }

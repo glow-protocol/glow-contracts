@@ -167,7 +167,8 @@ pub fn read_all_sequences<S: Storage, A: Api, Q: Querier>(
     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
         bucket_read(PREFIX_SEQUENCE, &deps.storage);
 
-    let limit = 100;
+    // TODO: review limit value for optimization
+    let limit = 1000;
     let mut start = None;
 
     let mut all_sequences = vec![];

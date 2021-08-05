@@ -405,7 +405,7 @@ fn deposit() {
     );
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     /*
     deps.querier.update_balance(
@@ -704,7 +704,7 @@ fn gift_tickets() {
     );
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     /*
     deps.querier.update_balance(
@@ -843,10 +843,10 @@ fn withdraw() {
     };
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = handle(&mut deps, env, msg).unwrap();
 
-    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
     let env = mock_env("addr0001", &[]);
 
@@ -990,10 +990,10 @@ fn instant_withdraw() {
     };
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = handle(&mut deps, env, msg).unwrap();
 
-    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
     let env = mock_env("addr0001", &[]);
 
@@ -1148,14 +1148,14 @@ fn claim() {
     };
 
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(1023));
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = handle(&mut deps, env, msg).unwrap();
 
     // Address withdraws one ticket
     let env = mock_env("addr0001", &[]);
     let msg = HandleMsg::Withdraw { instant: None };
 
-    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(1023)) * Uint256::one();
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
     deps.querier.with_token_balances(&[(
         &HumanAddr::from("aterra"),
@@ -2118,7 +2118,7 @@ fn handle_prize_many_different_winning_combinations() {
         }],
     );
 
-    let addresses_count = 500u64;
+    let addresses_count = 1500u64;
     let addresses_range = 0..addresses_count;
     let addresses = addresses_range
         .map(|c| format!("addr{:0>4}", c))
@@ -2131,6 +2131,7 @@ fn handle_prize_many_different_winning_combinations() {
         // Users buys winning ticket
         let msg = HandleMsg::Deposit {
             combinations: vec![String::from(format!("{:0>5}", index))],
+            // combinations: vec![String::from("00000")],
         };
         let env = mock_env(
             address.as_str(),
@@ -2143,7 +2144,7 @@ fn handle_prize_many_different_winning_combinations() {
         let _res = handle(&mut deps, env, msg).unwrap();
     }
 
-    // Run lottery, one winner (5 hits) - should run correctly
+    // Run lottery - should run correctly
     let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
     let msg = HandleMsg::_HandlePrize {
         balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
@@ -2152,25 +2153,9 @@ fn handle_prize_many_different_winning_combinations() {
 
     // Check lottery info was updated correctly
 
-    assert_eq!(
-        read_lottery_info(&deps.storage, 0u64).winners.len(),
-        addresses_count as usize
-    );
+    let lottery_info = read_lottery_info(&deps.storage, 0u64);
 
-    // println!(
-    //     "winners: {:?}",
-    //     read_lottery_info(&deps.storage, 0u64)
-    //         .winners
-    //         .iter()
-    //         .map(|w| w.0)
-    //         .collect::<Vec<u8>>()
-    // );
-
-    // println!("lottery_info: {:?}", read_lottery_info(&deps.storage, 0u64));
-    // println!(
-    //     "winners_count: {:?}",
-    //     read_lottery_info(&deps.storage, 0u64).winners.len()
-    // );
+    assert!(lottery_info.awarded);
 }
 
 #[test]

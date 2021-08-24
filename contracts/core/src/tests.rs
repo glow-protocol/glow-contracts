@@ -1,27 +1,36 @@
-use crate::contract::{handle, init, query, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
+use crate::contract::{execute, init, instantiate, query, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
+use crate::mock_querier::mock_dependencies;
 use crate::state::{
-    read_depositor_info, read_lottery_info, read_sequence_info, read_state, store_state,
-    DepositorInfo, LotteryInfo, State,
+    read_config, read_depositor_info, read_lottery_info, read_sequence_info, read_state,
+    store_state, Config, DepositorInfo, LotteryInfo, State,
 };
-use crate::test::mock_querier::mock_dependencies;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, log, to_binary, Api, BankMsg, Coin, CosmosMsg, Decimal, Env, Extern, HumanAddr,
-    InitResponse, Querier, StdError, Storage, Uint128, WasmMsg,
+    attr, from_binary, to_binary, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Decimal, DepsMut,
+    Env, Querier, StdError, Storage, Timestamp, Uint128, WasmMsg,
 };
-use cw20::Cw20HandleMsg;
+use cw20::Cw20ExecuteMsg;
 use glow_protocol::core::{
-    Claim, ConfigResponse, DepositorInfoResponse, HandleMsg, InitMsg, QueryMsg, StateResponse,
+    Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
+    StateResponse,
 };
-use glow_protocol::distributor::HandleMsg as FaucetHandleMsg;
+use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 
+use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
-use moneymarket::market::{Cw20HookMsg, HandleMsg as AnchorMsg};
-use moneymarket::querier::deduct_tax;
+use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
+use moneymarket::querier::deduct_tax; //TODO: import from glow_protocol package
 use std::ops::{Add, Div, Mul};
 use std::str::FromStr;
+
+const TEST_CREATOR: &str = "creator";
+const ANCHOR: &str = "anchor";
+const A_UST: &str = "aterra-ust";
+const DENOM: &str = "uusd";
+const GOV_ADDR: &str = "gov";
+const DISTRIBUTOR_ADDR: &str = "distributor";
 
 const TICKET_PRIZE: u64 = 1_000_000_000; // 10_000_000 as %
 const SPLIT_FACTOR: u64 = 75; // as a %
@@ -31,15 +40,12 @@ const RATE: u64 = 1023; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 
-fn initialize<S: Storage, A: Api, Q: Querier>(
-    mut deps: &mut Extern<S, A, Q>,
-    env: Env,
-) -> InitResponse {
-    let msg = InitMsg {
-        owner: HumanAddr::from("owner"),
-        stable_denom: "uusd".to_string(),
-        anchor_contract: HumanAddr::from("anchor"),
-        aterra_contract: HumanAddr::from("aterra"),
+fn instantiate_msg() -> InstantiateMsg {
+    InstantiateMsg {
+        owner: TEST_CREATOR.to_string(),
+        stable_denom: DENOM.to_string(),
+        anchor_contract: ANCHOR.to_string(),
+        aterra_contract: A_UST.to_string(),
         lottery_interval: WEEK_TIME,
         block_time: HOUR_TIME,
         ticket_prize: Decimal256::percent(TICKET_PRIZE),
@@ -57,124 +63,137 @@ fn initialize<S: Storage, A: Api, Q: Querier>(
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
-    };
+    }
+}
 
-    init(&mut deps, env.clone(), msg).unwrap()
+fn mock_instantiate(deps: DepsMut) -> InitResponse {
+    let msg = instantiate_msg();
+
+    let info = mock_info(TEST_CREATOR, &[]);
+
+    let _res = instantiate(deps, mock_env(), info, msg)
+        .expect("contract successfully executes InstantiateMsg");
+}
+
+fn mock_register_contracts(deps: DepsMut) {
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::RegisterContracts {
+        gov_contract: GOV_ADDR.to_string(),
+        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
+    };
+    let _res = execute(deps, mock_env(), info, msg)
+        .expect("contract successfully executes RegisterContracts");
+}
+
+fn mock_env_height(height: u64, time: u64) -> Env {
+    let mut env = mock_env();
+    env.block.height = height;
+    env.block.time = Timestamp::from_seconds(time);
+    env
 }
 
 #[test]
 fn proper_initialization() {
-    let mut deps = mock_dependencies(
-        20,
+    let mut deps = mock_dependencies(&[]);
+
+    let msg = instantiate_msg();
+    let info = mock_info(
+        TEST_CREATOR,
         &[Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
 
-    let env = mock_env(
-        "owner",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    assert_eq!(0, res.messages.len());
 
-    let res = initialize(&mut deps, env.clone());
-    assert_eq!(res, InitResponse::default());
+    let config: Config = read_config(deps.as_ref().storage).load().unwrap();
+
+    assert_eq!(
+        config,
+        Config {
+            contract_addr: deps.api.addr_canonicalize("contract").unwrap(), //TODO: do we need this?
+            owner: deps.api.addr_canonicalize("owner").unwrap(),
+            a_terra_contract: deps.api.addr_canonicalize(A_UST).unwrap(),
+            gov_contract: CanonicalAddr::from(vec![]),
+            distributor_contract: CanonicalAddr::from(vec![]),
+            anchor_contract: deps.api.addr_canonicalize(ANCHOR).unwrap(),
+            stable_denom: DENOM.to_string(),
+            lottery_interval: WEEK,
+            block_time: HOUR,
+            ticket_prize: Decimal256::percent(TICKET_PRIZE),
+            prize_distribution: vec![
+                Decimal256::zero(),
+                Decimal256::zero(),
+                Decimal256::percent(5),
+                Decimal256::percent(15),
+                Decimal256::percent(30),
+                Decimal256::percent(50)
+            ],
+            target_award: Decimal256::zero(),
+            reserve_factor: Decimal256::percent(RESERVE_FACTOR),
+            split_factor: Decimal256::percent(SPLIT_FACTOR),
+            instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
+            unbonding_period: WEEK
+        }
+    );
 
     // Register contracts
-    let msg = HandleMsg::RegisterContracts {
-        gov_contract: HumanAddr::from("gov"),
-        distributor_contract: HumanAddr::from("distributor"),
+    let msg = ExecuteMsg::RegisterContracts {
+        gov_contract: GOV_ADDR.to_string(),
+        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env, msg).unwrap();
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let config: Config = config_read(deps.as_ref().storage).load().unwrap();
+    assert_eq!(
+        config.gov_contract,
+        deps.api.addr_canonicalize(GOV_ADDR).unwrap()
+    );
+    assert_eq!(
+        config.distributor_contract,
+        deps.api.addr_canonicalize(DISTRIBUTOR_ADDR).unwrap()
+    );
+
+    let state: State = state_read(deps.as_ref().storage).load().unwrap();
+    assert_eq!(
+        state,
+        State {
+            total_tickets: Uint256::zero(),
+            total_reserve: Decimal256::zero(),
+            total_deposits: Decimal256::zero(),
+            lottery_deposits: Decimal256::zero(),
+            shares_supply: Decimal256::zero(),
+            deposit_shares: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&mock_env().block),
+            last_reward_updated: 0,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
+        }
+    );
 
     // Cannot register contracts again
-    let msg = HandleMsg::RegisterContracts {
-        gov_contract: HumanAddr::from("gov"),
-        distributor_contract: HumanAddr::from("distributor"),
+    let msg = ExecuteMsg::RegisterContracts {
+        gov_contract: GOV_ADDR.to_string(),
+        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env.clone(), msg).unwrap_err();
-
-    // Test query config
-    let query_res = query(&deps, QueryMsg::Config {}).unwrap();
-    let config_res: ConfigResponse = from_binary(&query_res).unwrap();
-    assert_eq!(HumanAddr::from("owner"), config_res.owner);
-    assert_eq!("uusd".to_string(), config_res.stable_denom);
-    assert_eq!(HumanAddr::from("anchor"), config_res.anchor_contract);
-    assert_eq!(WEEK, config_res.lottery_interval);
-    assert_eq!(HOUR, config_res.block_time);
-    assert_eq!(Decimal256::percent(TICKET_PRIZE), config_res.ticket_prize);
-    assert_eq!(
-        vec![
-            Decimal256::zero(),
-            Decimal256::zero(),
-            Decimal256::percent(5),
-            Decimal256::percent(15),
-            Decimal256::percent(30),
-            Decimal256::percent(50)
-        ],
-        config_res.prize_distribution
-    );
-    assert_eq!(Decimal256::percent(5), config_res.reserve_factor);
-    assert_eq!(Decimal256::percent(75), config_res.split_factor);
-    assert_eq!(WEEK, config_res.unbonding_period);
-    assert_eq!(
-        HumanAddr::from("distributor"),
-        config_res.distributor_contract
-    );
-    assert_eq!(HumanAddr::from("gov"), config_res.gov_contract);
-
-    // Test query state
-    let query_res = query(&deps, QueryMsg::State { block_height: None }).unwrap();
-    let state_res: StateResponse = from_binary(&query_res).unwrap();
-    assert_eq!(state_res.total_tickets, Uint256::zero());
-    assert_eq!(state_res.total_reserve, Decimal256::zero());
-    assert_eq!(state_res.lottery_deposits, Decimal256::zero());
-    assert_eq!(state_res.shares_supply, Decimal256::zero());
-    assert_eq!(
-        state_res.award_available,
-        Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT)
-    );
-    assert_eq!(state_res.current_lottery, 0);
-    assert_eq!(state_res.next_lottery_time, WEEK.after(&env.block));
 }
 
 #[test]
 fn update_config() {
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
-
-    // Register contracts
-    let msg = HandleMsg::RegisterContracts {
-        gov_contract: HumanAddr::from("gov"),
-        distributor_contract: HumanAddr::from("distributor"),
-    };
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env, msg).unwrap();
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // update owner
-    let env = mock_env("owner", &[]);
-    let msg = HandleMsg::UpdateConfig {
-        owner: Some(HumanAddr::from("owner1".to_string())),
+    let env = mock_info(TEST_CREATOR, &[]);
+
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: Some("owner1".to_string()),
         lottery_interval: None,
         block_time: None,
         ticket_prize: None,
@@ -183,18 +202,18 @@ fn update_config() {
         split_factor: None,
         unbonding_period: None,
     };
-    let res = handle(&mut deps, env, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // Check owner has changed
-    let res = query(&deps, QueryMsg::Config {}).unwrap();
+    let res = query(deps.as_ref(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
 
-    assert_eq!(HumanAddr::from("owner1"), config_response.owner);
+    assert_eq!("owner1".to_string(), config_response.owner);
 
     // update lottery interval to 30 minutes
-    let env = mock_env("owner1", &[]);
-    let msg = HandleMsg::UpdateConfig {
+    let env = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         lottery_interval: Some(1800),
         block_time: None,
@@ -205,17 +224,16 @@ fn update_config() {
         unbonding_period: None,
     };
 
-    let res = handle(&mut deps, env, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // check lottery_interval has changed
-    let res = query(&deps, QueryMsg::Config {}).unwrap();
+    let res = query(deps.as_ref(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.lottery_interval, Duration::Time(1800));
 
     // update reserve_factor to 1%
-    let env = mock_env("owner1", &[]);
-    let msg = HandleMsg::UpdateConfig {
+    let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         lottery_interval: None,
         block_time: None,
@@ -226,17 +244,17 @@ fn update_config() {
         unbonding_period: None,
     };
 
-    let res = handle(&mut deps, env, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // check reserve_factor has changed
-    let res = query(&deps, QueryMsg::Config {}).unwrap();
+    let res = query(deps.as_ref(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.reserve_factor, Decimal256::percent(1));
 
     // check only owner can update config
-    let env = mock_env("owner", &[]);
-    let msg = HandleMsg::UpdateConfig {
+    let env = mock_info("owner2", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         lottery_interval: Some(1800),
         block_time: None,
@@ -247,9 +265,9 @@ fn update_config() {
         unbonding_period: None,
     };
 
-    let res = handle(&mut deps, env, msg);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
-        Err(StdError::Unauthorized { .. }) => {}
+        Err(ContractError::Unauthorized {}) => {}
         _ => panic!("Must return unauthorized error"),
     }
 }
@@ -262,29 +280,16 @@ fn update_config() {
 #[test]
 fn deposit() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Must deposit stable_denom coins
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "ukrw".to_string(),
@@ -292,117 +297,70 @@ fn deposit() {
         }],
     );
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Deposit amount must be greater than 0 uusd")
-        }
+        Err(ContractError::InvalidDepositAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // correct base denom, zero deposit
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: Uint128::zero(),
         }],
     );
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Deposit amount must be greater than 0 uusd")
-        }
+        Err(ContractError::InvalidDepositAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Invalid ticket sequence - more number of digits
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("135797"), String::from("34567")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Ticket sequence must be {} characters between 0-9",
-                    SEQUENCE_DIGITS
-                )
-            )
-        }
+        Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Invalid ticket sequence - less number of digits
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("3457")],
     };
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
-        }],
-    );
-    let res = handle(&mut deps, env, msg.clone());
+
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Ticket sequence must be {} characters between 0-9",
-                    SEQUENCE_DIGITS
-                )
-            )
-        }
+        Err(StdError::GenericErr { msg, .. }) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Invalid ticket sequence - only numbers allowed
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("135w9"), String::from("34567")],
     };
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
-        }],
-    );
-    let res = handle(&mut deps, env, msg.clone());
+
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Ticket sequence must be {} characters between 0-9",
-                    SEQUENCE_DIGITS
-                )
-            )
-        }
+        Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Correct deposit - buys two tickets
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::from(2u64)).into(),
-        }],
-    );
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
@@ -417,32 +375,23 @@ fn deposit() {
     );
      */
 
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
         read_sequence_info(&deps.storage, &String::from("13579")),
-        vec![deps
-            .api
-            .canonical_address(&HumanAddr::from("addr0000"))
-            .unwrap()]
+        vec![deps.api.addr_canonicalize("addr0000").unwrap()]
     );
     assert_eq!(
         read_sequence_info(&deps.storage, &String::from("34567")),
-        vec![deps
-            .api
-            .canonical_address(&HumanAddr::from("addr0000"))
-            .unwrap()]
+        vec![deps.api.addr_canonicalize("addr0000").unwrap()]
     );
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(
-            &deps.storage,
-            &deps
-                .api
-                .canonical_address(&HumanAddr::from("addr0000"))
-                .unwrap()
+            deps.as_ref().storage,
+            &deps.api.addr_canonicalize("addr0000").unwrap()
         ),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE * 2u64),
@@ -479,8 +428,8 @@ fn deposit() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("anchor"),
-            send: vec![Coin {
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
                 denom: String::from("uusd"),
                 amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
             }],
@@ -489,12 +438,12 @@ fn deposit() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "batch_deposit"),
-            log("depositor", "addr0000"),
-            log("deposit_amount", Decimal256::percent(TICKET_PRIZE * 2u64)),
-            log(
+            attr("action", "batch_deposit"),
+            attr("depositor", "addr0000"),
+            attr("deposit_amount", Decimal256::percent(TICKET_PRIZE * 2u64)),
+            attr(
                 "shares_minted",
                 Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE)
             ),
@@ -509,30 +458,17 @@ fn deposit() {
 #[test]
 fn gift_tickets() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Must deposit stable_denom coins
-    let msg = HandleMsg::Gift {
+    let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("34567")],
-        recipient: HumanAddr::from("addr1111"),
+        recipient: "addr1111".to_string(),
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "ukrw".to_string(),
@@ -540,16 +476,14 @@ fn gift_tickets() {
         }],
     );
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Deposit amount to gift must be greater than 0 uusd")
-        }
+        Err(ContractError::InvalidGiftAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // correct base denom, zero deposit
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
@@ -557,18 +491,16 @@ fn gift_tickets() {
         }],
     );
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Deposit amount to gift must be greater than 0 uusd")
-        }
+        Err(ContractError::InvalidGiftAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     let wrong_amount = Decimal256::percent(TICKET_PRIZE * 4);
 
     // correct base denom, deposit different to ticket_prize
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
@@ -576,132 +508,83 @@ fn gift_tickets() {
         }],
     );
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    let amount_required = TICKET_PRIZE * 2u64;
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Deposit amount required to gift 2 tickets is {} uusd",
-                    Decimal256::percent(TICKET_PRIZE * 2u64)
-                )
-            )
-        }
+        Err(ContractError::InsufficientGiftDepositAmount(amount_required)) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
     // Invalid recipient - you cannot make a gift to yourself
-    let msg = HandleMsg::Gift {
+    let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13597"), String::from("34567")],
-        recipient: HumanAddr::from("addr0000"),
+        recipient: "addr0000".to_string(),
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
             amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!("You cannot gift tickets to yourself, just make a regular deposit",)
-            )
-        }
+        Err(ContractError::InvalidGift {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Invalid ticket sequence - more number of digits
-    let msg = HandleMsg::Gift {
+    let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("135797"), String::from("34567")],
-        recipient: HumanAddr::from("addr1111"),
+        recipient: "addr1111".to_string(),
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Ticket sequence must be {} characters between 0-9",
-                    SEQUENCE_DIGITS
-                )
-            )
-        }
+        Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Invalid ticket sequence - less number of digits
-    let msg = HandleMsg::Gift {
+    let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("3457")],
-        recipient: HumanAddr::from("addr1111"),
+        recipient: "addr1111".to_string(),
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
             amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), env, info.clone(), msg);
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Ticket sequence must be {} characters between 0-9",
-                    SEQUENCE_DIGITS
-                )
-            )
-        }
+        Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Invalid ticket sequence - only numbers allowed
-    let msg = HandleMsg::Gift {
+    let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("135w9"), String::from("34567")],
-        recipient: HumanAddr::from("addr1111"),
+        recipient: "addr1111".to_string(),
     };
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
-        }],
-    );
-    let res = handle(&mut deps, env, msg.clone());
+
+    let res = execute(deps.as_mut(), env, info.clone(), msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Ticket sequence must be {} characters between 0-9",
-                    SEQUENCE_DIGITS
-                )
-            )
-        }
+        Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Correct single deposit - buys one ticket
-    let msg = HandleMsg::Gift {
+    // Correct gift - gifts two tickets
+    let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("34567")],
-        recipient: HumanAddr::from("addr1111"),
+        recipient: "addr1111".to_string(),
     };
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::from(2u64)).into(),
-        }],
-    );
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
@@ -716,32 +599,23 @@ fn gift_tickets() {
     );
      */
 
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
-        read_sequence_info(&deps.storage, &String::from("13579")),
-        vec![deps
-            .api
-            .canonical_address(&HumanAddr::from("addr1111"))
-            .unwrap()]
+        read_sequence_info(deps.as_ref().storage, &String::from("13579")),
+        vec![deps.api.addr_canonicalize("addr1111").unwrap()]
     );
     assert_eq!(
-        read_sequence_info(&deps.storage, &String::from("34567")),
-        vec![deps
-            .api
-            .canonical_address(&HumanAddr::from("addr1111"))
-            .unwrap()]
+        read_sequence_info(deps.as_ref().storage, &String::from("34567")),
+        vec![deps.api.addr_canonicalize("addr1111").unwrap()]
     );
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(
-            &deps.storage,
-            &deps
-                .api
-                .canonical_address(&HumanAddr::from("addr1111"))
-                .unwrap()
+            deps.as_ref().storage,
+            &deps.api.addr_canonicalize("addr1111").unwrap()
         ),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE * 2u64),
@@ -778,9 +652,9 @@ fn gift_tickets() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("anchor"),
-            send: vec![Coin {
-                denom: String::from("uusd"),
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
+                denom: DENOM.to_string(),
                 amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
@@ -788,14 +662,14 @@ fn gift_tickets() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "gift_tickets"),
-            log("gifter", "addr0000"),
-            log("recipient", "addr1111"),
-            log("deposit_amount", Decimal256::percent(TICKET_PRIZE * 2u64)),
-            log("tickets", 2u64),
-            log(
+            attr("action", "gift_tickets"),
+            attr("gifter", "addr0000"),
+            attr("recipient", "addr1111"),
+            attr("deposit_amount", Decimal256::percent(TICKET_PRIZE * 2u64)),
+            attr("tickets", 2u64),
+            attr(
                 "shares_minted",
                 Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE)
             ),
@@ -811,26 +685,13 @@ fn gift_tickets() {
 #[test]
 fn withdraw() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Address buys one ticket
-    let env = mock_env(
+    let info = mock_info(
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
@@ -838,27 +699,25 @@ fn withdraw() {
         }],
     );
 
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("23456")],
     };
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
-    let env = mock_env("addr0001", &[]);
+    let info = mock_info("addr0001", &[]);
 
-    let msg = HandleMsg::Withdraw { instant: None };
+    let msg = ExecuteMsg::Withdraw { instant: None };
 
-    deps.querier.with_token_balances(&[(
-        &HumanAddr::from("aterra"),
-        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &shares.into())],
-    )]);
+    deps.querier
+        .with_token_balances(&[(&A_UST, &[(&MOCK_CONTRACT_ADDR, &shares.into())])]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
@@ -872,7 +731,7 @@ fn withdraw() {
     );
 
     let _redeem_amount = deduct_tax(
-        &deps,
+        deps.as_ref(),
         Coin {
             denom: String::from("uusd"),
             amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
@@ -886,11 +745,8 @@ fn withdraw() {
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(
-            &deps.storage,
-            &deps
-                .api
-                .canonical_address(&HumanAddr::from("addr0001"))
-                .unwrap()
+            deps.as_ref().storage,
+            &deps.api.addr_canonicalize("addr0001").unwrap()
         ),
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
@@ -927,29 +783,29 @@ fn withdraw() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("aterra"),
-            send: vec![],
-            msg: to_binary(&Cw20HandleMsg::Send {
-                contract: HumanAddr::from("anchor"),
+            contract_addr: A_UST.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: ANCHOR.to_string(),
                 amount: shares.into(),
-                msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
+                msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
             })
             .unwrap(),
         })]
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "withdraw_ticket"),
-            log("depositor", "addr0001"),
-            log("tickets_amount", 1u64),
-            log("redeem_amount_anchor", shares),
-            log(
+            attr("action", "withdraw_ticket"),
+            attr("depositor", "addr0001"),
+            attr("tickets_amount", 1u64.to_string()),
+            attr("redeem_amount_anchor", shares.to_string()),
+            attr(
                 "redeem_stable_amount",
                 Decimal256::from_str("9999999.933").unwrap()
             ),
-            log("instant_withdrawal_fee", Decimal256::zero())
+            attr("instant_withdrawal_fee", Decimal256::zero().to_string())
         ]
     );
 }
@@ -958,56 +814,41 @@ fn withdraw() {
 #[test]
 fn instant_withdraw() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Address buys one ticket
-    let env = mock_env(
+    let info = mock_info(
         "addr0001",
         &[Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
 
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("23456")],
     };
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
-    let env = mock_env("addr0001", &[]);
+    let info = mock_info("addr0001", &[]);
 
-    let msg = HandleMsg::Withdraw {
+    let msg = ExecuteMsg::Withdraw {
         instant: Some(true),
     };
 
-    deps.querier.with_token_balances(&[(
-        &HumanAddr::from("aterra"),
-        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &shares.into())],
-    )]);
+    deps.querier
+        .with_token_balances(&[(&A_UST, &[(&MOCK_CONTRACT_ADDR, &shares.into())])]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
@@ -1021,7 +862,7 @@ fn instant_withdraw() {
     );
 
     let _redeem_amount = deduct_tax(
-        &deps,
+        deps.as_ref(),
         Coin {
             denom: String::from("uusd"),
             amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
@@ -1034,13 +875,7 @@ fn instant_withdraw() {
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(
-            &deps.storage,
-            &deps
-                .api
-                .canonical_address(&HumanAddr::from("addr0001"))
-                .unwrap()
-        ),
+        read_depositor_info(&deps.storage, &deps.api.addr_canonicalize("addr0001")?),
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
@@ -1074,17 +909,16 @@ fn instant_withdraw() {
         res.messages,
         vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: HumanAddr::from("aterra"),
-                send: vec![],
-                msg: to_binary(&Cw20HandleMsg::Send {
-                    contract: HumanAddr::from("anchor"),
+                contract_addr: A_UST.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: ANCHOR.to_string(),
                     amount: shares.into(),
-                    msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
+                    msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
                 })
                 .unwrap(),
             }),
             CosmosMsg::Bank(BankMsg::Send {
-                from_address: env.clone().contract.address,
                 to_address: env.clone().message.sender,
                 amount: vec![Coin {
                     denom: "uusd".to_string(),
@@ -1095,47 +929,34 @@ fn instant_withdraw() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "withdraw_ticket"),
-            log("depositor", "addr0001"),
-            log("tickets_amount", 1u64),
-            log("redeem_amount_anchor", shares),
-            log(
+            attr("action", "withdraw_ticket"),
+            attr("depositor", "addr0001"),
+            attr("tickets_amount", 1u64),
+            attr("redeem_amount_anchor", shares),
+            attr(
                 "redeem_stable_amount",
                 Decimal256::from_str("8999999.9397").unwrap()
             ),
-            log(
+            attr(
                 "instant_withdrawal_fee",
                 Decimal256::from_str("999999.9933").unwrap()
             )
         ]
-    );
+    )
 }
 
 #[test]
 fn claim() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Address buys one ticket
-    let env = mock_env(
+    let info = mock_info(
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
@@ -1143,70 +964,62 @@ fn claim() {
         }],
     );
 
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("23456")],
     };
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Address withdraws one ticket
-    let env = mock_env("addr0001", &[]);
-    let msg = HandleMsg::Withdraw { instant: None };
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Withdraw { instant: None };
 
     let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
-    deps.querier.with_token_balances(&[(
-        &HumanAddr::from("aterra"),
-        &[(&HumanAddr::from(MOCK_CONTRACT_ADDR), &shares.into())],
-    )]);
+    deps.querier
+        .with_token_balances(&[(&A_UST, &[(&MOCK_CONTRACT_ADDR, &shares.into())])]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
-    let _res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     // Claim 0 amount, should fail
-    let msg = HandleMsg::Claim {
+    let msg = ExecuteMsg::Claim {
         amount: Some(Uint128::zero()),
     };
-    let res = handle(&mut deps, env.clone(), msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
 
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Claim amount must be greater than zero")
-        }
+        Err(ContractError::InvalidClaimAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Claim amount that you don't have, should fail
-    let env = mock_env("addr0002", &[]);
-    let msg = HandleMsg::Claim {
+    let info = mock_info("addr0002", &[]);
+    let msg = ExecuteMsg::Claim {
         amount: Some(Uint128::from(10u64)),
     };
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Depositor does not have any amount to claim")
-        }
+        Err(ContractError::InsufficientFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Claim amount that you have, but still in unbonding state, should fail
-    let mut env = mock_env("addr0001", &[]);
-    let msg = HandleMsg::Claim {
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Claim {
         amount: Some(Uint128::from(10u64)),
     };
 
-    let res = handle(&mut deps, env.clone(), msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Depositor does not have any amount to claim")
-        }
+        Err(ContractError::InsufficientFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let msg = HandleMsg::Claim { amount: None };
+    let msg = ExecuteMsg::Claim { amount: None };
 
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
@@ -1220,7 +1033,7 @@ fn claim() {
 
     // TODO: this update is not needed (??)
     deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: "uusd".to_string(),
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + 10000000u128),
@@ -1228,16 +1041,13 @@ fn claim() {
     );
 
     // Claim amount is already unbonded, so claim execution should work
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(
             &deps.storage,
-            &deps
-                .api
-                .canonical_address(&HumanAddr::from("addr0001"))
-                .unwrap()
+            &deps.api.addr_canonicalize("addr0001").unwrap()
         ),
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
@@ -1253,8 +1063,7 @@ fn claim() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Bank(BankMsg::Send {
-            from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
-            to_address: HumanAddr::from("addr0001"),
+            to_address: "addr0001".to_string(),
             amount: vec![Coin {
                 denom: String::from("uusd"),
                 amount: Uint128::from(9_999_999u64), //TODO: should be 10_000_000
@@ -1263,12 +1072,12 @@ fn claim() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "claim"),
-            log("depositor", "addr0001"),
-            log("redeemed_amount", 9_999_999u64),
-            log("redeemable_amount_left", Uint128(0)),
+            attr("action", "claim"),
+            attr("depositor", "addr0001"),
+            attr("redeemed_amount", 9_999_999u64),
+            attr("redeemable_amount_left", Uint128(0)),
         ]
     );
 }
@@ -1276,25 +1085,12 @@ fn claim() {
 #[test]
 fn execute_lottery() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
-    let _res = initialize(&mut deps, env.clone());
-
-    let env = mock_env(
+    let info = mock_info(
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
@@ -1302,19 +1098,18 @@ fn execute_lottery() {
         }],
     );
 
-    let msg = HandleMsg::ExecuteLottery {};
+    let msg = ExecuteMsg::ExecuteLottery {};
 
-    let res = handle(&mut deps, env, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
 
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "Do not send funds when executing the lottery")
-        }
+        Err(ContractError::InvalidLotteryExecution {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let mut env = mock_env("addr0001", &[]);
-    let res = handle(&mut deps, env.clone(), msg.clone());
+    let mut env = mock_env();
+    let info = mock_info("addr0001", &[]);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
 
     let mut lottery_expiration: u64 = 0;
     if let Duration::Time(time) = WEEK {
@@ -1322,15 +1117,7 @@ fn execute_lottery() {
     }
 
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(
-                msg,
-                format!(
-                    "Lottery is still running, please check again after expiration time: {}",
-                    lottery_expiration
-                )
-            )
-        }
+        Err(ContractError::LotteryInProgress {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -1342,7 +1129,7 @@ fn execute_lottery() {
     // It should not fail, but redeem message is not called
     // TODO: add test case
     /*
-    let res = handle(&mut deps, env.clone(), msg.clone());
+    let res = execute(&mut deps, env.clone(), msg.clone());
 
     match res {
         Err(StdError::GenericErr { msg, .. }) => {
@@ -1355,18 +1142,15 @@ fn execute_lottery() {
 
     // Add 10 aUST to our contract balance
     deps.querier.with_token_balances(&[(
-        &HumanAddr::from("aterra"),
-        &[(
-            &HumanAddr::from(MOCK_CONTRACT_ADDR),
-            &Uint128::from(10_000_000u128),
-        )],
+        &A_UST,
+        &[(&MOCK_CONTRACT_ADDR, &Uint128::from(10_000_000u128))],
     )]);
 
     // Add 100 UST to our contract balance
     deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        MOCK_CONTRACT_ADDR,
         vec![Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: Uint128::from(100_000_000u128),
         }],
     );
@@ -1375,10 +1159,10 @@ fn execute_lottery() {
 
     // TODO: add test case with deposit_shares != 0
 
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
-    let next_lottery_time = read_state(&deps.storage).unwrap().next_lottery_time;
+    let next_lottery_time = read_state(deps.as_ref().storage).unwrap().next_lottery_time;
 
     assert_eq!(
         next_lottery_time,
@@ -1391,19 +1175,19 @@ fn execute_lottery() {
         res.messages,
         vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: HumanAddr::from("aterra"),
-                send: vec![],
-                msg: to_binary(&Cw20HandleMsg::Send {
-                    contract: HumanAddr::from("anchor"),
+                contract_addr: A_UST.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: ANCHOR.to_string(),
                     amount: to_redeem.into(),
-                    msg: Some(to_binary(&Cw20HookMsg::RedeemStable {}).unwrap()),
+                    msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
                 })
                 .unwrap(),
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: HumanAddr::from(MOCK_CONTRACT_ADDR),
-                send: vec![],
-                msg: to_binary(&HandleMsg::_HandlePrize {
+                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+                funds: vec![],
+                msg: to_binary(&ExecuteMsg::_ExecutePrize {
                     balance: current_balance
                 })
                 .unwrap(),
@@ -1412,52 +1196,39 @@ fn execute_lottery() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "execute_lottery"),
-            log("redeemed_amount", to_redeem),
+            attr("action", "execute_lottery"),
+            attr("redeemed_amount", to_redeem),
         ]
     );
 }
 
 #[test]
-fn handle_prize_no_tickets() {
+fn execute_prize_no_tickets() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
-    let _res = initialize(&mut deps, env.clone());
-
-    let env = mock_env("addr0001", &[]);
+    let info = mock_info("addr0001", &[]);
 
     let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
 
-    let msg = HandleMsg::_HandlePrize { balance };
-    let res = handle(&mut deps, env, msg.clone());
+    let msg = ExecuteMsg::_ExecutePrize { balance };
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
 
     match res {
-        Err(StdError::Unauthorized { .. }) => {}
+        Err(ContractError::Unauthorized {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize { balance };
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let msg = ExecuteMsg::_ExecutePrize { balance };
 
     /* The contract does not have UST balance, should fail
-    let res = handle(&mut deps, env.clone(), msg.clone());
+    let res = execute(&mut deps, env.clone(), msg.clone());
     match res {
         Err(StdError::GenericErr { msg, .. }) => {
             assert_eq!(msg, "There is no UST balance to fund the prize",)
@@ -1477,11 +1248,11 @@ fn handle_prize_no_tickets() {
      */
 
     // Run lottery, no winners - should run correctly
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64),
+        read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -1490,7 +1261,7 @@ fn handle_prize_no_tickets() {
         }
     );
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = read_state(deps.as_ref().storage).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero()); // From the initialization of the contract
@@ -1502,45 +1273,38 @@ fn handle_prize_no_tickets() {
     assert_eq!(res.messages, vec![]);
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "handle_prize"),
-            log("accrued_interest", Uint256::zero()),
-            log("total_awarded_prize", Decimal256::zero()),
-            log("reinvested_amount", Uint256::zero()),
+            attr("action", "execute_prize"),
+            attr("accrued_interest", Uint256::zero()),
+            attr("total_awarded_prize", Decimal256::zero()),
+            attr("reinvested_amount", Uint256::zero()),
         ]
     );
 }
 
 #[test]
-fn handle_prize_no_winners() {
+fn execute_prize_no_winners() {
     // Initialize contract
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Add 150_000 UST to our contract balance
     deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        MOCK_CONTRACT_ADDR,
         vec![Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
 
     // Users buys a non-winning ticket
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("11111")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
@@ -1551,16 +1315,13 @@ fn handle_prize_no_winners() {
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw = deps
-        .api
-        .canonical_address(&HumanAddr::from("addr0000"))
-        .unwrap();
+    let address_raw = deps.api.addr_canonicalize("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(&deps.storage, &address_raw),
+        read_depositor_info(deps.as_ref().storage, &address_raw),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
@@ -1575,15 +1336,15 @@ fn handle_prize_no_winners() {
     let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
 
     // Run lottery, one winner (5 hits) - should run correctly
-    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize { balance };
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let msg = ExecuteMsg::_ExecutePrize { balance };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
     let awarded_prize = Decimal256::zero();
 
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64),
+        read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -1592,7 +1353,7 @@ fn handle_prize_no_winners() {
         }
     );
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = read_state(deps.as_ref().storage).unwrap();
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
@@ -1608,8 +1369,8 @@ fn handle_prize_no_winners() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("anchor"),
-            send: vec![Coin {
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
                 denom: "uusd".to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
@@ -1618,34 +1379,27 @@ fn handle_prize_no_winners() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "handle_prize"),
-            log("accrued_interest", Uint128::zero()),
-            log("total_awarded_prize", awarded_prize),
-            log("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("action", "execute_prize"),
+            attr("accrued_interest", Uint128::zero()),
+            attr("total_awarded_prize", awarded_prize),
+            attr("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
     );
 }
 
 #[test]
-fn handle_prize_one_winner() {
+fn execute_prize_one_winner() {
     // Initialize contract
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Add 150_000 UST to our contract balance
     deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: "uusd".to_string(),
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
@@ -1653,10 +1407,10 @@ fn handle_prize_one_winner() {
     );
 
     // Users buys winning ticket
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("00000")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
@@ -1667,16 +1421,13 @@ fn handle_prize_one_winner() {
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw = deps
-        .api
-        .canonical_address(&HumanAddr::from("addr0000"))
-        .unwrap();
+    let address_raw = deps.api.addr_canonicalize("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(&deps.storage, &address_raw),
+        read_depositor_info(deps.as_ref().storage, &address_raw),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
@@ -1689,11 +1440,11 @@ fn handle_prize_one_winner() {
     );
 
     // Run lottery, one winner (5 hits) - should run correctly
-    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let msg = ExecuteMsg::_ExecutePrize {
         balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
     };
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
 
@@ -1703,7 +1454,7 @@ fn handle_prize_one_winner() {
     let awarded_prize = total_prize * Decimal256::percent(50);
 
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64),
+        read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -1712,7 +1463,7 @@ fn handle_prize_one_winner() {
         }
     );
 
-    let prize_assigned = read_depositor_info(&deps.storage, &address_raw).redeemable_amount;
+    let prize_assigned = read_depositor_info(deps.as_ref().storage, &address_raw).redeemable_amount;
 
     // prize assigned should be (140k - 7500) / 2
 
@@ -1720,7 +1471,7 @@ fn handle_prize_one_winner() {
 
     assert_eq!(prize_assigned, (mock_prize * Uint256::one()).into());
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = read_state(deps.as_ref().storage).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
@@ -1737,8 +1488,8 @@ fn handle_prize_one_winner() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("anchor"),
-            send: vec![Coin {
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
                 denom: "uusd".to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
@@ -1747,36 +1498,29 @@ fn handle_prize_one_winner() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "handle_prize"),
-            log("accrued_interest", Uint128::zero()),
-            log("total_awarded_prize", awarded_prize),
-            log("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("action", "execute_prize"),
+            attr("accrued_interest", Uint128::zero()),
+            attr("total_awarded_prize", awarded_prize),
+            attr("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
     );
 }
 
-//TODO: Test lottery from ExecuteLottery, not directly from _HandlePrize
+//TODO: Test lottery from ExecuteLottery, not directly from _ExecutePrize
 
 #[test]
-fn handle_prize_winners_diff_ranks() {
+fn execute_prize_winners_diff_ranks() {
     // Initialize contract
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Add 150_000 UST to our contract balance
     deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: "uusd".to_string(),
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
@@ -1787,10 +1531,10 @@ fn handle_prize_winners_diff_ranks() {
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     // Users buys winning ticket - 5 hits
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("00000")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
@@ -1798,16 +1542,13 @@ fn handle_prize_winners_diff_ranks() {
         }],
     );
 
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw_0 = deps
-        .api
-        .canonical_address(&HumanAddr::from("addr0000"))
-        .unwrap();
+    let address_raw_0 = deps.api.addr_canonicalize("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(&deps.storage, &address_raw_0),
+        read_depositor_info(deps.as_ref().storage, &address_raw_0),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
@@ -1820,10 +1561,10 @@ fn handle_prize_winners_diff_ranks() {
     );
 
     // Users buys winning ticket - 4 hits
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("00100")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
@@ -1831,16 +1572,13 @@ fn handle_prize_winners_diff_ranks() {
         }],
     );
 
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let address_raw_1 = deps
-        .api
-        .canonical_address(&HumanAddr::from("addr0001"))
-        .unwrap();
+    let address_raw_1 = deps.api.addr_canonicalize("addr0001").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(&deps.storage, &address_raw_1),
+        read_depositor_info(deps.as_ref().storage, &address_raw_1),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
@@ -1853,11 +1591,11 @@ fn handle_prize_winners_diff_ranks() {
     );
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
-    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let msg = ExecuteMsg::_ExecutePrize {
         balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
     };
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
 
@@ -1869,7 +1607,7 @@ fn handle_prize_winners_diff_ranks() {
     let awarded_prize = awarded_prize_0 + awarded_prize_1;
 
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64),
+        read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -1881,8 +1619,10 @@ fn handle_prize_winners_diff_ranks() {
         }
     );
 
-    let prize_assigned_0 = read_depositor_info(&deps.storage, &address_raw_0).redeemable_amount;
-    let prize_assigned_1 = read_depositor_info(&deps.storage, &address_raw_1).redeemable_amount;
+    let prize_assigned_0 =
+        read_depositor_info(deps.as_ref().storage, &address_raw_0).redeemable_amount;
+    let prize_assigned_1 =
+        read_depositor_info(deps.as_ref().storage, &address_raw_1).redeemable_amount;
 
     let mock_prize_0 = awarded_prize_0 - (awarded_prize_0 * Decimal256::percent(RESERVE_FACTOR));
     let mock_prize_1 = awarded_prize_1 - (awarded_prize_1 * Decimal256::percent(RESERVE_FACTOR));
@@ -1890,7 +1630,7 @@ fn handle_prize_winners_diff_ranks() {
     assert_eq!(prize_assigned_0, (mock_prize_0 * Uint256::one()).into());
     assert_eq!(prize_assigned_1, (mock_prize_1 * Uint256::one()).into());
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = read_state(deps.as_ref().storage).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
@@ -1908,8 +1648,8 @@ fn handle_prize_winners_diff_ranks() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("anchor"),
-            send: vec![Coin {
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
                 denom: "uusd".to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
@@ -1918,35 +1658,27 @@ fn handle_prize_winners_diff_ranks() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "handle_prize"),
-            log("accrued_interest", Uint128::zero()),
-            log("total_awarded_prize", awarded_prize),
-            log("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("action", "execute_prize"),
+            attr("accrued_interest", Uint128::zero()),
+            attr("total_awarded_prize", awarded_prize),
+            attr("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
     );
 }
 
 #[test]
-fn handle_prize_winners_same_rank() {
+fn execute_prize_winners_same_rank() {
     // Initialize contract
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Add 150_000 UST to our contract balance
     deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: "uusd".to_string(),
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
@@ -1957,27 +1689,24 @@ fn handle_prize_winners_same_rank() {
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     // Users buys winning ticket - 5 hits
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("00000")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
         }],
     );
 
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw_0 = deps
-        .api
-        .canonical_address(&HumanAddr::from("addr0000"))
-        .unwrap();
+    let address_raw_0 = deps.api.addr_canonicalize("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(&deps.storage, &address_raw_0),
+        read_depositor_info(deps.as_ref().storage, &address_raw_0),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
@@ -1990,10 +1719,10 @@ fn handle_prize_winners_same_rank() {
     );
 
     // Users buys winning ticket - 4 hits
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("00000")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
@@ -2001,16 +1730,13 @@ fn handle_prize_winners_same_rank() {
         }],
     );
 
-    let _res = handle(&mut deps, env, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw_1 = deps
-        .api
-        .canonical_address(&HumanAddr::from("addr0001"))
-        .unwrap();
+    let address_raw_1 = deps.api.addr_canonicalize("addr0001").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(&deps.storage, &address_raw_1),
+        read_depositor_info(deps.as_ref().storage, &address_raw_1),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
@@ -2023,11 +1749,11 @@ fn handle_prize_winners_same_rank() {
     );
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
-    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let msg = ExecuteMsg::_ExecutePrize {
         balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
     };
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
 
@@ -2038,7 +1764,7 @@ fn handle_prize_winners_same_rank() {
     let awarded_prize_each = awarded_prize * Decimal256::percent(50); //divide by two
 
     assert_eq!(
-        read_lottery_info(&deps.storage, 0u64),
+        read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             sequence: "00000".to_string(),
             awarded: true,
@@ -2047,8 +1773,10 @@ fn handle_prize_winners_same_rank() {
         }
     );
 
-    let prize_assigned_0 = read_depositor_info(&deps.storage, &address_raw_0).redeemable_amount;
-    let prize_assigned_1 = read_depositor_info(&deps.storage, &address_raw_1).redeemable_amount;
+    let prize_assigned_0 =
+        read_depositor_info(deps.as_ref().storage, &address_raw_0).redeemable_amount;
+    let prize_assigned_1 =
+        read_depositor_info(deps.as_ref().storage, &address_raw_1).redeemable_amount;
 
     let mock_prize_each =
         awarded_prize_each - (awarded_prize_each * Decimal256::percent(RESERVE_FACTOR));
@@ -2074,9 +1802,9 @@ fn handle_prize_winners_same_rank() {
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("anchor"),
-            send: vec![Coin {
-                denom: "uusd".to_string(),
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
+                denom: DENOM.to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
@@ -2084,34 +1812,27 @@ fn handle_prize_winners_same_rank() {
     );
 
     assert_eq!(
-        res.log,
+        res.attributes,
         vec![
-            log("action", "handle_prize"),
-            log("accrued_interest", Uint128::zero()),
-            log("total_awarded_prize", awarded_prize),
-            log("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("action", "execute_prize"),
+            attr("accrued_interest", Uint128::zero()),
+            attr("total_awarded_prize", awarded_prize),
+            attr("reinvested_amount", lottery_deposits * Uint256::one()),
         ]
     );
 }
 
 #[test]
-fn handle_prize_many_different_winning_combinations() {
+fn execute_prize_many_different_winning_combinations() {
     // Initialize contract
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env.clone());
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
     // Add 150_000 UST to our contract balance
     deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
+        MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: "uusd".to_string(),
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
@@ -2129,11 +1850,11 @@ fn handle_prize_many_different_winning_combinations() {
 
     for (index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
-        let msg = HandleMsg::Deposit {
+        let msg = ExecuteMsg::Deposit {
             combinations: vec![String::from(format!("{:0>5}", index))],
             // combinations: vec![String::from("00000")],
         };
-        let env = mock_env(
+        let info = mock_info(
             address.as_str(),
             &[Coin {
                 denom: "uusd".to_string(),
@@ -2141,19 +1862,19 @@ fn handle_prize_many_different_winning_combinations() {
             }],
         );
 
-        let _res = handle(&mut deps, env, msg).unwrap();
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     }
 
     // Run lottery - should run correctly
-    let env = mock_env(MOCK_CONTRACT_ADDR, &[]);
-    let msg = HandleMsg::_HandlePrize {
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let msg = ExecuteMsg::_ExecutePrize {
         balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
     };
-    let _res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
 
-    let lottery_info = read_lottery_info(&deps.storage, 0u64);
+    let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
 
     assert!(lottery_info.awarded);
 }
@@ -2161,48 +1882,27 @@ fn handle_prize_many_different_winning_combinations() {
 #[test]
 fn claim_rewards_one_depositor() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
-    let _res = initialize(&mut deps, env);
+    let info = mock_info("addr0000", &[]);
 
-    // Register contracts required as ClaimRewards queries Distributor
-    let msg = HandleMsg::RegisterContracts {
-        gov_contract: HumanAddr::from("gov"),
-        distributor_contract: HumanAddr::from("distributor"),
-    };
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env, msg).unwrap();
-
-    let env = mock_env("addr0000", &[]);
-
-    let mut state = read_state(&deps.storage).unwrap();
+    let mut state = read_state(deps.as_ref().storage).unwrap();
     state.glow_emission_rate = Decimal256::one();
-    store_state(&mut deps.storage, &state).unwrap();
+    store_state(deps.as_mut().storage, &state).unwrap();
 
     // User has no deposits, so no claimable rewards and empty msg returned
-    let msg = HandleMsg::ClaimRewards {};
-    let res = handle(&mut deps, env.clone(), msg).unwrap();
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(res.messages.len(), 0);
 
     // Deposit of 20_000_000 uusd
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
@@ -2210,25 +1910,27 @@ fn claim_rewards_one_depositor() {
         }],
     );
 
-    let _res = handle(&mut deps, env, msg.clone());
+    let mut env = mock_env();
+
+    let _res = execute(deps.as_mut(), env.clone(), info, msg);
 
     // User has deposits but zero blocks have passed, so no rewards accrued
-    let mut env = mock_env("addr0000", &[]);
-    let msg = HandleMsg::ClaimRewards {};
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let info = mock_info("addr0000", &[]);
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
     assert_eq!(res.messages.len(), 0);
 
     // After 100 blocks
     env.block.height += 100;
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("distributor"),
-            send: vec![],
-            msg: to_binary(&FaucetHandleMsg::Spend {
-                recipient: HumanAddr::from("addr0000"),
+            contract_addr: DISTRIBUTOR_ADDR.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: "addr0000".to_string(),
                 amount: Uint128(100u128),
             })
             .unwrap(),
@@ -2237,9 +1939,9 @@ fn claim_rewards_one_depositor() {
 
     let res: DepositorInfoResponse = from_binary(
         &query(
-            &deps,
+            deps.as_ref(),
             QueryMsg::Depositor {
-                address: HumanAddr::from("addr0000"),
+                address: "addr0000".to_string(),
             },
         )
         .unwrap(),
@@ -2255,41 +1957,20 @@ fn claim_rewards_one_depositor() {
 #[test]
 fn claim_rewards_multiple_depositors() {
     // Initialize contract
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    let mut deps = mock_dependencies(&[]);
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
-    let _res = initialize(&mut deps, env);
-
-    // Register contracts required as ClaimRewards queries Distributor
-    let msg = HandleMsg::RegisterContracts {
-        gov_contract: HumanAddr::from("gov"),
-        distributor_contract: HumanAddr::from("distributor"),
-    };
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env, msg).unwrap();
-
-    let mut state = read_state(&deps.storage).unwrap();
+    let mut state = read_state(deps.as_mut().storage).unwrap();
     state.glow_emission_rate = Decimal256::one();
     store_state(&mut deps.storage, &state).unwrap();
 
     // USER 0 Deposits 20_000_000 uusd
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
@@ -2297,43 +1978,45 @@ fn claim_rewards_multiple_depositors() {
         }],
     );
 
-    let _res = handle(&mut deps, env, msg.clone());
+    let mut env = mock_env();
+
+    let _res = execute(deps.as_mut(), env.clone(), info, msg);
 
     // USER 1 Deposits another 20_000_000 uusd
-    let msg = HandleMsg::Deposit {
+    let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("00000"), String::from("11111")],
     };
-    let env = mock_env(
+    let info = mock_info(
         "addr1111",
         &[Coin {
             denom: "uusd".to_string(),
             amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let _res = handle(&mut deps, env, msg.clone());
+    let _res = execute(deps.as_mut(), env.clone(), info, msg);
 
-    let mut env = mock_env("addr0000", &[]);
+    let info = mock_info("addr0000", &[]);
 
     // After 100 blocks
     env.block.height += 100;
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = read_state(deps.as_mut().storage).unwrap();
     println!("Global reward index: {:?}", state.global_reward_index);
     println!("Emission rate {:?}", state.glow_emission_rate);
     println!("Last reward updated {:?}", state.last_reward_updated);
     println!("Current height {:?}", env.block.height);
 
-    let msg = HandleMsg::ClaimRewards {};
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    println!("{:?}", res.log);
+    println!("{:?}", res.attributes);
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("distributor"),
-            send: vec![],
-            msg: to_binary(&FaucetHandleMsg::Spend {
-                recipient: HumanAddr::from("addr0000"),
+            contract_addr: DISTRIBUTOR_ADDR.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: "addr0000".to_string(),
                 amount: Uint128(50u128),
             })
             .unwrap(),
@@ -2343,9 +2026,9 @@ fn claim_rewards_multiple_depositors() {
     // Checking USER 0 state is correct
     let res: DepositorInfoResponse = from_binary(
         &query(
-            &deps,
+            deps.as_ref(),
             QueryMsg::Depositor {
-                address: HumanAddr::from("addr0000"),
+                address: "addr0000".to_string(),
             },
         )
         .unwrap(),
@@ -2360,9 +2043,9 @@ fn claim_rewards_multiple_depositors() {
     // Checking USER 1 state is correct
     let res: DepositorInfoResponse = from_binary(
         &query(
-            &deps,
+            deps.as_ref(),
             QueryMsg::Depositor {
-                address: HumanAddr::from("addr1111"),
+                address: "addr1111".to_string(),
             },
         )
         .unwrap(),
@@ -2376,60 +2059,41 @@ fn claim_rewards_multiple_depositors() {
 
 #[test]
 fn execute_epoch_operations() {
-    let mut deps = mock_dependencies(
-        20,
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
     deps.querier.with_tax(
         Decimal::percent(1),
         &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
     );
 
-    let env = mock_env(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
-    let _res = initialize(&mut deps, env);
-
-    // Register contracts required as ClaimRewards queries Distributor
-    let msg = HandleMsg::RegisterContracts {
-        gov_contract: HumanAddr::from("gov"),
-        distributor_contract: HumanAddr::from("distributor"),
-    };
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env.clone(), msg).unwrap();
-
-    let mut env = mock_env("addr0000", &[]);
+    let info = mock_info("addr0000", &[]);
+    let mut env = mock_env();
 
     let mut state = read_state(&deps.storage).unwrap();
     state.total_reserve = Decimal256::percent(50000); // 500
-    store_state(&mut deps.storage, &state).unwrap();
+    store_state(deps.as_mut().storage, &state).unwrap();
 
     env.block.height += 100;
 
-    let msg = HandleMsg::ExecuteEpochOps {};
-    let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+    let msg = ExecuteMsg::ExecuteEpochOps {};
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
 
     assert_eq!(
         res.messages,
         vec![CosmosMsg::Bank(BankMsg::Send {
-            from_address: env.contract.address,
-            to_address: HumanAddr::from("gov"),
+            to_address: GOV_ADDR.to_string(),
             amount: vec![Coin {
-                denom: "uusd".to_string(),
+                denom: DENOM.to_string(),
                 amount: Uint128::from(496u128), // 1% tax
             }],
         })]
     );
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = read_state(deps.as_ref().storage).unwrap();
     // Glow Emission rate must be 1 as hard-coded in mock querier
     assert_eq!(
         state,

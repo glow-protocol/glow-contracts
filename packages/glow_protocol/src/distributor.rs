@@ -2,14 +2,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::Decimal256;
-use cosmwasm_std::{HumanAddr, Uint128};
+use cosmwasm_std::Uint128;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InitMsg {
-    pub owner: HumanAddr,          // glow gov contract
-    pub glow_token: HumanAddr,     // glow token address
-    pub whitelist: Vec<HumanAddr>, // whitelisted contract addresses to spend distributor
-    pub spend_limit: Uint128,      // spend limit per each `spend` request
+pub struct InstantiateMsg {
+    pub owner: String,          // glow gov contract
+    pub glow_token: String,     // glow token address
+    pub whitelist: Vec<String>, // whitelisted contract addresses to spend distributor
+    pub spend_limit: Uint128,   // spend limit per each `spend` request
     pub emission_cap: Decimal256,
     pub emission_floor: Decimal256,
     pub increment_multiplier: Decimal256,
@@ -18,9 +18,9 @@ pub struct InitMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum HandleMsg {
+pub enum ExecuteMsg {
     UpdateConfig {
-        owner: Option<HumanAddr>,
+        owner: Option<String>,
         spend_limit: Option<Uint128>,
         emission_cap: Option<Decimal256>,
         emission_floor: Option<Decimal256>,
@@ -28,14 +28,14 @@ pub enum HandleMsg {
         decrement_multiplier: Option<Decimal256>,
     },
     Spend {
-        recipient: HumanAddr,
+        recipient: String,
         amount: Uint128,
     },
     AddDistributor {
-        distributor: HumanAddr,
+        distributor: String,
     },
     RemoveDistributor {
-        distributor: HumanAddr,
+        distributor: String,
     },
 }
 
@@ -57,9 +57,9 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub owner: HumanAddr,
-    pub glow_token: HumanAddr,
-    pub whitelist: Vec<HumanAddr>,
+    pub owner: String,
+    pub glow_token: String,
+    pub whitelist: Vec<String>,
     pub spend_limit: Uint128,
     pub emission_cap: Decimal256,
     pub emission_floor: Decimal256,

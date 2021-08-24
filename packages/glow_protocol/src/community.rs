@@ -1,24 +1,24 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{HumanAddr, Uint128};
+use cosmwasm_std::Uint128;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InitMsg {
-    pub owner: HumanAddr, // owner contract, to be transferred to glow gov contract
-    pub glow_token: HumanAddr, // glow token address
+pub struct InstantiateMsg {
+    pub owner: String,        // owner contract, to be transferred to glow gov contract
+    pub glow_token: String,   // glow token address
     pub spend_limit: Uint128, // spend limit per each `spend` request
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum HandleMsg {
+pub enum ExecuteMsg {
     UpdateConfig {
         spend_limit: Option<Uint128>,
-        owner: Option<HumanAddr>,
+        owner: Option<String>,
     },
     Spend {
-        recipient: HumanAddr,
+        recipient: String,
         amount: Uint128,
     },
 }
@@ -36,7 +36,7 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub owner: HumanAddr,
-    pub glow_token: HumanAddr,
+    pub owner: String,
+    pub glow_token: String,
     pub spend_limit: Uint128,
 }

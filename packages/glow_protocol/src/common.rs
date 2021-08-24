@@ -10,10 +10,9 @@ pub enum OrderBy {
     Desc,
 }
 
-#[allow(clippy::from_over_into)]
-impl Into<Order> for OrderBy {
-    fn into(self) -> Order {
-        if self == OrderBy::Asc {
+impl From<OrderBy> for Order {
+    fn from(o: OrderBy) -> Order {
+        if o == OrderBy::Asc {
             Order::Ascending
         } else {
             Order::Descending

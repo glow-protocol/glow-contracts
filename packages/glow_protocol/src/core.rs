@@ -2,15 +2,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{HumanAddr, Uint128};
+use cosmwasm_std::Uint128;
 use cw0::{Duration, Expiration};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InitMsg {
-    pub owner: HumanAddr,
+pub struct InstantiateMsg {
+    pub owner: String,
     pub stable_denom: String,
-    pub anchor_contract: HumanAddr,
-    pub aterra_contract: HumanAddr,
+    pub anchor_contract: String,
+    pub aterra_contract: String,
     pub lottery_interval: u64,
     pub block_time: u64,
     pub ticket_prize: Decimal256,
@@ -25,17 +25,17 @@ pub struct InitMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum HandleMsg {
+pub enum ExecuteMsg {
     /// Register Contracts contract address
     RegisterContracts {
         /// Gov contract accrues protocol fees and distributes them to Glow stakers
-        gov_contract: HumanAddr,
+        gov_contract: String,
         /// Faucet contract to drip GLOW token to users and update Glow emission rate
-        distributor_contract: HumanAddr,
+        distributor_contract: String,
     },
     /// Update contract configuration
     UpdateConfig {
-        owner: Option<HumanAddr>,
+        owner: Option<String>,
         lottery_interval: Option<u64>,
         block_time: Option<u64>,
         ticket_prize: Option<Decimal256>,
@@ -49,7 +49,7 @@ pub enum HandleMsg {
     },
     Gift {
         combinations: Vec<String>,
-        recipient: HumanAddr,
+        recipient: String,
     },
     Sponsor {
         award: Option<bool>,
@@ -63,7 +63,7 @@ pub enum HandleMsg {
     ClaimRewards {},
     ExecuteLottery {},
     /// (internal) Called internally by ExecuteLottery
-    _HandlePrize {
+    _ExecutePrize {
         balance: Uint256,
     },
     ExecuteEpochOps {},
@@ -80,10 +80,10 @@ pub enum QueryMsg {
         lottery_id: Option<u64>,
     },
     Depositor {
-        address: HumanAddr,
+        address: String,
     },
     Depositors {
-        start_after: Option<HumanAddr>,
+        start_after: Option<String>,
         limit: Option<u32>,
     },
 }
@@ -91,11 +91,11 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub owner: HumanAddr,
+    pub owner: String,
     pub stable_denom: String,
-    pub anchor_contract: HumanAddr,
-    pub gov_contract: HumanAddr,
-    pub distributor_contract: HumanAddr,
+    pub anchor_contract: String,
+    pub gov_contract: String,
+    pub distributor_contract: String,
     pub lottery_interval: Duration,
     pub block_time: Duration,
     pub ticket_prize: Decimal256,
@@ -127,13 +127,13 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub winners: Vec<(u8, Vec<HumanAddr>)>, // [(number_hits, [lucky_holders])]
+    pub winners: Vec<(u8, Vec<String>)>, // [(number_hits, [lucky_holders])]
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfoResponse {
-    pub depositor: HumanAddr,
+    pub depositor: String,
     pub deposit_amount: Decimal256,
     pub shares: Decimal256,
     pub redeemable_amount: Uint128,

@@ -2,9 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{
-    Api, CanonicalAddr, Extern, HumanAddr, Order, Querier, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
 use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 use cw0::{Duration, Expiration};
 use glow_protocol::core::{Claim, DepositorInfoResponse};
@@ -78,32 +76,32 @@ pub struct Sequence {
     pub holders: Vec<CanonicalAddr>,
 }
 
-pub fn store_config<S: Storage>(storage: &mut S, data: &Config) -> StdResult<()> {
+pub fn store_config(storage: &mut dyn Storage, data: &Config) -> StdResult<()> {
     Singleton::new(storage, KEY_CONFIG).save(data)
 }
 
-pub fn read_config<S: Storage>(storage: &S) -> StdResult<Config> {
+pub fn read_config(storage: &dyn Storage) -> StdResult<Config> {
     ReadonlySingleton::new(storage, KEY_CONFIG).load()
 }
 
-pub fn store_state<S: Storage>(storage: &mut S, data: &State) -> StdResult<()> {
+pub fn store_state(storage: &mut dyn Storage, data: &State) -> StdResult<()> {
     Singleton::new(storage, KEY_STATE).save(data)
 }
 
-pub fn read_state<S: Storage>(storage: &S) -> StdResult<State> {
+pub fn read_state(storage: &dyn Storage) -> StdResult<State> {
     ReadonlySingleton::new(storage, KEY_STATE).load()
 }
 
-pub fn store_lottery_info<S: Storage>(
-    storage: &mut S,
+pub fn store_lottery_info(
+    storage: &mut dyn Storage,
     lottery_id: u64,
     lottery_info: &LotteryInfo,
 ) -> StdResult<()> {
-    bucket(PREFIX_LOTTERY, storage).save(&lottery_id.to_be_bytes(), lottery_info)
+    bucket(storage, PREFIX_LOTTERY).save(&lottery_id.to_be_bytes(), lottery_info)
 }
 
-pub fn read_lottery_info<S: Storage>(storage: &S, lottery_id: u64) -> LotteryInfo {
-    match bucket_read(PREFIX_LOTTERY, storage).load(&lottery_id.to_be_bytes()) {
+pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo {
+    match bucket_read(storage, PREFIX_LOTTERY).load(&lottery_id.to_be_bytes()) {
         Ok(v) => v,
         _ => LotteryInfo {
             sequence: "".to_string(),
@@ -114,12 +112,12 @@ pub fn read_lottery_info<S: Storage>(storage: &S, lottery_id: u64) -> LotteryInf
     }
 }
 
-pub fn sequence_bucket<S: Storage>(storage: &mut S) -> Bucket<S, Vec<CanonicalAddr>> {
-    bucket(PREFIX_SEQUENCE, storage)
+pub fn sequence_bucket(storage: &mut dyn Storage) -> Bucket<Vec<CanonicalAddr>> {
+    bucket(storage, PREFIX_SEQUENCE)
 }
 
-pub fn store_sequence_info<S: Storage>(
-    storage: &mut S,
+pub fn store_sequence_info(
+    storage: &mut dyn Storage,
     depositor: CanonicalAddr,
     sequence: &str,
 ) -> StdResult<()> {
@@ -128,8 +126,8 @@ pub fn store_sequence_info<S: Storage>(
     sequence_bucket(storage).save(sequence.as_bytes(), &holders)
 }
 
-pub fn read_sequence_info<S: Storage>(storage: &S, sequence: &str) -> Vec<CanonicalAddr> {
-    match bucket_read(PREFIX_SEQUENCE, storage).load(sequence.as_bytes()) {
+pub fn read_sequence_info(storage: &dyn Storage, sequence: &str) -> Vec<CanonicalAddr> {
+    match bucket_read(storage, PREFIX_SEQUENCE).load(sequence.as_bytes()) {
         Ok(v) => v,
         _ => vec![],
     }
@@ -161,11 +159,9 @@ const DEFAULT_LIMIT: u32 = 10;
 //         .collect()
 // }
 
-pub fn read_all_sequences<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-) -> Vec<(String, Vec<CanonicalAddr>)> {
-    let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
-        bucket_read(PREFIX_SEQUENCE, &deps.storage);
+pub fn read_all_sequences(deps: Deps) -> Vec<(String, Vec<CanonicalAddr>)> {
+    let sequence_bucket: ReadonlyBucket<Vec<CanonicalAddr>> =
+        bucket_read(deps.storage, PREFIX_SEQUENCE);
 
     // TODO: review limit value for optimization
     let limit = 1000;
@@ -230,11 +226,8 @@ pub fn read_all_sequences<S: Storage, A: Api, Q: Querier>(
 //         .collect()
 // }
 
-pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    win_sequence: &str,
-) -> Vec<(u8, Vec<CanonicalAddr>)> {
-    let all_sequences = read_all_sequences(&deps);
+pub fn read_matching_sequences(deps: Deps, win_sequence: &str) -> Vec<(u8, Vec<CanonicalAddr>)> {
+    let all_sequences = read_all_sequences(deps);
 
     all_sequences
         .iter()
@@ -251,16 +244,16 @@ pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
         .collect()
 }
 
-pub fn store_depositor_info<S: Storage>(
-    storage: &mut S,
+pub fn store_depositor_info(
+    storage: &mut dyn Storage,
     depositor: &CanonicalAddr,
     depositor_info: &DepositorInfo,
 ) -> StdResult<()> {
-    bucket(PREFIX_DEPOSIT, storage).save(depositor.as_slice(), depositor_info)
+    bucket(storage, PREFIX_DEPOSIT).save(depositor.as_slice(), depositor_info)
 }
 
-pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -> DepositorInfo {
-    match bucket_read(PREFIX_DEPOSIT, storage).load(depositor.as_slice()) {
+pub fn read_depositor_info(storage: &dyn Storage, depositor: &CanonicalAddr) -> DepositorInfo {
+    match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_slice()) {
         Ok(v) => v,
         _ => DepositorInfo {
             deposit_amount: Decimal256::zero(),
@@ -274,13 +267,12 @@ pub fn read_depositor_info<S: Storage>(storage: &S, depositor: &CanonicalAddr) -
     }
 }
 
-pub fn read_depositors<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+pub fn read_depositors(
+    deps: Deps,
     start_after: Option<CanonicalAddr>,
     limit: Option<u32>,
 ) -> StdResult<Vec<DepositorInfoResponse>> {
-    let liability_bucket: ReadonlyBucket<S, DepositorInfo> =
-        bucket_read(PREFIX_DEPOSIT, &deps.storage);
+    let liability_bucket: ReadonlyBucket<DepositorInfo> = bucket_read(deps.storage, PREFIX_DEPOSIT);
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = calc_range_start(start_after);
@@ -290,7 +282,7 @@ pub fn read_depositors<S: Storage, A: Api, Q: Querier>(
         .take(limit)
         .map(|elem| {
             let (k, v) = elem?;
-            let depositor: HumanAddr = deps.api.human_address(&CanonicalAddr::from(k))?;
+            let depositor = deps.api.addr_humanize(&CanonicalAddr::from(k))?.to_string();
             Ok(DepositorInfoResponse {
                 depositor,
                 deposit_amount: v.deposit_amount,

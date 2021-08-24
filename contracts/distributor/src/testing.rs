@@ -1,43 +1,46 @@
-use crate::contract::{handle, init, query};
+use crate::contract::{execute, instantiate, query};
 
-use cosmwasm_std::testing::{mock_dependencies, mock_env};
-use cosmwasm_std::{from_binary, to_binary, CosmosMsg, HumanAddr, StdError, Uint128, WasmMsg};
-use cw20::Cw20HandleMsg;
-use glow_protocol::distributor::{ConfigResponse, HandleMsg, InitMsg, QueryMsg};
+use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+use cosmwasm_std::{
+    from_binary, to_binary, CosmosMsg, HumanAddr, StdError, SubMsg, Uint128, WasmMsg,
+};
+use cw20::Cw20ExecuteMsg;
+use glow_protocol::distributor::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 #[test]
 fn proper_initialization() {
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let msg = InitMsg {
-        owner: HumanAddr("owner".to_string()),
-        glow_token: HumanAddr("glow".to_string()),
+    let msg = InstantiateMsg {
+        owner: "owner".to_string(),
+        glow_token: "glow".to_string(),
         whitelist: vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
-        emission_cap: Default::default(),
+        emission_cap: Default::default(), //TODO: assign default values
         emission_floor: Default::default(),
         increment_multiplier: Default::default(),
         decrement_multiplier: Default::default(),
     };
 
-    let env = mock_env("addr0000", &[]);
+    let info = mock_info("addr0000", &[]);
 
     // we can just call .unwrap() to assert this was a success
-    let _res = init(&mut deps, env, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // it worked, let's query the state
-    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!("owner", config.owner.as_str());
     assert_eq!("glow", config.glow_token.as_str());
     assert_eq!(
         vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         config.whitelist
     );
@@ -46,15 +49,15 @@ fn proper_initialization() {
 
 #[test]
 fn update_config() {
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let msg = InitMsg {
-        owner: HumanAddr("owner".to_string()),
-        glow_token: HumanAddr("glow".to_string()),
+    let msg = InstantiateMsg {
+        owner: "owner".to_string(),
+        glow_token: "glow".to_string(),
         whitelist: vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
         emission_cap: Default::default(),
@@ -63,26 +66,27 @@ fn update_config() {
         decrement_multiplier: Default::default(),
     };
 
-    let env = mock_env("addr0000", &[]);
+    let info = mock_info("addr0000", &[]);
 
     // we can just call .unwrap() to assert this was a success
-    let _res = init(&mut deps, env, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // it worked, let's query the state
-    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!("owner", config.owner.as_str());
     assert_eq!("glow", config.glow_token.as_str());
     assert_eq!(
         vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         config.whitelist
     );
     assert_eq!(Uint128::from(1000000u128), config.spend_limit);
 
-    let msg = HandleMsg::UpdateConfig {
+    let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         spend_limit: Some(Uint128::from(500000u128)),
         emission_cap: None,
@@ -90,26 +94,27 @@ fn update_config() {
         increment_multiplier: None,
         decrement_multiplier: None,
     };
-    let env = mock_env("addr0000", &[]);
-    let res = handle(&mut deps, env, msg.clone());
+    let info = mock_info("addr0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
 
     match res {
-        Err(StdError::Unauthorized { .. }) => {}
+        Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env, msg).unwrap();
-    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    let info = mock_info("owner", &[]);
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!(
         config,
         ConfigResponse {
-            owner: HumanAddr::from("owner"),
-            glow_token: HumanAddr::from("glow"),
+            owner: "owner".to_string(),
+            glow_token: "glow".to_string(),
             whitelist: vec![
-                HumanAddr::from("addr1"),
-                HumanAddr::from("addr2"),
-                HumanAddr::from("addr3"),
+                "addr1".to_string(),
+                "addr2".to_string(),
+                "addr3".to_string(),
             ],
             spend_limit: Uint128::from(500000u128),
             emission_cap: Default::default(),
@@ -122,15 +127,15 @@ fn update_config() {
 
 #[test]
 fn transfer_to_gov() {
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let msg = InitMsg {
-        owner: HumanAddr("owner".to_string()),
-        glow_token: HumanAddr("glow".to_string()),
+    let msg = InstantiateMsg {
+        owner: "owner".to_string(),
+        glow_token: "glow".to_string(),
         whitelist: vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
         emission_cap: Default::default(),
@@ -139,53 +144,55 @@ fn transfer_to_gov() {
         decrement_multiplier: Default::default(),
     };
 
-    let env = mock_env("addr0000", &[]);
+    let info = mock_info("addr0000", &[]);
 
     // we can just call .unwrap() to assert this was a success
-    let _res = init(&mut deps, env, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // it worked, let's query the state
-    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!("owner", config.owner.as_str());
     assert_eq!("glow", config.glow_token.as_str());
     assert_eq!(
         vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         config.whitelist
     );
     assert_eq!(Uint128::from(1000000u128), config.spend_limit);
 
-    let msg = HandleMsg::UpdateConfig {
-        owner: Some(HumanAddr("gov".to_string())),
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: Some("gov".to_string()),
         spend_limit: None,
         emission_cap: None,
         emission_floor: None,
         increment_multiplier: None,
         decrement_multiplier: None,
     };
-    let env = mock_env("addr0000", &[]);
-    let res = handle(&mut deps, env, msg.clone());
+    let info = mock_info("addr0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
 
     match res {
-        Err(StdError::Unauthorized { .. }) => {}
+        Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let env = mock_env("owner", &[]);
-    let _res = handle(&mut deps, env, msg).unwrap();
-    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    let info = mock_info("owner", &[]);
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!(
         config,
         ConfigResponse {
-            owner: HumanAddr::from("gov"),
-            glow_token: HumanAddr::from("glow"),
+            owner: "gov".to_string(),
+            glow_token: "glow".to_string(),
             whitelist: vec![
-                HumanAddr::from("addr1"),
-                HumanAddr::from("addr2"),
-                HumanAddr::from("addr3"),
+                "addr1".to_string(),
+                "addr2".to_string(),
+                "addr3".to_string(),
             ],
             spend_limit: Uint128::from(1000000u128),
             emission_cap: Default::default(),
@@ -198,15 +205,15 @@ fn transfer_to_gov() {
 
 #[test]
 fn test_add_remove_distributor() {
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let msg = InitMsg {
-        owner: HumanAddr("owner".to_string()),
-        glow_token: HumanAddr("glow".to_string()),
+    let msg = InstantiateMsg {
+        owner: "owner".to_string(),
+        glow_token: "glow".to_string(),
         whitelist: vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
         emission_cap: Default::default(),
@@ -215,53 +222,54 @@ fn test_add_remove_distributor() {
         decrement_multiplier: Default::default(),
     };
 
-    let env = mock_env("addr0000", &[]);
+    let info = mock_info("addr0000", &[]);
 
     // we can just call .unwrap() to assert this was a success
-    let _res = init(&mut deps, env, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Permission check AddDistributor
-    let env = mock_env("addr0000", &[]);
-    let msg = HandleMsg::AddDistributor {
-        distributor: HumanAddr::from("addr4"),
+    let info = mock_info("addr0000", &[]);
+    let msg = ExecuteMsg::AddDistributor {
+        distributor: "addr4".to_string(),
     };
 
-    let res = handle(&mut deps, env, msg);
+    let res = execute(deps.as_mut, mock_env(), info, msg);
     match res {
-        Err(StdError::Unauthorized { .. }) => {}
+        Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // Permission check RemoveDistributor
-    let env = mock_env("addr0000", &[]);
-    let msg = HandleMsg::RemoveDistributor {
-        distributor: HumanAddr::from("addr4"),
+    let info = mock_info("addr0000", &[]);
+    let msg = ExecuteMsg::RemoveDistributor {
+        distributor: "addr4".to_string(),
     };
 
-    let res = handle(&mut deps, env, msg);
+    let res = execute(deps.as_mut, mock_env(), info, msg);
     match res {
-        Err(StdError::Unauthorized { .. }) => {}
+        Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // AddDistributor
-    let env = mock_env("owner", &[]);
-    let msg = HandleMsg::AddDistributor {
-        distributor: HumanAddr::from("addr4"),
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::AddDistributor {
+        distributor: "addr4".to_string(),
     };
 
-    let _res = handle(&mut deps, env, msg).unwrap();
-    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!(
         config,
         ConfigResponse {
-            owner: HumanAddr::from("owner"),
-            glow_token: HumanAddr::from("glow"),
+            owner: "owner".to_string(),
+            glow_token: "glow".to_string(),
             whitelist: vec![
-                HumanAddr::from("addr1"),
-                HumanAddr::from("addr2"),
-                HumanAddr::from("addr3"),
-                HumanAddr::from("addr4"),
+                "addr1".to_string(),
+                "addr2".to_string(),
+                "addr3".to_string(),
+                "addr4".to_string(),
             ],
             spend_limit: Uint128::from(1000000u128),
             emission_cap: Default::default(),
@@ -272,22 +280,23 @@ fn test_add_remove_distributor() {
     );
 
     // RemoveDistributor
-    let env = mock_env("owner", &[]);
-    let msg = HandleMsg::RemoveDistributor {
-        distributor: HumanAddr::from("addr1"),
+    let info = mock_info("owner", &[]);
+    let msg = ExecuteMsg::RemoveDistributor {
+        distributor: "addr1".to_string(),
     };
 
-    let _res = handle(&mut deps, env, msg).unwrap();
-    let config: ConfigResponse = from_binary(&query(&deps, QueryMsg::Config {}).unwrap()).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!(
         config,
         ConfigResponse {
-            owner: HumanAddr::from("owner"),
-            glow_token: HumanAddr::from("glow"),
+            owner: "owner".to_string(),
+            glow_token: "glow".to_string(),
             whitelist: vec![
-                HumanAddr::from("addr2"),
-                HumanAddr::from("addr3"),
-                HumanAddr::from("addr4"),
+                "addr2".to_string(),
+                "addr3".to_string(),
+                "addr4".to_string(),
             ],
             spend_limit: Uint128::from(1000000u128),
             emission_cap: Default::default(),
@@ -300,15 +309,15 @@ fn test_add_remove_distributor() {
 
 #[test]
 fn test_spend() {
-    let mut deps = mock_dependencies(20, &[]);
+    let mut deps = mock_dependencies(&[]);
 
-    let msg = InitMsg {
-        owner: HumanAddr("owner".to_string()),
-        glow_token: HumanAddr("glow".to_string()),
+    let msg = InstantiateMsg {
+        owner: "owner".to_string(),
+        glow_token: "glow".to_string(),
         whitelist: vec![
-            HumanAddr::from("addr1"),
-            HumanAddr::from("addr2"),
-            HumanAddr::from("addr3"),
+            "addr1".to_string(),
+            "addr2".to_string(),
+            "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
         emission_cap: Default::default(),
@@ -317,32 +326,32 @@ fn test_spend() {
         decrement_multiplier: Default::default(),
     };
 
-    let env = mock_env("addr0000", &[]);
+    let info = mock_info("addr0000", &[]);
 
     // we can just call .unwrap() to assert this was a success
-    let _res = init(&mut deps, env, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // permission failed
-    let msg = HandleMsg::Spend {
-        recipient: HumanAddr::from("addr0000"),
+    let msg = ExecuteMsg::Spend {
+        recipient: "addr0000".to_string(),
         amount: Uint128::from(1000000u128),
     };
 
-    let env = mock_env("addr0000", &[]);
-    let res = handle(&mut deps, env, msg);
+    let info = mock_info("addr0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
-        Err(StdError::Unauthorized { .. }) => {}
+        Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     // failed due to spend limit
-    let msg = HandleMsg::Spend {
-        recipient: HumanAddr::from("addr0000"),
+    let msg = ExecuteMsg::Spend {
+        recipient: "addr0000".to_string(),
         amount: Uint128::from(2000000u128),
     };
 
-    let env = mock_env("addr1", &[]);
-    let res = handle(&mut deps, env, msg);
+    let info = mock_info("addr1", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
         Err(StdError::GenericErr { msg, .. }) => {
             assert_eq!(msg, "Cannot spend more than spend_limit")
@@ -350,23 +359,24 @@ fn test_spend() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let msg = HandleMsg::Spend {
-        recipient: HumanAddr::from("addr0000"),
+    let msg = ExecuteMsg::Spend {
+        recipient: "addr0000".to_string(),
         amount: Uint128::from(1000000u128),
     };
 
-    let env = mock_env("addr2", &[]);
-    let res = handle(&mut deps, env, msg).unwrap();
+    let info = mock_info("addr2", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: HumanAddr::from("glow"),
-            send: vec![],
-            msg: to_binary(&Cw20HandleMsg::Transfer {
-                recipient: HumanAddr::from("addr0000"),
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "glow".to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
                 amount: Uint128::from(1000000u128),
             })
             .unwrap(),
-        })]
+        }))]
     );
 }

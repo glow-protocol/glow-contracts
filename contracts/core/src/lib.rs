@@ -2,46 +2,13 @@ pub mod contract;
 pub mod state;
 
 mod claims;
+mod error;
 mod prize_strategy;
 mod querier;
 mod random;
 
 #[cfg(test)]
-mod test;
+mod tests;
 
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::contract;
-    use cosmwasm_std::{
-        do_handle, do_init, do_query, ExternalApi, ExternalQuerier, ExternalStorage,
-    };
-
-    #[no_mangle]
-    extern "C" fn init(env_ptr: u32, msg_ptr: u32) -> u32 {
-        do_init(
-            &contract::init::<ExternalStorage, ExternalApi, ExternalQuerier>,
-            env_ptr,
-            msg_ptr,
-        )
-    }
-
-    #[no_mangle]
-    extern "C" fn handle(env_ptr: u32, msg_ptr: u32) -> u32 {
-        do_handle(
-            &contract::handle::<ExternalStorage, ExternalApi, ExternalQuerier>,
-            env_ptr,
-            msg_ptr,
-        )
-    }
-
-    #[no_mangle]
-    extern "C" fn query(msg_ptr: u32) -> u32 {
-        do_query(
-            &contract::query::<ExternalStorage, ExternalApi, ExternalQuerier>,
-            msg_ptr,
-        )
-    }
-
-    // Other C externs like cosmwasm_vm_version_1, allocate, deallocate are available
-    // automatically because we `use cosmwasm_std`.
-}
+#[cfg(test)]
+mod mock_querier;

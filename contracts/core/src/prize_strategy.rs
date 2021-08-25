@@ -94,16 +94,11 @@ pub fn execute_lottery(
 
     msgs.push(execute_prize_msg);
 
-    // Response withdraws from Anchor and call internal _execute_prize
-    Ok(Response {
-        messages: msgs,
-        attributes: vec![
-            attr("action", "execute_lottery"),
-            attr("redeemed_amount", lottery_aterra),
-        ],
-        events: vec![],
-        data: None,
-    })
+    let res = Response::new().add_messages(msgs).add_attributes(vec![
+        attr("action", "execute_lottery"),
+        attr("redeemed_amount", lottery_aterra),
+    ]);
+    Ok(res)
 }
 
 pub fn _execute_prize(

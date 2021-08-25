@@ -1,4 +1,4 @@
-use crate::contract::{execute, init, instantiate, query, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
+use crate::contract::{execute, instantiate, query, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
     read_config, read_depositor_info, read_lottery_info, read_sequence_info, read_state,
@@ -9,12 +9,11 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     attr, from_binary, to_binary, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Decimal, DepsMut,
-    Env, Querier, StdError, Storage, Timestamp, Uint128, WasmMsg,
+    Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::core::{
     Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    StateResponse,
 };
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 
@@ -66,13 +65,18 @@ fn instantiate_msg() -> InstantiateMsg {
     }
 }
 
-fn mock_instantiate(deps: DepsMut) -> InitResponse {
+fn mock_instantiate(deps: DepsMut) -> Response {
     let msg = instantiate_msg();
 
-    let info = mock_info(TEST_CREATOR, &[]);
+    let info = mock_info(
+        TEST_CREATOR,
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
 
-    let _res = instantiate(deps, mock_env(), info, msg)
-        .expect("contract successfully executes InstantiateMsg");
+    instantiate(deps, mock_env(), info, msg).expect("contract successfully executes InstantiateMsg")
 }
 
 fn mock_register_contracts(deps: DepsMut) {
@@ -101,14 +105,14 @@ fn proper_initialization() {
         TEST_CREATOR,
         &[Coin {
             denom: DENOM.to_string(),
-            amount: Uint128(INITIAL_DEPOSIT_AMOUNT),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
 
     let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(0, res.messages.len());
 
-    let config: Config = read_config(deps.as_ref().storage).load().unwrap();
+    let config: Config = read_config(deps.as_ref().storage).unwrap();
 
     assert_eq!(
         config,
@@ -146,7 +150,7 @@ fn proper_initialization() {
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    let config: Config = config_read(deps.as_ref().storage).load().unwrap();
+    let config: Config = read_config(deps.as_ref().storage).unwrap();
     assert_eq!(
         config.gov_contract,
         deps.api.addr_canonicalize(GOV_ADDR).unwrap()
@@ -156,7 +160,7 @@ fn proper_initialization() {
         deps.api.addr_canonicalize(DISTRIBUTOR_ADDR).unwrap()
     );
 
-    let state: State = state_read(deps.as_ref().storage).load().unwrap();
+    let state: State = read_state(deps.as_ref().storage).unwrap();
     assert_eq!(
         state,
         State {
@@ -190,7 +194,7 @@ fn update_config() {
     mock_register_contracts(deps.as_mut());
 
     // update owner
-    let env = mock_info(TEST_CREATOR, &[]);
+    let info = mock_info(TEST_CREATOR, &[]);
 
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("owner1".to_string()),
@@ -212,7 +216,7 @@ fn update_config() {
     assert_eq!("owner1".to_string(), config_response.owner);
 
     // update lottery interval to 30 minutes
-    let env = mock_info("owner1", &[]);
+    let info = mock_info("owner1", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         lottery_interval: Some(1800),
@@ -342,7 +346,7 @@ fn deposit() {
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(StdError::GenericErr { msg, .. }) => {}
+        Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -396,7 +400,7 @@ fn deposit() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE * 2u64),
             shares: Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
@@ -418,7 +422,7 @@ fn deposit() {
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block),
+            next_lottery_time: WEEK.after(&mock_env().block),
             last_reward_updated: 12345, //TODO: hardcoded. why this value?
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -427,14 +431,14 @@ fn deposit() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: String::from("uusd"),
                 amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
-        })]
+        }))]
     );
 
     assert_eq!(
@@ -442,10 +446,13 @@ fn deposit() {
         vec![
             attr("action", "batch_deposit"),
             attr("depositor", "addr0000"),
-            attr("deposit_amount", Decimal256::percent(TICKET_PRIZE * 2u64)),
+            attr(
+                "deposit_amount",
+                Decimal256::percent(TICKET_PRIZE * 2u64).to_string()
+            ),
             attr(
                 "shares_minted",
-                Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE)
+                (Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE)).to_string()
             ),
         ]
     );
@@ -562,7 +569,7 @@ fn gift_tickets() {
             amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let res = execute(deps.as_mut(), env, info.clone(), msg);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
         Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -574,7 +581,7 @@ fn gift_tickets() {
         recipient: "addr1111".to_string(),
     };
 
-    let res = execute(deps.as_mut(), env, info.clone(), msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone());
     match res {
         Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -620,7 +627,7 @@ fn gift_tickets() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE * 2u64),
             shares: Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
@@ -642,7 +649,7 @@ fn gift_tickets() {
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block),
+            next_lottery_time: WEEK.after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -651,14 +658,14 @@ fn gift_tickets() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: DENOM.to_string(),
                 amount: (Decimal256::percent(TICKET_PRIZE * 2u64) * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
-        })]
+        }))]
     );
 
     assert_eq!(
@@ -667,11 +674,14 @@ fn gift_tickets() {
             attr("action", "gift_tickets"),
             attr("gifter", "addr0000"),
             attr("recipient", "addr1111"),
-            attr("deposit_amount", Decimal256::percent(TICKET_PRIZE * 2u64)),
-            attr("tickets", 2u64),
+            attr(
+                "deposit_amount",
+                Decimal256::percent(TICKET_PRIZE * 2u64).to_string()
+            ),
+            attr("tickets", 2u64.to_string()),
             attr(
                 "shares_minted",
-                Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE)
+                (Decimal256::percent(TICKET_PRIZE * 2u64) / Decimal256::permille(RATE)).to_string()
             ),
         ]
     );
@@ -713,8 +723,10 @@ fn withdraw() {
 
     let msg = ExecuteMsg::Withdraw { instant: None };
 
-    deps.querier
-        .with_token_balances(&[(&A_UST, &[(&MOCK_CONTRACT_ADDR, &shares.into())])]);
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+    )]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -751,13 +763,13 @@ fn withdraw() {
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
                 amount: Decimal256::from_uint256(Uint256::from(9999999u128)),
-                release_at: WEEK.after(&env.block),
+                release_at: WEEK.after(&mock_env().block),
             }]
         }
     );
@@ -773,7 +785,7 @@ fn withdraw() {
             deposit_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block),
+            next_lottery_time: WEEK.after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -782,7 +794,7 @@ fn withdraw() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: A_UST.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Send {
@@ -791,7 +803,7 @@ fn withdraw() {
                 msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
             })
             .unwrap(),
-        })]
+        }))]
     );
 
     assert_eq!(
@@ -803,7 +815,7 @@ fn withdraw() {
             attr("redeem_amount_anchor", shares.to_string()),
             attr(
                 "redeem_stable_amount",
-                Decimal256::from_str("9999999.933").unwrap()
+                Decimal256::from_str("9999999.933").unwrap().to_string()
             ),
             attr("instant_withdrawal_fee", Decimal256::zero().to_string())
         ]
@@ -844,11 +856,13 @@ fn instant_withdraw() {
         instant: Some(true),
     };
 
-    deps.querier
-        .with_token_balances(&[(&A_UST, &[(&MOCK_CONTRACT_ADDR, &shares.into())])]);
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+    )]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
@@ -875,11 +889,14 @@ fn instant_withdraw() {
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(&deps.storage, &deps.api.addr_canonicalize("addr0001")?),
+        read_depositor_info(
+            &deps.storage,
+            &deps.api.addr_canonicalize("addr0001").unwrap()
+        ),
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -898,7 +915,7 @@ fn instant_withdraw() {
             deposit_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&env.block),
+            next_lottery_time: WEEK.after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -908,7 +925,7 @@ fn instant_withdraw() {
     assert_eq!(
         res.messages,
         vec![
-            CosmosMsg::Wasm(WasmMsg::Execute {
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: A_UST.to_string(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Send {
@@ -917,14 +934,14 @@ fn instant_withdraw() {
                     msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
                 })
                 .unwrap(),
-            }),
-            CosmosMsg::Bank(BankMsg::Send {
-                to_address: env.clone().message.sender,
+            })),
+            SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+                to_address: info.sender.to_string(),
                 amount: vec![Coin {
                     denom: "uusd".to_string(),
                     amount: Uint128::from(8999999u128)
                 }],
-            })
+            }))
         ]
     );
 
@@ -933,15 +950,15 @@ fn instant_withdraw() {
         vec![
             attr("action", "withdraw_ticket"),
             attr("depositor", "addr0001"),
-            attr("tickets_amount", 1u64),
-            attr("redeem_amount_anchor", shares),
+            attr("tickets_amount", 1u64.to_string()),
+            attr("redeem_amount_anchor", shares.to_string()),
             attr(
                 "redeem_stable_amount",
-                Decimal256::from_str("8999999.9397").unwrap()
+                Decimal256::from_str("8999999.9397").unwrap().to_string()
             ),
             attr(
                 "instant_withdrawal_fee",
-                Decimal256::from_str("999999.9933").unwrap()
+                Decimal256::from_str("999999.9933").unwrap().to_string()
             )
         ]
     )
@@ -978,8 +995,10 @@ fn claim() {
 
     let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
-    deps.querier
-        .with_token_balances(&[(&A_UST, &[(&MOCK_CONTRACT_ADDR, &shares.into())])]);
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+    )]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -1013,7 +1032,9 @@ fn claim() {
         amount: Some(Uint128::from(10u64)),
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+    let mut env = mock_env();
+
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     match res {
         Err(ContractError::InsufficientFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -1023,7 +1044,7 @@ fn claim() {
 
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
-        env.block.time += time;
+        env.block.time.plus_seconds(time);
     }
     // TODO: change also the exchange rate here
 
@@ -1041,7 +1062,7 @@ fn claim() {
     );
 
     // Claim amount is already unbonded, so claim execution should work
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1052,7 +1073,7 @@ fn claim() {
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -1062,13 +1083,13 @@ fn claim() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Bank(BankMsg::Send {
+        vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
             to_address: "addr0001".to_string(),
             amount: vec![Coin {
                 denom: String::from("uusd"),
                 amount: Uint128::from(9_999_999u64), //TODO: should be 10_000_000
             }],
-        })]
+        }))]
     );
 
     assert_eq!(
@@ -1076,8 +1097,8 @@ fn claim() {
         vec![
             attr("action", "claim"),
             attr("depositor", "addr0001"),
-            attr("redeemed_amount", 9_999_999u64),
-            attr("redeemable_amount_left", Uint128(0)),
+            attr("redeemed_amount", 9_999_999u64.to_string()),
+            attr("redeemable_amount_left", Uint128::zero().to_string()),
         ]
     );
 }
@@ -1094,7 +1115,7 @@ fn execute_lottery() {
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint128(1),
+            amount: Uint128::from(1u64),
         }],
     );
 
@@ -1113,7 +1134,7 @@ fn execute_lottery() {
 
     let mut lottery_expiration: u64 = 0;
     if let Duration::Time(time) = WEEK {
-        lottery_expiration = env.block.time + time;
+        lottery_expiration = env.block.time.seconds();
     }
 
     match res {
@@ -1123,7 +1144,7 @@ fn execute_lottery() {
 
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
-        env.block.time += time;
+        env.block.time.plus_seconds(time);
     }
 
     // It should not fail, but redeem message is not called
@@ -1142,8 +1163,11 @@ fn execute_lottery() {
 
     // Add 10 aUST to our contract balance
     deps.querier.with_token_balances(&[(
-        &A_UST,
-        &[(&MOCK_CONTRACT_ADDR, &Uint128::from(10_000_000u128))],
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &Uint128::from(10_000_000u128),
+        )],
     )]);
 
     // Add 100 UST to our contract balance
@@ -1174,7 +1198,7 @@ fn execute_lottery() {
     assert_eq!(
         res.messages,
         vec![
-            CosmosMsg::Wasm(WasmMsg::Execute {
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: A_UST.to_string(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Send {
@@ -1183,15 +1207,15 @@ fn execute_lottery() {
                     msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
                 })
                 .unwrap(),
-            }),
-            CosmosMsg::Wasm(WasmMsg::Execute {
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 funds: vec![],
                 msg: to_binary(&ExecuteMsg::_ExecutePrize {
                     balance: current_balance
                 })
                 .unwrap(),
-            })
+            }))
         ]
     );
 
@@ -1276,9 +1300,9 @@ fn execute_prize_no_tickets() {
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("accrued_interest", Uint256::zero()),
-            attr("total_awarded_prize", Decimal256::zero()),
-            attr("reinvested_amount", Uint256::zero()),
+            attr("accrued_interest", Uint256::zero().to_string()),
+            attr("total_awarded_prize", Decimal256::zero().to_string()),
+            attr("reinvested_amount", Uint256::zero().to_string()),
         ]
     );
 }
@@ -1325,7 +1349,7 @@ fn execute_prize_no_winners() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("11111")],
@@ -1368,23 +1392,26 @@ fn execute_prize_no_winners() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: "uusd".to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
-        })]
+        }))]
     );
 
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("accrued_interest", Uint128::zero()),
-            attr("total_awarded_prize", awarded_prize),
-            attr("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("accrued_interest", Uint128::zero().to_string()),
+            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "reinvested_amount",
+                (lottery_deposits * Uint256::one()).to_string()
+            ),
         ]
     );
 }
@@ -1431,7 +1458,7 @@ fn execute_prize_one_winner() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
@@ -1487,23 +1514,26 @@ fn execute_prize_one_winner() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: "uusd".to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
-        })]
+        }))]
     );
 
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("accrued_interest", Uint128::zero()),
-            attr("total_awarded_prize", awarded_prize),
-            attr("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("accrued_interest", Uint128::zero().to_string()),
+            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "reinvested_amount",
+                (lottery_deposits * Uint256::one()).to_string()
+            ),
         ]
     );
 }
@@ -1552,7 +1582,7 @@ fn execute_prize_winners_diff_ranks() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
@@ -1572,7 +1602,7 @@ fn execute_prize_winners_diff_ranks() {
         }],
     );
 
-    let _res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let address_raw_1 = deps.api.addr_canonicalize("addr0001").unwrap();
 
@@ -1582,7 +1612,7 @@ fn execute_prize_winners_diff_ranks() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00100")],
@@ -1647,23 +1677,26 @@ fn execute_prize_winners_diff_ranks() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: "uusd".to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
-        })]
+        }))]
     );
 
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("accrued_interest", Uint128::zero()),
-            attr("total_awarded_prize", awarded_prize),
-            attr("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("accrued_interest", Uint128::zero().to_string()),
+            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "reinvested_amount",
+                (lottery_deposits * Uint256::one()).to_string()
+            ),
         ]
     );
 }
@@ -1710,7 +1743,7 @@ fn execute_prize_winners_same_rank() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
@@ -1740,7 +1773,7 @@ fn execute_prize_winners_same_rank() {
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRIZE),
             shares: Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE),
-            redeemable_amount: Uint128(0),
+            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("00000")],
@@ -1801,23 +1834,26 @@ fn execute_prize_winners_same_rank() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: DENOM.to_string(),
                 amount: (lottery_deposits * Uint256::one()).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
-        })]
+        }))]
     );
 
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("accrued_interest", Uint128::zero()),
-            attr("total_awarded_prize", awarded_prize),
-            attr("reinvested_amount", lottery_deposits * Uint256::one()),
+            attr("accrued_interest", Uint128::zero().to_string()),
+            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "reinvested_amount",
+                (lottery_deposits * Uint256::one()).to_string()
+            ),
         ]
     );
 }
@@ -1926,15 +1962,15 @@ fn claim_rewards_one_depositor() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: DISTRIBUTOR_ADDR.to_string(),
             funds: vec![],
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
-                amount: Uint128(100u128),
+                amount: Uint128::from(100u128),
             })
             .unwrap(),
-        })]
+        }))]
     );
 
     let res: DepositorInfoResponse = from_binary(
@@ -2012,15 +2048,15 @@ fn claim_rewards_multiple_depositors() {
     println!("{:?}", res.attributes);
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: DISTRIBUTOR_ADDR.to_string(),
             funds: vec![],
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
-                amount: Uint128(50u128),
+                amount: Uint128::from(50u128),
             })
             .unwrap(),
-        })]
+        }))]
     );
 
     // Checking USER 0 state is correct
@@ -2084,13 +2120,13 @@ fn execute_epoch_operations() {
 
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Bank(BankMsg::Send {
+        vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
             to_address: GOV_ADDR.to_string(),
             amount: vec![Coin {
                 denom: DENOM.to_string(),
                 amount: Uint128::from(496u128), // 1% tax
             }],
-        })]
+        }))]
     );
 
     let state = read_state(deps.as_ref().storage).unwrap();

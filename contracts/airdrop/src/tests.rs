@@ -1,7 +1,7 @@
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
 use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-use cosmwasm_std::{attr, from_binary, to_binary, CosmosMsg, Uint128, WasmMsg};
+use cosmwasm_std::{attr, from_binary, to_binary, ReplyOn, SubMsg, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::airdrop::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, IsClaimedResponse, LatestStageResponse,
@@ -161,18 +161,24 @@ fn claim() {
     };
 
     let info = mock_info("terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8", &[]);
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "glow0000".to_string(),
-            funds: vec![],
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: "terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8".to_string(),
-                amount: Uint128::from(1000001u128),
-            })
-            .unwrap(),
-        })]
+        vec![SubMsg {
+            id: 0,
+            msg: WasmMsg::Execute {
+                contract_addr: "glow0000".to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: "terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8".to_string(),
+                    amount: Uint128::from(1000001u128),
+                })
+                .unwrap(),
+            }
+            .into(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }]
     );
 
     assert_eq!(
@@ -224,15 +230,21 @@ fn claim() {
     let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "glow0000".to_string(),
-            funds: vec![],
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: "terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8".to_string(),
-                amount: Uint128::from(2000001u128),
-            })
-            .unwrap(),
-        })]
+        vec![SubMsg {
+            id: 0,
+            msg: WasmMsg::Execute {
+                contract_addr: "glow0000".to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: "terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8".to_string(),
+                    amount: Uint128::from(2000001u128),
+                })
+                .unwrap(),
+            }
+            .into(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }]
     );
 
     assert_eq!(

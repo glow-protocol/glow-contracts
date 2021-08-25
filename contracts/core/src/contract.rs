@@ -708,7 +708,7 @@ pub fn execute_epoch_operations(deps: DepsMut, env: Env) -> Result<Response, Con
     state.total_reserve = Decimal256::zero();
     store_state(deps.storage, &state)?;
 
-    Ok(Response::new().add_attributes(vec![
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "execute_epoch_operations"),
         attr("total_reserves", total_reserves.to_string()),
         attr("glow_emission_rate", state.glow_emission_rate.to_string()),

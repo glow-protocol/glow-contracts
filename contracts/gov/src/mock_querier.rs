@@ -4,7 +4,6 @@ use cosmwasm_std::{
     QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
-use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 
 use std::collections::HashMap;
 
@@ -57,6 +56,51 @@ pub(crate) fn balances_to_map(
         balances_map.insert(contract_addr.to_string(), contract_balances_map);
     }
     balances_map
+}
+
+#[derive(Clone, Default)]
+pub struct TaxQuerier {
+    rate: Decimal,
+    // this lets us iterate over all pairs that match the first string
+    caps: HashMap<String, Uint128>,
+}
+
+impl TaxQuerier {
+    pub fn new(rate: Decimal, caps: &[(&String, &Uint128)]) -> Self {
+        TaxQuerier {
+            rate,
+            caps: caps_to_map(caps),
+        }
+    }
+}
+
+pub(crate) fn caps_to_map(caps: &[(&String, &Uint128)]) -> HashMap<String, Uint128> {
+    let mut owner_map: HashMap<String, Uint128> = HashMap::new();
+    for (denom, cap) in caps.iter() {
+        owner_map.insert(denom.to_string(), **cap);
+    }
+    owner_map
+}
+
+#[derive(Clone, Default)]
+pub struct TerraswapFactoryQuerier {
+    pairs: HashMap<String, String>,
+}
+
+impl TerraswapFactoryQuerier {
+    pub fn new(pairs: &[(&String, &String)]) -> Self {
+        TerraswapFactoryQuerier {
+            pairs: pairs_to_map(pairs),
+        }
+    }
+}
+
+pub(crate) fn pairs_to_map(pairs: &[(&String, &String)]) -> HashMap<String, String> {
+    let mut pairs_map: HashMap<String, String> = HashMap::new();
+    for (key, pair) in pairs.iter() {
+        pairs_map.insert(key.to_string(), pair.to_string());
+    }
+    pairs_map
 }
 
 impl Querier for WasmMockQuerier {

@@ -41,11 +41,11 @@ pub fn claim_deposits(
         if c.release_at.is_expired(block) {
             let new_amount = c.amount * Uint256::one();
             if let Some(limit) = cap {
-                if to_send + new_amount.into() > limit {
+                if to_send + Uint128::from(new_amount) > limit {
                     return false;
                 }
             }
-            to_send += new_amount.into();
+            to_send += Uint128::from(new_amount);
             true
         } else {
             //nothing to send, leave all claims in waiting status

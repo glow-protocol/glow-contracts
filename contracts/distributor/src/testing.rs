@@ -1,9 +1,7 @@
 use crate::contract::{execute, instantiate, query};
 
 use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-use cosmwasm_std::{
-    from_binary, to_binary, CosmosMsg, HumanAddr, StdError, SubMsg, Uint128, WasmMsg,
-};
+use cosmwasm_std::{from_binary, to_binary, CosmosMsg, StdError, SubMsg, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
@@ -233,7 +231,7 @@ fn test_add_remove_distributor() {
         distributor: "addr4".to_string(),
     };
 
-    let res = execute(deps.as_mut, mock_env(), info, msg);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
         Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("DO NOT ENTER HERE"),
@@ -245,7 +243,7 @@ fn test_add_remove_distributor() {
         distributor: "addr4".to_string(),
     };
 
-    let res = execute(deps.as_mut, mock_env(), info, msg);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
         Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("DO NOT ENTER HERE"),

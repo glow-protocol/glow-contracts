@@ -6,11 +6,10 @@ use crate::state::{
     Config, Poll, State, TokenManager,
 };
 
-use crate::querier::load_token_balance;
-use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     attr, coins, from_binary, to_binary, Addr, Api, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
+    DepsMut, Env, ReplyOn, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use glow_protocol::common::OrderBy;
@@ -44,7 +43,7 @@ fn mock_instantiate(deps: DepsMut) {
         voting_period: DEFAULT_VOTING_PERIOD,
         timelock_period: DEFAULT_TIMELOCK_PERIOD,
         expiration_period: DEFAULT_EXPIRATION_PERIOD,
-        proposal_deposit: Uint128(DEFAULT_PROPOSAL_DEPOSIT),
+        proposal_deposit: Uint128::from(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_FIX_PERIOD,
     };
 
@@ -77,7 +76,7 @@ fn instantiate_msg() -> InstantiateMsg {
         voting_period: DEFAULT_VOTING_PERIOD,
         timelock_period: DEFAULT_TIMELOCK_PERIOD,
         expiration_period: DEFAULT_EXPIRATION_PERIOD,
-        proposal_deposit: Uint128(DEFAULT_PROPOSAL_DEPOSIT),
+        proposal_deposit: Uint128::from(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_FIX_PERIOD,
     }
 }
@@ -103,7 +102,7 @@ fn proper_initialization() {
             voting_period: DEFAULT_VOTING_PERIOD,
             timelock_period: DEFAULT_TIMELOCK_PERIOD,
             expiration_period: DEFAULT_EXPIRATION_PERIOD,
-            proposal_deposit: Uint128(DEFAULT_PROPOSAL_DEPOSIT),
+            proposal_deposit: Uint128::from(DEFAULT_PROPOSAL_DEPOSIT),
             snapshot_period: DEFAULT_FIX_PERIOD
         }
     );
@@ -135,19 +134,19 @@ fn proper_initialization() {
 fn test_sweep() {
     let mut deps = mock_dependencies(&[Coin {
         denom: "uusd".to_string(),
-        amount: Uint128(100u128),
+        amount: Uint128::from(100u128),
     }]);
 
     mock_instantiate(deps.as_mut());
 
     deps.querier.with_tax(
         Decimal::percent(1),
-        &[(&"uusd".to_string(), &Uint128(1000000u128))],
+        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
     );
 
     deps.querier.with_terraswap_pairs(&[(
         &"uusdvoting_token".to_string(),
-        &HumanAddr::from("pairvoting_token"),
+        &"pairvoting_token".to_string(),
     )]);
 
     let msg = ExecuteMsg::Sweep {
@@ -155,30 +154,36 @@ fn test_sweep() {
     };
 
     let info = mock_info("addr0000", &[]);
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // tax deduct 100 => 99
     assert_eq!(
         res.messages,
-        vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "pairvoting_token".to_string(),
-            msg: to_binary(&TerraswapExecuteMsg::Swap {
-                offer_asset: Asset {
-                    info: AssetInfo::NativeToken {
-                        denom: "uusd".to_string()
+        vec![SubMsg {
+            id: 0,
+            msg: WasmMsg::Execute {
+                contract_addr: "pairvoting_token".to_string(),
+                msg: to_binary(&TerraswapExecuteMsg::Swap {
+                    offer_asset: Asset {
+                        info: AssetInfo::NativeToken {
+                            denom: "uusd".to_string()
+                        },
+                        amount: Uint128::from(99u128),
                     },
+                    max_spread: None,
+                    belief_price: None,
+                    to: None,
+                })
+                .unwrap(),
+                funds: vec![Coin {
+                    denom: "uusd".to_string(),
                     amount: Uint128::from(99u128),
-                },
-                max_spread: None,
-                belief_price: None,
-                to: None,
-            })
-            .unwrap(),
-            funds: vec![Coin {
-                denom: "uusd".to_string(),
-                amount: Uint128::from(99u128),
-            }],
-        }),]
+                }],
+            }
+            .into(),
+            gas_limit: None,
+            reply_on: ReplyOn::Success
+        }]
     );
 }
 

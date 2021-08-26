@@ -59,7 +59,6 @@ pub fn instantiate(
     store_config(
         deps.storage,
         &Config {
-            contract_addr: deps.api.addr_canonicalize(env.contract.address.as_str())?,
             owner: deps.api.addr_canonicalize(&msg.owner.as_str())?,
             a_terra_contract: deps.api.addr_canonicalize(&msg.aterra_contract.as_str())?,
             gov_contract: CanonicalAddr::from(vec![]),
@@ -517,7 +516,7 @@ pub fn withdraw(
         deps.api
             .addr_humanize(&config.a_terra_contract)?
             .to_string(),
-        deps.api.addr_humanize(&config.contract_addr)?.to_string(),
+        env.contract.address.to_string(),
     )?;
 
     // Calculate amount of aUST to be redeemed
@@ -569,7 +568,7 @@ pub fn withdraw(
         // Double-check if there is enough balance to send in the contract
         let balance = query_balance(
             deps.as_ref(),
-            deps.api.addr_humanize(&config.contract_addr)?.to_string(),
+            env.contract.address.to_string(),
             String::from("uusd"),
         )?;
 
@@ -626,18 +625,26 @@ pub fn claim(
     let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &sender_raw);
     to_send += depositor.redeemable_amount;
 
+    if to_send == Uint128::zero() {
+        return Err(ContractError::InsufficientClaimableFunds {});
+    }
+
+    // User requested more funds that the ones it's entitled to
+    if let Some(amount) = amount {
+        if amount > to_send {
+            return Err(ContractError::InsufficientClaimableFunds {});
+        }
+    }
+
     // Deduct taxes on the claim
     let net_coin_amount = deduct_tax(deps.as_ref(), coin(to_send.into(), "uusd"))?;
     let net_send = net_coin_amount.amount;
 
-    // TODO: add check for when the amount requested is greater than to_send
-    if net_send == Uint128::zero() {
-        return Err(ContractError::InvalidClaimAmount {});
-    }
+
     // Double-check if there is enough balance to send in the contract
     let balance = query_balance(
         deps.as_ref(),
-        deps.api.addr_humanize(&config.contract_addr)?.to_string(),
+        env.contract.address.to_string(),
         String::from("uusd"),
     )?;
 
@@ -656,7 +663,7 @@ pub fn claim(
             to_address: info.sender.to_string(),
             amount: vec![Coin {
                 denom: config.stable_denom,
-                amount: net_send,
+                amount: net_send, //TODO: alway sending net_send, what happens in case amount < net_send?
             }],
         }))
         .add_attributes(vec![

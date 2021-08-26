@@ -18,7 +18,6 @@ const PREFIX_DEPOSIT: &[u8] = b"depositor";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub contract_addr: CanonicalAddr,
     pub owner: CanonicalAddr,
     pub a_terra_contract: CanonicalAddr,
     pub gov_contract: CanonicalAddr,

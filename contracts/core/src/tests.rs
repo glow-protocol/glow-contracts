@@ -77,6 +77,8 @@ fn mock_instantiate(deps: DepsMut) -> Response {
     );
 
     instantiate(deps, mock_env(), info, msg).expect("contract successfully executes InstantiateMsg")
+
+
 }
 
 fn mock_register_contracts(deps: DepsMut) {
@@ -98,7 +100,7 @@ fn mock_env_height(height: u64, time: u64) -> Env {
 
 #[test]
 fn proper_initialization() {
-    let mut deps = mock_dependencies(&[]);
+    let mut deps = mock_dependencies(&[Coin{ denom: DENOM.to_string(),  amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) }]);
 
     let msg = instantiate_msg();
     let info = mock_info(
@@ -117,8 +119,7 @@ fn proper_initialization() {
     assert_eq!(
         config,
         Config {
-            contract_addr: deps.api.addr_canonicalize("contract").unwrap(), //TODO: do we need this?
-            owner: deps.api.addr_canonicalize("owner").unwrap(),
+            owner: deps.api.addr_canonicalize(TEST_CREATOR).unwrap(),
             a_terra_contract: deps.api.addr_canonicalize(A_UST).unwrap(),
             gov_contract: CanonicalAddr::from(vec![]),
             distributor_contract: CanonicalAddr::from(vec![]),
@@ -179,7 +180,7 @@ fn proper_initialization() {
         }
     );
 
-    // Cannot register contracts again
+    // Cannot register contracts again //TODO
     let msg = ExecuteMsg::RegisterContracts {
         gov_contract: GOV_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
@@ -248,7 +249,7 @@ fn update_config() {
         unbonding_period: None,
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // check reserve_factor has changed
@@ -257,7 +258,7 @@ fn update_config() {
     assert_eq!(config_response.reserve_factor, Decimal256::percent(1));
 
     // check only owner can update config
-    let env = mock_info("owner2", &[]);
+    let info = mock_info("owner2", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         lottery_interval: Some(1800),
@@ -695,33 +696,58 @@ fn gift_tickets() {
 #[test]
 fn withdraw() {
     // Initialize contract
-    let mut deps = mock_dependencies(&[]);
+    let mut deps = mock_dependencies(&[Coin{ denom: DENOM.to_string(),  amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) }]);
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
+
+    let deposit_amount = (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into();
 
     // Address buys one ticket
     let info = mock_info(
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+            amount: deposit_amount,
         }],
     );
+
 
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("23456")],
     };
 
+
+
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let dep1 = read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_canonicalize("addr0001").unwrap()
+        );
+
+    println!("dep1: {:x?}", dep1);
+
+    let stor1 = read_state(&deps.storage).unwrap();
+
+    println!("stor1: {:x?}", stor1);
+
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR.to_string(),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + deposit_amount,
+        }],
+    );
 
     let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
 
     let info = mock_info("addr0001", &[]);
 
     let msg = ExecuteMsg::Withdraw { instant: None };
+
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -730,6 +756,18 @@ fn withdraw() {
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let dep1 = read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_canonicalize("addr0001").unwrap()
+    );
+
+    println!("dep2: {:x?}", dep1);
+
+    let stor1 = read_state(&deps.storage).unwrap();
+
+    println!("stor2: {:x?}", stor1);
+
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
@@ -1022,9 +1060,11 @@ fn claim() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(ContractError::InsufficientFunds {}) => {}
+        Err(ContractError::InsufficientClaimableFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
+
+    //TODO: test insufficient funds in contract
 
     // Claim amount that you have, but still in unbonding state, should fail
     let info = mock_info("addr0001", &[]);
@@ -1036,16 +1076,19 @@ fn claim() {
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     match res {
-        Err(ContractError::InsufficientFunds {}) => {}
+        Err(ContractError::InsufficientClaimableFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
     let msg = ExecuteMsg::Claim { amount: None };
 
+    println!("Block time 1: {}",env.block.time);
+
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
-        env.block.time.plus_seconds(time);
+        env.block.time = env.block.time.plus_seconds(time*2);
     }
+    println!("Block time 2: {}",env.block.time);
     // TODO: change also the exchange rate here
 
     // TODO: add case asking for more amount that the one we have (which is non-zero)
@@ -1056,13 +1099,20 @@ fn claim() {
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR,
         vec![Coin {
-            denom: "uusd".to_string(),
+            denom: DENOM.to_string(),
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + 10000000u128),
         }],
     );
 
+    let dep = read_depositor_info(
+            &deps.storage,
+            &deps.api.addr_canonicalize("addr0001").unwrap()
+        );
+
+    println!("DepositorInfo: {:x?}", dep);
+
     // Claim amount is already unbonded, so claim execution should work
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(

@@ -44,7 +44,7 @@ pub fn execute_lottery(
         deps.api
             .addr_humanize(&config.a_terra_contract)?
             .to_string(),
-        deps.api.addr_humanize(&config.contract_addr)?.to_string(),
+        env.contract.address.to_string(),
     )?;
 
     // Get lottery related deposits of aUST
@@ -54,7 +54,7 @@ pub fn execute_lottery(
     // Get contract current UST balance (used in _execute_prize)
     let balance = query_balance(
         deps.as_ref(),
-        deps.api.addr_humanize(&config.contract_addr)?.to_string(),
+        env.contract.address.to_string(),
         "uusd".to_string(),
     )?;
 
@@ -87,7 +87,7 @@ pub fn execute_lottery(
 
     // Prepare message for internal call to _execute_prize
     let execute_prize_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: deps.api.addr_humanize(&config.contract_addr)?.to_string(),
+        contract_addr: env.contract.address.to_string(),
         funds: vec![],
         msg: to_binary(&ExecuteMsg::_ExecutePrize { balance })?,
     });
@@ -120,7 +120,7 @@ pub fn _execute_prize(
     // Get contract current uusd balance
     let curr_balance = query_balance(
         deps.as_ref(),
-        deps.api.addr_humanize(&config.contract_addr)?.to_string(),
+        env.contract.address.to_string(),
         String::from("uusd"),
     )?;
 

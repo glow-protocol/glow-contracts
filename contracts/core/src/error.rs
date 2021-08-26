@@ -51,6 +51,9 @@ pub enum ContractError {
     #[error("Gift ticket amount must be greater than zero")]
     InvalidClaimAmount {},
 
+    #[error("There not enough claimable funds for the given user")]
+    InsufficientClaimableFunds {},
+
     #[error("Invalid prize distribution config")]
     InvalidPrizeDistribution {},
 

@@ -7,9 +7,7 @@ use cosmwasm_std::{
 };
 
 use crate::prize_strategy::{_execute_prize, execute_lottery, is_valid_sequence};
-use crate::querier::{
-    query_balance, query_exchange_rate, query_glow_emission_rate, query_token_balance,
-};
+use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_config, read_depositor_info, read_depositors, read_lottery_info, read_sequence_info,
     read_state, sequence_bucket, store_config, store_depositor_info, store_sequence_info,
@@ -26,6 +24,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 
 use cw0::Duration;
 use cw20::Cw20ExecuteMsg;
+use terraswap::querier::query_token_balance;
 
 use crate::claims::claim_deposits; //TODO: is the claim.rs needed? Consider refactoring
 use crate::error::ContractError;
@@ -512,11 +511,9 @@ pub fn withdraw(
     let withdraw_ratio = redeem_amount_shares / state.shares_supply;
     // Get contract's total balance of aUST
     let contract_a_balance = query_token_balance(
-        deps.as_ref(),
-        deps.api
-            .addr_humanize(&config.a_terra_contract)?
-            .to_string(),
-        env.contract.address.to_string(),
+        &deps.querier,
+        deps.api.addr_humanize(&config.a_terra_contract)?,
+        env.clone().contract.address,
     )?;
 
     // Calculate amount of aUST to be redeemed
@@ -639,7 +636,6 @@ pub fn claim(
     // Deduct taxes on the claim
     let net_coin_amount = deduct_tax(deps.as_ref(), coin(to_send.into(), "uusd"))?;
     let net_send = net_coin_amount.amount;
-
 
     // Double-check if there is enough balance to send in the contract
     let balance = query_balance(

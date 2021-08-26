@@ -77,8 +77,6 @@ fn mock_instantiate(deps: DepsMut) -> Response {
     );
 
     instantiate(deps, mock_env(), info, msg).expect("contract successfully executes InstantiateMsg")
-
-
 }
 
 fn mock_register_contracts(deps: DepsMut) {
@@ -100,7 +98,10 @@ fn mock_env_height(height: u64, time: u64) -> Env {
 
 #[test]
 fn proper_initialization() {
-    let mut deps = mock_dependencies(&[Coin{ denom: DENOM.to_string(),  amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) }]);
+    let mut deps = mock_dependencies(&[Coin {
+        denom: DENOM.to_string(),
+        amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+    }]);
 
     let msg = instantiate_msg();
     let info = mock_info(
@@ -696,7 +697,10 @@ fn gift_tickets() {
 #[test]
 fn withdraw() {
     // Initialize contract
-    let mut deps = mock_dependencies(&[Coin{ denom: DENOM.to_string(),  amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) }]);
+    let mut deps = mock_dependencies(&[Coin {
+        denom: DENOM.to_string(),
+        amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+    }]);
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
@@ -712,27 +716,30 @@ fn withdraw() {
         }],
     );
 
-
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("23456")],
     };
-
-
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let dep1 = read_depositor_info(
-            deps.as_ref().storage,
-            &deps.api.addr_canonicalize("addr0001").unwrap()
-        );
+        deps.as_ref().storage,
+        &deps.api.addr_canonicalize("addr0001").unwrap(),
+    );
 
     println!("dep1: {:x?}", dep1);
 
     let stor1 = read_state(&deps.storage).unwrap();
 
     println!("stor1: {:x?}", stor1);
+
+    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
+
+    let info = mock_info("addr0001", &[]);
+
+    let msg = ExecuteMsg::Withdraw { instant: None };
 
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR.to_string(),
@@ -741,13 +748,6 @@ fn withdraw() {
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + deposit_amount,
         }],
     );
-
-    let shares = (Decimal256::percent(TICKET_PRIZE) / Decimal256::permille(RATE)) * Uint256::one();
-
-    let info = mock_info("addr0001", &[]);
-
-    let msg = ExecuteMsg::Withdraw { instant: None };
-
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -758,8 +758,8 @@ fn withdraw() {
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let dep1 = read_depositor_info(
-            deps.as_ref().storage,
-            &deps.api.addr_canonicalize("addr0001").unwrap()
+        deps.as_ref().storage,
+        &deps.api.addr_canonicalize("addr0001").unwrap(),
     );
 
     println!("dep2: {:x?}", dep1);
@@ -767,7 +767,6 @@ fn withdraw() {
     let stor1 = read_state(&deps.storage).unwrap();
 
     println!("stor2: {:x?}", stor1);
-
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
@@ -860,7 +859,6 @@ fn withdraw() {
     );
 }
 
-#[test]
 #[test]
 fn instant_withdraw() {
     // Initialize contract
@@ -1082,13 +1080,13 @@ fn claim() {
 
     let msg = ExecuteMsg::Claim { amount: None };
 
-    println!("Block time 1: {}",env.block.time);
+    println!("Block time 1: {}", env.block.time);
 
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
-        env.block.time = env.block.time.plus_seconds(time*2);
+        env.block.time = env.block.time.plus_seconds(time * 2);
     }
-    println!("Block time 2: {}",env.block.time);
+    println!("Block time 2: {}", env.block.time);
     // TODO: change also the exchange rate here
 
     // TODO: add case asking for more amount that the one we have (which is non-zero)
@@ -1105,9 +1103,9 @@ fn claim() {
     );
 
     let dep = read_depositor_info(
-            &deps.storage,
-            &deps.api.addr_canonicalize("addr0001").unwrap()
-        );
+        &deps.storage,
+        &deps.api.addr_canonicalize("addr0001").unwrap(),
+    );
 
     println!("DepositorInfo: {:x?}", dep);
 

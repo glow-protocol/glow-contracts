@@ -1,7 +1,7 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    from_binary, to_binary, AllBalanceResponse, BalanceResponse, BankQuery, Binary, Coin, Deps,
-    QueryRequest, StdResult, Uint128, WasmQuery,
+    from_binary, to_binary, Addr, AllBalanceResponse, BalanceResponse, BankQuery, Binary, Coin,
+    Deps, QuerierWrapper, QueryRequest, StdResult, Uint128, WasmQuery,
 };
 use cosmwasm_storage::to_length_prefixed;
 use cw20::TokenInfoResponse;
@@ -67,14 +67,14 @@ pub fn query_token_balance(
 }
 
 pub fn query_glow_emission_rate(
-    deps: Deps,
-    distributor: String,
+    querier: &QuerierWrapper,
+    distributor: Addr,
     current_award: Decimal256,
     target_award: Decimal256,
     current_emission_rate: Decimal256,
 ) -> StdResult<GlowEmissionRateResponse> {
     let glow_emission_rate: GlowEmissionRateResponse =
-        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: distributor.to_string(),
             msg: to_binary(&DistributorQueryMsg::GlowEmissionRate {
                 current_award,

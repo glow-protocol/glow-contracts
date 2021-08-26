@@ -1,3 +1,6 @@
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     from_binary, from_slice, to_binary, Api, CanonicalAddr, Coin, ContractResult, Decimal, Empty,
@@ -8,8 +11,29 @@ use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrap
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_storage::to_length_prefixed;
-use moneymarket::market::{EpochStateResponse, QueryMsg};
+use moneymarket::market::{EpochStateResponse, QueryMsg as MarketQueryMsg};
+use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as GlowDistributorQueryMsg};
 use std::collections::HashMap;
+
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryMsg {
+    /// Query Epoch State to Anchor money market
+    EpochState {
+        block_height: Option<u64>,
+        distributed_interest: Option<Uint256>,
+    },
+
+    /// Query GLOW emission rate to distributor model contract
+    GlowEmissionRate {
+        current_award: Decimal256,
+        target_award: Decimal256,
+        current_emission_rate: Decimal256,
+    },
+
+    Balance { address: String }
+}
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -20,8 +44,8 @@ pub fn mock_dependencies(
         WasmMockQuerier::new(MockQuerier::new(&[(MOCK_CONTRACT_ADDR, contract_balance)]));
 
     OwnedDeps {
-        api: MockApi::default(),
         storage: MockStorage::default(),
+        api: MockApi::default(),
         querier: custom_querier,
     }
 }
@@ -31,6 +55,7 @@ pub struct WasmMockQuerier {
     token_querier: TokenQuerier,
     tax_querier: TaxQuerier,
     exchange_rate_querier: ExchangeRateQuerier,
+    emission_rate_querier: EmissionRateQuerier,
 }
 
 #[derive(Clone, Default)]
@@ -97,6 +122,17 @@ impl ExchangeRateQuerier {
     }
 }
 
+#[derive(Clone, Default)]
+pub struct EmissionRateQuerier {
+    emission_rate: Decimal256,
+}
+
+impl EmissionRateQuerier {
+    pub fn new(emission_rate: Decimal256) -> Self {
+        EmissionRateQuerier { emission_rate }
+    }
+}
+
 impl Querier for WasmMockQuerier {
     fn raw_query(&self, bin_request: &[u8]) -> QuerierResult {
         // MockQuerier doesn't support Custom, so we ignore it completely here
@@ -141,17 +177,29 @@ impl WasmMockQuerier {
                     panic!("DO NOT ENTER HERE")
                 }
             }
-            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => match from_binary(msg) {
-                Ok(QueryMsg::EpochState {
-                    block_height: _, ..
-                }) => {
+
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) =>
+                match from_binary(msg).unwrap(){
+
+                QueryMsg::EpochState {
+                    block_height: _,
+                    distributed_interest: _,
+                } => {
                     SystemResult::Ok(ContractResult::from(to_binary(&EpochStateResponse {
                         exchange_rate: Decimal256::permille(1023), // Current anchor rate,
                         aterra_supply: Uint256::one(),
                     })))
                 }
 
+                QueryMsg::GlowEmissionRate { current_award, target_award, current_emission_rate } =>
+                    {
+                        SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse{
+                            emission_rate: Decimal256::one()
+                        })))
+                    }
+
                 _ => match from_binary(msg).unwrap() {
+
                     Cw20QueryMsg::Balance { address } => {
                         let balances: &HashMap<String, Uint128> =
                             match self.token_querier.balances.get(contract_addr) {
@@ -199,6 +247,7 @@ impl WasmMockQuerier {
             token_querier: TokenQuerier::default(),
             tax_querier: TaxQuerier::default(),
             exchange_rate_querier: ExchangeRateQuerier::default(),
+            emission_rate_querier: EmissionRateQuerier::default(),
         }
     }
 
@@ -224,5 +273,10 @@ impl WasmMockQuerier {
     // configure anchor exchange rate
     pub fn with_exchange_rate(&mut self, rate: Decimal256) {
         self.exchange_rate_querier = ExchangeRateQuerier::new(rate);
+    }
+
+    // configure glow emission rate
+    pub fn with_emission_rate(&mut self, rate: Decimal256) {
+        self.emission_rate_querier = EmissionRateQuerier::new(rate);
     }
 }

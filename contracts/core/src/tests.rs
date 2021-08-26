@@ -867,12 +867,14 @@ fn instant_withdraw() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
+    let deposit_amount = (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into();
+
     // Address buys one ticket
     let info = mock_info(
         "addr0001",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Decimal256::percent(TICKET_PRIZE) * Uint256::one()).into(),
+            amount: deposit_amount,
         }],
     );
 
@@ -891,6 +893,14 @@ fn instant_withdraw() {
     let msg = ExecuteMsg::Withdraw {
         instant: Some(true),
     };
+
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR.to_string(),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + deposit_amount,
+        }],
+    );
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -1192,7 +1202,7 @@ fn execute_lottery() {
 
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
-        env.block.time.plus_seconds(time);
+        env.block.time = env.block.time.plus_seconds(time);
     }
 
     // It should not fail, but redeem message is not called
@@ -2200,4 +2210,3 @@ fn execute_epoch_operations() {
 
 // TODO: Refactor tests
 // TODO: Test prize_strategy functions combinations (without wasm)
-// TODO: Include RegisterContracts in the initialize function? If not manually included after calling initialize in the rest of tests

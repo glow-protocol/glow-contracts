@@ -138,6 +138,8 @@ fn test_sweep() {
     }]);
 
     mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
 
     deps.querier.with_tax(
         Decimal::percent(1),
@@ -182,7 +184,7 @@ fn test_sweep() {
             }
             .into(),
             gas_limit: None,
-            reply_on: ReplyOn::Success
+            reply_on: ReplyOn::Never //TODO: should not be OnSuccess??
         }]
     );
 }

@@ -680,10 +680,8 @@ pub fn execute_epoch_operations(deps: DepsMut, env: Env) -> Result<Response, Con
 
     // Query updated Glow emission rate and update state
     state.glow_emission_rate = query_glow_emission_rate(
-        deps.as_ref(),
-        deps.api
-            .addr_humanize(&config.distributor_contract)?
-            .to_string(),
+        &deps.querier,
+        deps.api.addr_humanize(&config.distributor_contract)?,
         state.award_available,
         config.target_award,
         state.glow_emission_rate,

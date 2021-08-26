@@ -1,5 +1,5 @@
 use crate::error::ContractError;
-use crate::querier::{query_balance, query_token_balance};
+use crate::querier::query_balance;
 use crate::state::{
     read_config, read_depositor_info, read_matching_sequences, read_state, store_depositor_info,
     store_lottery_info, store_state, LotteryInfo,
@@ -11,6 +11,8 @@ use cosmwasm_std::{
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
+use terraswap::querier::query_token_balance;
+
 use glow_protocol::core::ExecuteMsg;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::collections::HashMap;
@@ -40,11 +42,9 @@ pub fn execute_lottery(
 
     // Get contract current aUST balance
     let total_aterra_balance = query_token_balance(
-        deps.as_ref(),
-        deps.api
-            .addr_humanize(&config.a_terra_contract)?
-            .to_string(),
-        env.contract.address.to_string(),
+        &deps.querier,
+        deps.api.addr_humanize(&config.a_terra_contract)?,
+        env.clone().contract.address,
     )?;
 
     // Get lottery related deposits of aUST

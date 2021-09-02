@@ -112,12 +112,16 @@ pub struct ConfigResponse {
 pub struct StateResponse {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
+    pub total_deposits: Decimal256,
     pub lottery_deposits: Decimal256,
     pub shares_supply: Decimal256,
     pub deposit_shares: Decimal256,
     pub award_available: Decimal256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
+    pub last_reward_updated: u64,
+    pub global_reward_index: Decimal256,
+    pub glow_emission_rate: Decimal256,
 }
 
 // We define a custom struct for each query response

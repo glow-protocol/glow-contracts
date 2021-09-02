@@ -968,12 +968,16 @@ pub fn query_state<S: Storage, A: Api, Q: Querier>(
     Ok(StateResponse {
         total_tickets: state.total_tickets,
         total_reserve: state.total_reserve,
+        total_deposits: state.total_deposits,
         lottery_deposits: state.lottery_deposits,
         shares_supply: state.shares_supply,
         deposit_shares: state.deposit_shares,
         award_available: state.award_available,
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,
+        last_reward_updated: state.last_reward_updated,
+        global_reward_index: state.global_reward_index,
+        glow_emission_rate: state.glow_emission_rate,
     })
 }
 

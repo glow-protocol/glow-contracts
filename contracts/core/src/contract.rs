@@ -66,7 +66,7 @@ pub fn instantiate(
             anchor_contract: deps.api.addr_canonicalize(&msg.anchor_contract.as_str())?,
             lottery_interval: Duration::Time(msg.lottery_interval),
             block_time: Duration::Time(msg.block_time),
-            ticket_prize: msg.ticket_prize,
+            ticket_price: msg.ticket_price,
             prize_distribution: msg.prize_distribution,
             target_award: msg.target_award,
             reserve_factor: msg.reserve_factor,
@@ -125,7 +125,7 @@ pub fn execute(
             owner,
             lottery_interval,
             block_time,
-            ticket_prize,
+            ticket_price,
             prize_distribution,
             reserve_factor,
             split_factor,
@@ -136,7 +136,7 @@ pub fn execute(
             owner,
             lottery_interval,
             block_time,
-            ticket_prize,
+            ticket_price,
             prize_distribution,
             reserve_factor,
             split_factor,
@@ -196,7 +196,7 @@ pub fn deposit(
 
     let amount_tickets = combinations.len() as u64;
 
-    let required_amount = config.ticket_prize * Uint256::from(amount_tickets);
+    let required_amount = config.ticket_price * Uint256::from(amount_tickets);
     if deposit_amount < required_amount {
         return Err(ContractError::InsufficientDepositAmount(amount_tickets));
     }
@@ -308,7 +308,7 @@ pub fn gift_tickets(
     }
 
     let amount_tickets = combinations.len() as u64;
-    let required_amount = config.ticket_prize * Uint256::from(amount_tickets);
+    let required_amount = config.ticket_price * Uint256::from(amount_tickets);
 
     if deposit_amount != required_amount {
         return Err(ContractError::InsufficientGiftDepositAmount(amount_tickets));
@@ -815,8 +815,8 @@ pub fn update_config(
         config.block_time = Duration::Time(block_time);
     }
 
-    if let Some(ticket_prize) = ticket_price {
-        config.ticket_prize = ticket_prize;
+    if let Some(ticket_price) = ticket_price {
+        config.ticket_price = ticket_price;
     }
 
     if let Some(prize_distribution) = prize_distribution {
@@ -872,7 +872,7 @@ pub fn update_config(
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
 }
 
-pub fn query(deps: Deps, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State { block_height } => to_binary(&query_state(deps, block_height)?),
@@ -898,7 +898,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
             .to_string(),
         lottery_interval: config.lottery_interval,
         block_time: config.block_time,
-        ticket_prize: config.ticket_prize,
+        ticket_price: config.ticket_price,
         prize_distribution: config.prize_distribution,
         target_award: config.target_award,
         reserve_factor: config.reserve_factor,

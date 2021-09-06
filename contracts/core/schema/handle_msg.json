@@ -101,7 +101,7 @@
                 }
               ]
             },
-            "ticket_prize": {
+            "ticket_price": {
               "anyOf": [
                 {
                   "$ref": "#/definitions/Decimal256"

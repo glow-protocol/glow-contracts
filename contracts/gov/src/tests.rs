@@ -140,7 +140,6 @@ fn test_sweep() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
-
     deps.querier.with_tax(
         Decimal::percent(1),
         &[(&"uusd".to_string(), &Uint128::from(1000000u128))],

@@ -11,10 +11,9 @@ use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrap
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_storage::to_length_prefixed;
-use moneymarket::market::{EpochStateResponse, QueryMsg as MarketQueryMsg};
 use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as GlowDistributorQueryMsg};
+use moneymarket::market::{EpochStateResponse, QueryMsg as MarketQueryMsg};
 use std::collections::HashMap;
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -32,7 +31,9 @@ pub enum QueryMsg {
         current_emission_rate: Decimal256,
     },
 
-    Balance { address: String }
+    Balance {
+        address: String,
+    },
 }
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
@@ -178,9 +179,9 @@ impl WasmMockQuerier {
                 }
             }
 
-            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) =>
-                match from_binary(msg).unwrap(){
-
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => match from_binary(msg)
+                .unwrap()
+            {
                 QueryMsg::EpochState {
                     block_height: _,
                     distributed_interest: _,
@@ -191,15 +192,15 @@ impl WasmMockQuerier {
                     })))
                 }
 
-                QueryMsg::GlowEmissionRate { current_award, target_award, current_emission_rate } =>
-                    {
-                        SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse{
-                            emission_rate: Decimal256::one()
-                        })))
-                    }
+                QueryMsg::GlowEmissionRate {
+                    current_award,
+                    target_award,
+                    current_emission_rate,
+                } => SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse {
+                    emission_rate: Decimal256::one(),
+                }))),
 
                 _ => match from_binary(msg).unwrap() {
-
                     Cw20QueryMsg::Balance { address } => {
                         let balances: &HashMap<String, Uint128> =
                             match self.token_querier.balances.get(contract_addr) {

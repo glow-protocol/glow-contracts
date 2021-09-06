@@ -10,5 +10,6 @@ mod random;
 #[cfg(test)]
 mod tests;
 
+mod integration_test;
 #[cfg(test)]
 mod mock_querier;

@@ -872,7 +872,7 @@ pub fn update_config(
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
 }
 
-pub fn query(deps: Deps, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State { block_height } => to_binary(&query_state(deps, block_height)?),

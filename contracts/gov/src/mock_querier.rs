@@ -9,8 +9,8 @@ use cosmwasm_std::{
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
 
 use std::collections::HashMap;
+use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 use terraswap::asset::{AssetInfo, PairInfo};
-use terra_cosmwasm::{TerraQueryWrapper, TerraRoute, TaxRateResponse, TerraQuery, TaxCapResponse};
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -219,7 +219,6 @@ impl WasmMockQuerier {
         }
     }
 }
-
 
 impl WasmMockQuerier {
     pub fn new(base: MockQuerier<TerraQueryWrapper>) -> Self {

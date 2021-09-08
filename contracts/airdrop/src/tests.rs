@@ -1,7 +1,7 @@
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
 use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-use cosmwasm_std::{attr, from_binary, to_binary, SubMsg, Uint128, WasmMsg, CosmosMsg};
+use cosmwasm_std::{attr, from_binary, to_binary, CosmosMsg, SubMsg, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::airdrop::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, IsClaimedResponse, LatestStageResponse,
@@ -119,7 +119,6 @@ fn register_merkle_root() {
         merkle_root.merkle_root
     );
 }
-
 
 #[test]
 fn claim() {

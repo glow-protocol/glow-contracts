@@ -4,7 +4,7 @@ use cosmwasm_std::{
     Deps, QueryRequest, StdResult, Uint128, WasmQuery,
 };
 use cosmwasm_storage::to_length_prefixed;
-use cw20::{TokenInfoResponse, Cw20QueryMsg, BalanceResponse as Cw20BalanceResponse};
+use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
 use terra_cosmwasm::TerraQuerier;
 
 pub fn query_all_balances(deps: Deps, account_addr: Addr) -> StdResult<Vec<Coin>> {
@@ -76,4 +76,3 @@ pub fn deduct_tax(deps: Deps, coin: Coin) -> StdResult<Coin> {
         amount: (Uint256::from(coin.amount) - tax_amount).into(),
     })
 }
-

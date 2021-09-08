@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use cosmwasm_std::testing::{mock_env, MockApi, MockStorage};
-use cosmwasm_std::{coins, to_binary, Addr, Empty, Uint128, Coin};
+use cosmwasm_std::{coins, to_binary, Addr, Coin, Empty, Uint128};
 use cw20::{Cw20Coin, Cw20Contract, Cw20ExecuteMsg};
 use cw_multi_test::{App, BankKeeper, Contract, ContractWrapper, Executor};
 
@@ -11,7 +11,10 @@ use glow_protocol::core::{
     QueryMsg as CoreQuery, StateResponse as CoreStateResponse,
 };
 
-use crate::contract::{execute as core_execute, instantiate as core_instantiate, query as core_query, INITIAL_DEPOSIT_AMOUNT};
+use crate::contract::{
+    execute as core_execute, instantiate as core_instantiate, query as core_query,
+    INITIAL_DEPOSIT_AMOUNT,
+};
 use cosmwasm_bignumber::Decimal256;
 
 const TEST_CREATOR: &str = "creator";
@@ -38,14 +41,9 @@ fn mock_app() -> App {
 }
 
 pub fn contract_core() -> Box<dyn Contract<Empty>> {
-    let contract = ContractWrapper::new(
-        core_execute,
-        core_instantiate,
-        core_query,
-    );
+    let contract = ContractWrapper::new(core_execute, core_instantiate, core_query);
 
     Box::new(contract)
-
 }
 
 pub fn contract_cw20() -> Box<dyn Contract<Empty>> {
@@ -57,11 +55,9 @@ pub fn contract_cw20() -> Box<dyn Contract<Empty>> {
     Box::new(contract)
 }
 
-
 #[test]
 // Instantiate GLOW token
 fn instantiate_glow_token() {
-
     let mut app = mock_app();
 
     // set personal balance
@@ -90,7 +86,6 @@ fn instantiate_glow_token() {
 #[test]
 // Instantiate GLOW core
 fn instantiate_glow_core() {
-
     let mut app = mock_app();
 
     // set personal balance
@@ -103,9 +98,16 @@ fn instantiate_glow_core() {
     let msg = crate::tests::instantiate_msg();
 
     let core_addr = app
-        .instantiate_contract(core_id, owner.clone(), &msg, &[Coin {
-            denom: DENOM.to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }], "CORE", None)
+        .instantiate_contract(
+            core_id,
+            owner.clone(),
+            &msg,
+            &[Coin {
+                denom: DENOM.to_string(),
+                amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+            }],
+            "CORE",
+            None,
+        )
         .unwrap();
 }

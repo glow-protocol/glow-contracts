@@ -212,7 +212,7 @@ fn update_config() {
     assert_eq!(0, res.messages.len());
 
     // Check owner has changed
-    let res = query(deps.as_ref(), mock_env(),QueryMsg::Config {}).unwrap();
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
 
     assert_eq!("owner1".to_string(), config_response.owner);
@@ -234,7 +234,7 @@ fn update_config() {
     assert_eq!(0, res.messages.len());
 
     // check lottery_interval has changed
-    let res = query(deps.as_ref(), mock_env(),QueryMsg::Config {}).unwrap();
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.lottery_interval, Duration::Time(1800));
 
@@ -254,7 +254,7 @@ fn update_config() {
     assert_eq!(0, res.messages.len());
 
     // check reserve_factor has changed
-    let res = query(deps.as_ref(), mock_env(),QueryMsg::Config {}).unwrap();
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.reserve_factor, Decimal256::percent(1));
 

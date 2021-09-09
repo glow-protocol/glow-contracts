@@ -59,7 +59,7 @@ fn instantiate_glow_token() {
         marketing: None,
     };
     let _cash_addr = app
-        .instantiate_contract(cw20_id, owner.clone(), &msg, &[], "CASH", None)
+        .instantiate_contract(cw20_id, owner, &msg, &[], "CASH", None)
         .unwrap();
 }
 
@@ -80,7 +80,7 @@ fn instantiate_glow_core() {
     let _core_addr = app
         .instantiate_contract(
             core_id,
-            owner.clone(),
+            owner,
             &msg,
             &[Coin {
                 denom: DENOM.to_string(),

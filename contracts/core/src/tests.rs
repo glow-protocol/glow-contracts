@@ -89,6 +89,7 @@ fn mock_register_contracts(deps: DepsMut) {
         .expect("contract successfully executes RegisterContracts");
 }
 
+#[allow(dead_code)] //TODO: use this fn
 fn mock_env_height(height: u64, time: u64) -> Env {
     let mut env = mock_env();
     env.block.height = height;
@@ -381,7 +382,7 @@ fn deposit() {
     );
      */
 
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
@@ -537,7 +538,7 @@ fn gift_tickets() {
             amount: (Decimal256::percent(TICKET_PRICE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
         Err(ContractError::InvalidGift {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -555,7 +556,7 @@ fn gift_tickets() {
             amount: (Decimal256::percent(TICKET_PRICE * 2u64) * Uint256::one()).into(),
         }],
     );
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
         Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -585,7 +586,7 @@ fn gift_tickets() {
         recipient: "addr1111".to_string(),
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
         Err(ContractError::InvalidSequence {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -1068,7 +1069,7 @@ fn claim() {
         amount: Some(Uint128::from(10u64)),
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
         Err(ContractError::InsufficientClaimableFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -1084,7 +1085,7 @@ fn claim() {
 
     let mut env = mock_env();
 
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
     match res {
         Err(ContractError::InsufficientClaimableFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -1238,7 +1239,7 @@ fn execute_lottery() {
 
     // TODO: add test case with deposit_shares != 0
 
-    let res = execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
     let next_lottery_time = read_state(deps.as_ref().storage).unwrap().next_lottery_time;
@@ -1296,7 +1297,7 @@ fn execute_prize_no_tickets() {
     let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
 
     let msg = ExecuteMsg::_ExecutePrize { balance };
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
 
     match res {
         Err(ContractError::Unauthorized {}) => {}
@@ -1327,7 +1328,7 @@ fn execute_prize_no_tickets() {
      */
 
     // Run lottery, no winners - should run correctly
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
     assert_eq!(
@@ -1526,7 +1527,7 @@ fn execute_prize_one_winner() {
     let msg = ExecuteMsg::_ExecutePrize {
         balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
     };
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
 
@@ -1942,7 +1943,7 @@ fn execute_prize_many_different_winning_combinations() {
     for (index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
-            combinations: vec![String::from(format!("{:0>5}", index))],
+            combinations: vec![format!("{:0>5}", index)],
             // combinations: vec![String::from("00000")],
         };
         let info = mock_info(
@@ -2099,7 +2100,7 @@ fn claim_rewards_multiple_depositors() {
     println!("Current height {:?}", env.block.height);
 
     let msg = ExecuteMsg::ClaimRewards {};
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     println!("{:?}", res.attributes);
     assert_eq!(
@@ -2174,7 +2175,7 @@ fn execute_epoch_operations() {
     env.block.height += 100;
 
     let msg = ExecuteMsg::ExecuteEpochOps {};
-    let res = execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     assert_eq!(
         res.messages,

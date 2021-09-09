@@ -55,7 +55,7 @@ pub struct WasmMockQuerier {
     token_querier: TokenQuerier,
     tax_querier: TaxQuerier,
     exchange_rate_querier: ExchangeRateQuerier,
-    emission_rate_querier: EmissionRateQuerier,
+    emission_rate_querier: EmissionRateQuerier, //TODO: use in tests and replace _ for EmissionRateQuerier
 }
 
 #[derive(Clone, Default)]
@@ -128,6 +128,7 @@ pub struct EmissionRateQuerier {
 }
 
 impl EmissionRateQuerier {
+    #[allow(dead_code)] // TODO: use this fn in tests
     pub fn new(emission_rate: Decimal256) -> Self {
         EmissionRateQuerier { emission_rate }
     }
@@ -276,6 +277,7 @@ impl WasmMockQuerier {
     }
 
     // configure glow emission rate
+    #[allow(dead_code)] //TODO: Use in tests
     pub fn with_emission_rate(&mut self, rate: Decimal256) {
         self.emission_rate_querier = EmissionRateQuerier::new(rate);
     }

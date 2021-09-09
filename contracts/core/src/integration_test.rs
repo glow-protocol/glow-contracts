@@ -1,36 +1,17 @@
 #![cfg(test)]
 
 use cosmwasm_std::testing::{mock_env, MockApi, MockStorage};
-use cosmwasm_std::{coins, to_binary, Addr, Coin, Empty, Uint128};
-use cw20::{Cw20Coin, Cw20Contract, Cw20ExecuteMsg};
+use cosmwasm_std::{coins, Addr, Coin, Empty, Uint128};
+use cw20::{Cw20Coin};
 use cw_multi_test::{App, BankKeeper, Contract, ContractWrapper, Executor};
 
-use glow_protocol::core::{
-    ConfigResponse as CoreConfigResponse, DepositorInfoResponse, DepositorsInfoResponse,
-    ExecuteMsg as CoreMsg, InstantiateMsg as CoreInstantiate, LotteryInfoResponse,
-    QueryMsg as CoreQuery, StateResponse as CoreStateResponse,
-};
 
 use crate::contract::{
     execute as core_execute, instantiate as core_instantiate, query as core_query,
     INITIAL_DEPOSIT_AMOUNT,
 };
-use cosmwasm_bignumber::Decimal256;
 
-const TEST_CREATOR: &str = "creator";
-const ANCHOR: &str = "anchor";
-const A_UST: &str = "aterra-ust";
 const DENOM: &str = "uusd";
-const GOV_ADDR: &str = "gov";
-const DISTRIBUTOR_ADDR: &str = "distributor";
-
-const TICKET_PRICE: u64 = 1_000_000_000; // 10_000_000 as %
-const SPLIT_FACTOR: u64 = 75; // as a %
-const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
-const RESERVE_FACTOR: u64 = 5; // as a %
-const RATE: u64 = 1023; // as a permille
-const WEEK_TIME: u64 = 604800; // in seconds
-const HOUR_TIME: u64 = 3600; // in seconds
 
 fn mock_app() -> App {
     let env = mock_env();
@@ -78,7 +59,7 @@ fn instantiate_glow_token() {
         mint: None,
         marketing: None,
     };
-    let cash_addr = app
+    let _cash_addr = app
         .instantiate_contract(cw20_id, owner.clone(), &msg, &[], "CASH", None)
         .unwrap();
 }
@@ -97,7 +78,7 @@ fn instantiate_glow_core() {
     let core_id = app.store_code(contract_core());
     let msg = crate::tests::instantiate_msg();
 
-    let core_addr = app
+    let _core_addr = app
         .instantiate_contract(
             core_id,
             owner.clone(),

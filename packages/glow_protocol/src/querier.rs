@@ -1,9 +1,8 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, AllBalanceResponse, BalanceResponse, BankQuery, Binary, Coin,
-    Deps, QueryRequest, StdResult, Uint128, WasmQuery,
+    to_binary, Addr, AllBalanceResponse, BalanceResponse, BankQuery, Coin,
+    Deps, QueryRequest, StdResult, WasmQuery,
 };
-use cosmwasm_storage::to_length_prefixed;
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
 use terra_cosmwasm::TerraQuerier;
 

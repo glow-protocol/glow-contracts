@@ -112,13 +112,13 @@ fn proper_initialization() {
         terraswap_factory: TERRASWAP_FACTORY.to_string(),
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    let config: Config = config_read(&mut deps.storage).load().unwrap();
+    let config: Config = config_read(deps.as_ref().storage).load().unwrap();
     assert_eq!(
         config.glow_token,
         deps.api.addr_canonicalize(VOTING_TOKEN).unwrap()
     );
 
-    let state: State = state_read(&mut deps.storage).load().unwrap();
+    let state: State = state_read(deps.as_ref().storage).load().unwrap();
     assert_eq!(
         state,
         State {

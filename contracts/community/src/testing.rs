@@ -130,7 +130,7 @@ fn transfer_ownership_gov() {
         owner: Some("other".to_string()),
     };
     let info = mock_info("addr0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
 
     match res {
         Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),

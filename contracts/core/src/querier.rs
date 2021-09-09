@@ -1,7 +1,7 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     from_binary, to_binary, Addr, AllBalanceResponse, BalanceResponse, BankQuery, Binary, Coin,
-    Deps, QuerierWrapper, QueryRequest, StdResult, Uint128, WasmQuery,
+    Deps, QuerierWrapper, QueryRequest, StdResult, WasmQuery,
 };
 use cosmwasm_storage::to_length_prefixed;
 use cw20::TokenInfoResponse;
@@ -15,7 +15,7 @@ use crate::state::read_depositor_info;
 pub fn query_exchange_rate(deps: Deps, money_market_addr: String) -> StdResult<EpochStateResponse> {
     let epoch_state: EpochStateResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: money_market_addr.to_string(),
+            contract_addr: money_market_addr,
             msg: to_binary(&AnchorMsg::EpochState {
                 block_height: None,
                 distributed_interest: None,
@@ -31,7 +31,7 @@ pub fn query_all_balances(deps: Deps, account_addr: String) -> StdResult<Vec<Coi
     let all_balances: AllBalanceResponse =
         deps.querier
             .query(&QueryRequest::Bank(BankQuery::AllBalances {
-                address: account_addr.to_string(),
+                address: account_addr,
             }))?;
     Ok(all_balances.amount)
 }
@@ -39,32 +39,12 @@ pub fn query_all_balances(deps: Deps, account_addr: String) -> StdResult<Vec<Coi
 pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResult<Uint256> {
     // load price form the oracle
     let balance: BalanceResponse = deps.querier.query(&QueryRequest::Bank(BankQuery::Balance {
-        address: account_addr.to_string(),
+        address: account_addr,
         denom,
     }))?;
     Ok(balance.amount.amount.into())
 }
 
-pub fn query_token_balance(
-    deps: Deps,
-    contract_addr: String,
-    account_addr: String,
-) -> StdResult<Uint256> {
-    // load balance form the token contract
-    let res: Binary = deps
-        .querier
-        .query(&QueryRequest::Wasm(WasmQuery::Raw {
-            contract_addr: contract_addr.to_string(),
-            key: Binary::from(concat(
-                &to_length_prefixed(b"balance").to_vec(),
-                (deps.api.addr_canonicalize(&account_addr)?).as_slice(),
-            )),
-        }))
-        .unwrap_or_else(|_| to_binary(&Uint128::zero()).unwrap());
-
-    let balance: Uint128 = from_binary(&res)?;
-    Ok(balance.into())
-}
 
 pub fn query_glow_emission_rate(
     querier: &QuerierWrapper,
@@ -97,7 +77,7 @@ pub fn query_depositor_claims(deps: Deps, addr: String) -> StdResult<Vec<Claim>>
 pub fn query_supply(deps: Deps, contract_addr: String) -> StdResult<Uint256> {
     // load price form the oracle
     let res: Binary = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
-        contract_addr: contract_addr.to_string(),
+        contract_addr,
         key: Binary::from(to_length_prefixed(b"token_info")),
     }))?;
 
@@ -132,9 +112,3 @@ pub fn deduct_tax(deps: Deps, coin: Coin) -> StdResult<Coin> {
     })
 }
 
-#[inline]
-fn concat(namespace: &[u8], key: &[u8]) -> Vec<u8> {
-    let mut k = namespace.to_vec();
-    k.extend_from_slice(key);
-    k
-}

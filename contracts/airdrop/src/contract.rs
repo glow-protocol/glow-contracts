@@ -107,7 +107,7 @@ pub fn register_merkle_root(
     Ok(Response::new().add_attributes(vec![
         attr("action", "register_merkle_root"),
         attr("stage", stage.to_string()),
-        attr("merkle_root", merkle_root.to_string()),
+        attr("merkle_root", merkle_root),
     ]))
 }
 

@@ -3,16 +3,15 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Api, CanonicalAddr, Coin, ContractResult, Decimal, Empty,
+    from_binary, from_slice, to_binary, Coin, ContractResult, Decimal,
     OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
-use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
+use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_storage::to_length_prefixed;
-use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as GlowDistributorQueryMsg};
-use moneymarket::market::{EpochStateResponse, QueryMsg as MarketQueryMsg};
+use glow_protocol::distributor::{GlowEmissionRateResponse};
+use moneymarket::market::{EpochStateResponse};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -191,11 +190,11 @@ impl WasmMockQuerier {
                         aterra_supply: Uint256::one(),
                     })))
                 }
-
+                // TODO: revise, currently hard-coded
                 QueryMsg::GlowEmissionRate {
-                    current_award,
-                    target_award,
-                    current_emission_rate,
+                    current_award: _,
+                    target_award: _,
+                    current_emission_rate: _,
                 } => SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse {
                     emission_rate: Decimal256::one(),
                 }))),

@@ -1,4 +1,4 @@
-use crate::contract::{execute, instantiate, query, INITIAL_DEPOSIT_AMOUNT, SEQUENCE_DIGITS};
+use crate::contract::{execute, instantiate, query, INITIAL_DEPOSIT_AMOUNT};
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
     read_config, read_depositor_info, read_lottery_info, read_sequence_info, read_state,
@@ -182,7 +182,7 @@ fn proper_initialization() {
     );
 
     // Cannot register contracts again //TODO
-    let msg = ExecuteMsg::RegisterContracts {
+    let _msg = ExecuteMsg::RegisterContracts {
         gov_contract: GOV_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
@@ -518,9 +518,11 @@ fn gift_tickets() {
     );
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
-    let amount_required = TICKET_PRICE * 2u64;
+
+    //TODO: Revise this. Clippy complains as variables not being used
+    let _amount_required = TICKET_PRICE * 2u64;
     match res {
-        Err(ContractError::InsufficientGiftDepositAmount(amount_required)) => {}
+        Err(ContractError::InsufficientGiftDepositAmount(_amount_required)) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
     // Invalid recipient - you cannot make a gift to yourself
@@ -1189,11 +1191,6 @@ fn execute_lottery() {
     let mut env = mock_env();
     let info = mock_info("addr0001", &[]);
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
-
-    let mut lottery_expiration: u64 = 0;
-    if let Duration::Time(time) = WEEK {
-        lottery_expiration = env.block.time.seconds();
-    }
 
     match res {
         Err(ContractError::LotteryInProgress {}) => {}

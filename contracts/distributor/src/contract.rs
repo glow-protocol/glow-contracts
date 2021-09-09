@@ -90,7 +90,7 @@ pub fn update_config(
     decrement_multiplier: Option<Decimal256>,
 ) -> StdResult<Response> {
     let mut config: Config = read_config(deps.as_ref().storage)?;
-    if config.owner != deps.api.addr_canonicalize(&info.sender.as_str())? {
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
         return Err(StdError::generic_err("Unauthorized"));
     }
 
@@ -129,7 +129,7 @@ pub fn add_distributor(
     distributor: String,
 ) -> StdResult<Response> {
     let mut config: Config = read_config(deps.storage)?;
-    if config.owner != deps.api.addr_canonicalize(&info.sender.as_str())? {
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
         return Err(StdError::generic_err("Unauthorized"));
     }
 
@@ -158,7 +158,7 @@ pub fn remove_distributor(
     distributor: String,
 ) -> StdResult<Response> {
     let mut config: Config = read_config(deps.storage)?;
-    if config.owner != deps.api.addr_canonicalize(&info.sender.as_str())? {
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
         return Err(StdError::generic_err("Unauthorized"));
     }
 
@@ -193,7 +193,7 @@ pub fn spend(
     amount: Uint128,
 ) -> StdResult<Response> {
     let config: Config = read_config(deps.storage)?;
-    let sender_raw = deps.api.addr_canonicalize(&info.sender.as_str())?;
+    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
 
     if !config.whitelist.into_iter().any(|w| w == sender_raw) {
         return Err(StdError::generic_err("unauthorized"));

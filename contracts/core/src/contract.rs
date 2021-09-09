@@ -58,12 +58,12 @@ pub fn instantiate(
     store_config(
         deps.storage,
         &Config {
-            owner: deps.api.addr_canonicalize(&msg.owner.as_str())?,
-            a_terra_contract: deps.api.addr_canonicalize(&msg.aterra_contract.as_str())?,
+            owner: deps.api.addr_canonicalize(msg.owner.as_str())?,
+            a_terra_contract: deps.api.addr_canonicalize(msg.aterra_contract.as_str())?,
             gov_contract: CanonicalAddr::from(vec![]),
             distributor_contract: CanonicalAddr::from(vec![]),
             stable_denom: msg.stable_denom.clone(),
-            anchor_contract: deps.api.addr_canonicalize(&msg.anchor_contract.as_str())?,
+            anchor_contract: deps.api.addr_canonicalize(msg.anchor_contract.as_str())?,
             lottery_interval: Duration::Time(msg.lottery_interval),
             block_time: Duration::Time(msg.block_time),
             ticket_price: msg.ticket_price,

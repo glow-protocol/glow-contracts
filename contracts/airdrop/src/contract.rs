@@ -69,7 +69,7 @@ pub fn update_config(
     owner: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = read_config(deps.as_ref().storage)?;
-    if deps.api.addr_canonicalize(&info.sender.as_str())? != config.owner {
+    if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -88,7 +88,7 @@ pub fn register_merkle_root(
     merkle_root: String,
 ) -> Result<Response, ContractError> {
     let config: Config = read_config(deps.as_ref().storage)?;
-    if deps.api.addr_canonicalize(&info.sender.as_str())? != config.owner {
+    if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -121,7 +121,7 @@ pub fn claim(
     let config: Config = read_config(deps.storage)?;
     let merkle_root: String = read_merkle_root(deps.storage, stage)?;
 
-    let user_raw = deps.api.addr_canonicalize(&info.sender.as_str())?;
+    let user_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
 
     // If user claimed target stage, return err
     if read_claimed(deps.as_ref().storage, &user_raw, stage)? {

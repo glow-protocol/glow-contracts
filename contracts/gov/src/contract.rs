@@ -46,7 +46,7 @@ pub fn instantiate(
     let config = Config {
         glow_token: CanonicalAddr::from(vec![]),
         terraswap_factory: CanonicalAddr::from(vec![]),
-        owner: deps.api.addr_canonicalize(&info.sender.as_str())?,
+        owner: deps.api.addr_canonicalize(info.sender.as_str())?,
         quorum: msg.quorum,
         threshold: msg.threshold,
         voting_period: msg.voting_period,
@@ -57,7 +57,7 @@ pub fn instantiate(
     };
 
     let state = State {
-        contract_addr: deps.api.addr_canonicalize(&env.contract.address.as_str())?,
+        contract_addr: deps.api.addr_canonicalize(env.contract.address.as_str())?,
         poll_count: 0,
         total_share: Uint128::zero(),
         total_deposit: Uint128::zero(),
@@ -125,7 +125,7 @@ pub fn receive_cw20(
 ) -> Result<Response, ContractError> {
     // only asset contract can execute this message
     let config: Config = config_read(deps.storage).load()?;
-    if config.glow_token != deps.api.addr_canonicalize(&info.sender.as_str())? {
+    if config.glow_token != deps.api.addr_canonicalize(info.sender.as_str())? {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -242,7 +242,7 @@ pub fn update_config(
 ) -> Result<Response, ContractError> {
     let api = deps.api;
     config_store(deps.storage).update(|mut config| {
-        if config.owner != api.addr_canonicalize(&info.sender.as_str())? {
+        if config.owner != api.addr_canonicalize(info.sender.as_str())? {
             return Err(ContractError::Unauthorized {});
         }
 

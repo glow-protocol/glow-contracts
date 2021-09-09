@@ -2,9 +2,8 @@
 
 use cosmwasm_std::testing::{mock_env, MockApi, MockStorage};
 use cosmwasm_std::{coins, Addr, Coin, Empty, Uint128};
-use cw20::{Cw20Coin};
+use cw20::Cw20Coin;
 use cw_multi_test::{App, BankKeeper, Contract, ContractWrapper, Executor};
-
 
 use crate::contract::{
     execute as core_execute, instantiate as core_instantiate, query as core_query,

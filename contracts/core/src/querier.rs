@@ -45,7 +45,6 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
     Ok(balance.amount.amount.into())
 }
 
-
 pub fn query_glow_emission_rate(
     querier: &QuerierWrapper,
     distributor: Addr,
@@ -111,4 +110,3 @@ pub fn deduct_tax(deps: Deps, coin: Coin) -> StdResult<Coin> {
         amount: (Uint256::from(coin.amount) - tax_amount).into(),
     })
 }
-

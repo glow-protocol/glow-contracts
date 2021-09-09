@@ -5,35 +5,40 @@
   "required": [
     "anchor_contract",
     "block_time",
-    "collector_contract",
     "distributor_contract",
+    "gov_contract",
+    "instant_withdrawal_fee",
     "lottery_interval",
     "owner",
     "prize_distribution",
     "reserve_factor",
     "split_factor",
     "stable_denom",
-    "ticket_prize",
+    "target_award",
+    "ticket_price",
     "unbonding_period"
   ],
   "properties": {
     "anchor_contract": {
-      "$ref": "#/definitions/HumanAddr"
+      "type": "string"
     },
     "block_time": {
       "$ref": "#/definitions/Duration"
     },
-    "collector_contract": {
-      "$ref": "#/definitions/HumanAddr"
-    },
     "distributor_contract": {
-      "$ref": "#/definitions/HumanAddr"
+      "type": "string"
+    },
+    "gov_contract": {
+      "type": "string"
+    },
+    "instant_withdrawal_fee": {
+      "$ref": "#/definitions/Decimal256"
     },
     "lottery_interval": {
       "$ref": "#/definitions/Duration"
     },
     "owner": {
-      "$ref": "#/definitions/HumanAddr"
+      "type": "string"
     },
     "prize_distribution": {
       "type": "array",
@@ -50,7 +55,10 @@
     "stable_denom": {
       "type": "string"
     },
-    "ticket_prize": {
+    "target_award": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "ticket_price": {
       "$ref": "#/definitions/Decimal256"
     },
     "unbonding_period": {
@@ -76,9 +84,11 @@
               "format": "uint64",
               "minimum": 0.0
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
+          "description": "Time in seconds",
           "type": "object",
           "required": [
             "time"
@@ -89,12 +99,10 @@
               "format": "uint64",
               "minimum": 0.0
             }
-          }
+          },
+          "additionalProperties": false
         }
       ]
-    },
-    "HumanAddr": {
-      "type": "string"
     }
   }
 }

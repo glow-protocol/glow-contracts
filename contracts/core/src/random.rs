@@ -1,4 +1,4 @@
-use cosmwasm_std::{Api, Coin, Extern, Querier, StdResult, Storage, Uint128};
+use cosmwasm_std::{Coin, Deps, StdResult, Uint128};
 use sha3::{Digest, Keccak256};
 use terra_cosmwasm::{SwapResponse, TerraQuerier};
 
@@ -13,16 +13,12 @@ fn my_hash(val: u128) -> u128 {
 }
 
 #[allow(dead_code)]
-pub fn rn_gen<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    init_entropy: u128,
-    upperbound: u128,
-) -> StdResult<Uint128> {
+pub fn rn_gen(deps: Deps, init_entropy: u128, upperbound: u128) -> StdResult<Uint128> {
     let terra_querier = TerraQuerier::new(&deps.querier);
     let res: SwapResponse = terra_querier.query_swap(
         Coin {
             denom: String::from("uusd"),
-            amount: Uint128(init_entropy),
+            amount: Uint128::from(init_entropy),
         },
         "uluna",
     )?;
@@ -38,5 +34,5 @@ pub fn rn_gen<S: Storage, A: Api, Q: Querier>(
         random = my_hash(random);
     }
 
-    Ok(Uint128(random % upperbound))
+    Ok(Uint128::from(random % upperbound))
 }

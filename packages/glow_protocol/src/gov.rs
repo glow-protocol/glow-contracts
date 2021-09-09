@@ -1,4 +1,4 @@
-use cosmwasm_std::{Binary, Decimal, HumanAddr, Uint128};
+use cosmwasm_std::{Binary, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use std::fmt;
 use crate::common::OrderBy;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InitMsg {
+pub struct InstantiateMsg {
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
@@ -19,11 +19,11 @@ pub struct InitMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum HandleMsg {
+pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     RegisterContracts {
-        glow_token: HumanAddr,
-        terraswap_factory: HumanAddr,
+        glow_token: String,
+        terraswap_factory: String,
     },
     /// Public Message
     /// Sweep all given denom balance to GLOW token
@@ -31,7 +31,7 @@ pub enum HandleMsg {
         denom: String,
     },
     UpdateConfig {
-        owner: Option<HumanAddr>,
+        owner: Option<String>,
         quorum: Option<Decimal>,
         threshold: Option<Decimal>,
         voting_period: Option<u64>,
@@ -73,15 +73,15 @@ pub enum Cw20HookMsg {
         title: String,
         description: String,
         link: Option<String>,
-        execute_msgs: Option<Vec<ExecuteMsg>>,
+        execute_msgs: Option<Vec<PollExecuteMsg>>,
     },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub struct ExecuteMsg {
+pub struct PollExecuteMsg {
     pub order: u64,
-    pub contract: HumanAddr,
+    pub contract: String,
     pub msg: Binary,
 }
 
@@ -91,7 +91,7 @@ pub enum QueryMsg {
     Config {},
     State {},
     Staker {
-        address: HumanAddr,
+        address: String,
     },
     Poll {
         poll_id: u64,
@@ -104,7 +104,7 @@ pub enum QueryMsg {
     },
     Voters {
         poll_id: u64,
-        start_after: Option<HumanAddr>,
+        start_after: Option<String>,
         limit: Option<u32>,
         order_by: Option<OrderBy>,
     },
@@ -112,9 +112,9 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub owner: HumanAddr,
-    pub glow_token: HumanAddr,
-    pub terraswap_factory: HumanAddr,
+    pub owner: String,
+    pub glow_token: String,
+    pub terraswap_factory: String,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
@@ -134,14 +134,14 @@ pub struct StateResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct PollResponse {
     pub id: u64,
-    pub creator: HumanAddr,
+    pub creator: String,
     pub status: PollStatus,
     pub end_height: u64,
     pub title: String,
     pub description: String,
     pub link: Option<String>,
     pub deposit_amount: Uint128,
-    pub execute_data: Option<Vec<ExecuteMsg>>,
+    pub execute_data: Option<Vec<PollExecuteMsg>>,
     pub yes_votes: Uint128, // balance
     pub no_votes: Uint128,  // balance
     pub staked_amount: Option<Uint128>,
@@ -167,7 +167,7 @@ pub struct StakerResponse {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct VotersResponseItem {
-    pub voter: HumanAddr,
+    pub voter: String,
     pub vote: VoteOption,
     pub balance: Uint128,
 }

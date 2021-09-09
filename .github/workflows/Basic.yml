@@ -1,71 +1,55 @@
-# Based on https://github.com/actions-rs/example/blob/master/.github/workflows/quickstart.yml
-
 on: [push, pull_request]
 
-name: Basic
+name: Tests & Formatting
 
 jobs:
-
-  test:
-    name: Test Suite
+  clippy:
+    name: Actions - clippy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v2
         with:
+          fetch-depth: 1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
           profile: minimal
-          toolchain: 1.52.0
-          target: wasm32-unknown-unknown
           override: true
+      - run: cargo fetch --verbose
+      - run: cargo clippy --all --all-targets -- -D warnings
 
-      - name: Run tests
-        uses: actions-rs/cargo@v1
+  rustfmt:
+    name: Actions - rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
         with:
-          command: test
+          fetch-depth: 1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+          profile: minimal
+          override: true
+      - run: cargo fmt -- --check
+
+  unit-test:
+    name: Actions - unit test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+      - run: cargo fetch --verbose
+      - run: cargo build
+      - run: cargo test --verbose --all
         env:
           RUST_BACKTRACE: 1
-
-    #  - name: Compile WASM contract
-    #    uses: actions-rs/cargo@v1
-    #    with:
-    #      command: wasm
-    #    env:
-    #      RUSTFLAGS: "-C link-arg=-s"
-
-  lints:
-    name: Lints
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: 1.52.0
-          override: true
-          components: rustfmt, clippy
-
-      - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-      - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
-
-      # CHANGES_IN_REPO=$(git status --porcelain)
-      # after this, but I don't know how
-      # - name: Generate Schema
-      #  uses: actions-rs/cargo@v1
-      #  with:
-      #    command: schema
-      #    args: --locked

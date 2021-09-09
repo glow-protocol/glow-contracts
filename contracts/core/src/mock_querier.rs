@@ -7,10 +7,33 @@ use cosmwasm_std::{
     QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
-
-use std::collections::HashMap;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
-use terraswap::asset::{AssetInfo, PairInfo};
+
+use cosmwasm_bignumber::{Decimal256, Uint256};
+use glow_protocol::distributor::GlowEmissionRateResponse;
+use moneymarket::market::EpochStateResponse;
+use std::collections::HashMap;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryMsg {
+    /// Query Epoch State to Anchor money market
+    EpochState {
+        block_height: Option<u64>,
+        distributed_interest: Option<Uint256>,
+    },
+
+    /// Query GLOW emission rate to distributor model contract
+    GlowEmissionRate {
+        current_award: Decimal256,
+        target_award: Decimal256,
+        current_emission_rate: Decimal256,
+    },
+
+    Balance {
+        address: String,
+    },
+}
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -21,8 +44,8 @@ pub fn mock_dependencies(
         WasmMockQuerier::new(MockQuerier::new(&[(MOCK_CONTRACT_ADDR, contract_balance)]));
 
     OwnedDeps {
-        api: MockApi::default(),
         storage: MockStorage::default(),
+        api: MockApi::default(),
         querier: custom_querier,
     }
 }
@@ -31,7 +54,8 @@ pub struct WasmMockQuerier {
     base: MockQuerier<TerraQueryWrapper>,
     token_querier: TokenQuerier,
     tax_querier: TaxQuerier,
-    terraswap_factory_querier: TerraswapFactoryQuerier,
+    exchange_rate_querier: ExchangeRateQuerier,
+    emission_rate_querier: EmissionRateQuerier, //TODO: use in tests and replace _ for EmissionRateQuerier
 }
 
 #[derive(Clone, Default)]
@@ -88,24 +112,26 @@ pub(crate) fn caps_to_map(caps: &[(&String, &Uint128)]) -> HashMap<String, Uint1
 }
 
 #[derive(Clone, Default)]
-pub struct TerraswapFactoryQuerier {
-    pairs: HashMap<String, String>,
+pub struct ExchangeRateQuerier {
+    exchange_rate: Decimal256,
 }
 
-impl TerraswapFactoryQuerier {
-    pub fn new(pairs: &[(&String, &String)]) -> Self {
-        TerraswapFactoryQuerier {
-            pairs: pairs_to_map(pairs),
-        }
+impl ExchangeRateQuerier {
+    pub fn new(exchange_rate: Decimal256) -> Self {
+        ExchangeRateQuerier { exchange_rate }
     }
 }
 
-pub(crate) fn pairs_to_map(pairs: &[(&String, &String)]) -> HashMap<String, String> {
-    let mut pairs_map: HashMap<String, String> = HashMap::new();
-    for (key, pair) in pairs.iter() {
-        pairs_map.insert(key.to_string(), pair.to_string());
+#[derive(Clone, Default)]
+pub struct EmissionRateQuerier {
+    emission_rate: Decimal256,
+}
+
+impl EmissionRateQuerier {
+    #[allow(dead_code)] // TODO: use this fn in tests
+    pub fn new(emission_rate: Decimal256) -> Self {
+        EmissionRateQuerier { emission_rate }
     }
-    pairs_map
 }
 
 impl Querier for WasmMockQuerier {
@@ -122,12 +148,6 @@ impl Querier for WasmMockQuerier {
         };
         self.handle_query(&request)
     }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum QueryMsg {
-    Pair { asset_infos: [AssetInfo; 2] },
 }
 
 impl WasmMockQuerier {
@@ -158,28 +178,28 @@ impl WasmMockQuerier {
                     panic!("DO NOT ENTER HERE")
                 }
             }
-            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => match from_binary(msg) {
-                Ok(QueryMsg::Pair { asset_infos }) => {
-                    let key = asset_infos[0].to_string() + asset_infos[1].to_string().as_str();
-                    match self.terraswap_factory_querier.pairs.get(&key) {
-                        Some(v) => SystemResult::Ok(ContractResult::from(to_binary(&PairInfo {
-                            contract_addr: v.to_string(),
-                            liquidity_token: "liquidity".to_string(),
-                            asset_infos: [
-                                AssetInfo::NativeToken {
-                                    denom: "uusd".to_string(),
-                                },
-                                AssetInfo::NativeToken {
-                                    denom: "uusd".to_string(),
-                                },
-                            ],
-                        }))),
-                        None => SystemResult::Err(SystemError::InvalidRequest {
-                            error: "No pair info exists".to_string(),
-                            request: msg.as_slice().into(),
-                        }),
-                    }
+
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => match from_binary(msg)
+                .unwrap()
+            {
+                QueryMsg::EpochState {
+                    block_height: _,
+                    distributed_interest: _,
+                } => {
+                    SystemResult::Ok(ContractResult::from(to_binary(&EpochStateResponse {
+                        exchange_rate: Decimal256::permille(1023), // Current anchor rate,
+                        aterra_supply: Uint256::one(),
+                    })))
                 }
+                // TODO: revise, currently hard-coded
+                QueryMsg::GlowEmissionRate {
+                    current_award: _,
+                    target_award: _,
+                    current_emission_rate: _,
+                } => SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse {
+                    emission_rate: Decimal256::one(),
+                }))),
+
                 _ => match from_binary(msg).unwrap() {
                     Cw20QueryMsg::Balance { address } => {
                         let balances: &HashMap<String, Uint128> =
@@ -212,6 +232,7 @@ impl WasmMockQuerier {
                             to_binary(&Cw20BalanceResponse { balance }).unwrap(),
                         ))
                     }
+
                     _ => panic!("DO NOT ENTER HERE"),
                 },
             },
@@ -226,8 +247,18 @@ impl WasmMockQuerier {
             base,
             token_querier: TokenQuerier::default(),
             tax_querier: TaxQuerier::default(),
-            terraswap_factory_querier: TerraswapFactoryQuerier::default(),
+            exchange_rate_querier: ExchangeRateQuerier::default(),
+            emission_rate_querier: EmissionRateQuerier::default(),
         }
+    }
+
+    // set a new balance for the given address and return the old balance
+    pub fn update_balance<U: Into<String>>(
+        &mut self,
+        addr: U,
+        balance: Vec<Coin>,
+    ) -> Option<Vec<Coin>> {
+        self.base.update_balance(addr, balance)
     }
 
     // configure the mint whitelist mock querier
@@ -240,8 +271,14 @@ impl WasmMockQuerier {
         self.tax_querier = TaxQuerier::new(rate, caps);
     }
 
-    // configure the terraswap pair
-    pub fn with_terraswap_pairs(&mut self, pairs: &[(&String, &String)]) {
-        self.terraswap_factory_querier = TerraswapFactoryQuerier::new(pairs);
+    // configure anchor exchange rate
+    pub fn with_exchange_rate(&mut self, rate: Decimal256) {
+        self.exchange_rate_querier = ExchangeRateQuerier::new(rate);
+    }
+
+    // configure glow emission rate
+    #[allow(dead_code)] //TODO: Use in tests
+    pub fn with_emission_rate(&mut self, rate: Decimal256) {
+        self.emission_rate_querier = EmissionRateQuerier::new(rate);
     }
 }

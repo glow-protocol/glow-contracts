@@ -1,7 +1,7 @@
 pub mod airdrop;
 pub mod common;
 pub mod community;
-pub mod core;
+pub mod lotto;
 pub mod distributor;
 pub mod gov;
 pub mod querier;

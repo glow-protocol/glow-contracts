@@ -1,6 +1,6 @@
 # Glow Savings Protocol Contracts
 
-This monorepository contains the source code for the smart contracts implementing Glow Protocol on the [Terra](https://terra.money) blockchain.
+This monorepository contains the source code for the smart contract implementing Glow Lotto Protocol on the [Terra](https://terra.money) blockchain.
 
 You can find information about the architecture, usage, and function of the smart contracts on the official Glow Savings documentation [site](https://app.gitbook.com/@glow-savings).
 

@@ -3,7 +3,7 @@ use cosmwasm_std::{BlockInfo, CanonicalAddr, DepsMut, StdResult, Storage, Uint12
 
 use crate::state::{read_depositor_info, store_depositor_info};
 use cw0::Expiration;
-use glow_protocol::core::Claim;
+use glow_protocol::lotto::Claim;
 
 // TODO: helper functions should be methods, check cw_controllers
 /// This creates a claim, such that the given address can claim an amount of tokens after

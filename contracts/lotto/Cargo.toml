@@ -1,5 +1,5 @@
 [package]
-name = "glow-core"
+name = "glow-lotto"
 version = "0.2.0"
 authors = ["aes <andres@elevenyellow.com>"]
 edition = "2018"

@@ -13,7 +13,7 @@ use crate::state::{
     read_state, sequence_bucket, store_config, store_depositor_info, store_sequence_info,
     store_state, Config, DepositorInfo, State,
 };
-use glow_protocol::core::{
+use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
     InstantiateMsg, LotteryInfoResponse, QueryMsg, StateResponse,
 };

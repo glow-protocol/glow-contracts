@@ -5,7 +5,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
 use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 use cw0::{Duration, Expiration};
-use glow_protocol::core::{Claim, DepositorInfoResponse};
+use glow_protocol::lotto::{Claim, DepositorInfoResponse};
 
 use crate::prize_strategy::count_seq_matches;
 

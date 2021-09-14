@@ -6,9 +6,13 @@
     "award_available",
     "current_lottery",
     "deposit_shares",
+    "global_reward_index",
+    "glow_emission_rate",
+    "last_reward_updated",
     "lottery_deposits",
     "next_lottery_time",
     "shares_supply",
+    "total_deposits",
     "total_reserve",
     "total_tickets"
   ],
@@ -24,6 +28,17 @@
     "deposit_shares": {
       "$ref": "#/definitions/Decimal256"
     },
+    "global_reward_index": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "glow_emission_rate": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "last_reward_updated": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "lottery_deposits": {
       "$ref": "#/definitions/Decimal256"
     },
@@ -31,6 +46,9 @@
       "$ref": "#/definitions/Expiration"
     },
     "shares_supply": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "total_deposits": {
       "$ref": "#/definitions/Decimal256"
     },
     "total_reserve": {

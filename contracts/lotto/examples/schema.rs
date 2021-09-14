@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use glow_protocol::core::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StateResponse};
+use glow_protocol::lotto::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StateResponse};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

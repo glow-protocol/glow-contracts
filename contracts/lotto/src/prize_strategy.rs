@@ -13,7 +13,7 @@ use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use terraswap::querier::query_token_balance;
 
-use glow_protocol::core::ExecuteMsg;
+use glow_protocol::lotto::ExecuteMsg;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::collections::HashMap;
 use std::ops::{Add, Sub};

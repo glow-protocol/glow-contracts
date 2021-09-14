@@ -12,7 +12,7 @@ use cosmwasm_std::{
     Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use glow_protocol::core::{
+use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
 };
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;

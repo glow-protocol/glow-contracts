@@ -1,9 +1,9 @@
 pub mod airdrop;
 pub mod common;
 pub mod community;
-pub mod lotto;
 pub mod distributor;
 pub mod gov;
+pub mod lotto;
 pub mod querier;
 pub mod staking;
 pub mod vesting;

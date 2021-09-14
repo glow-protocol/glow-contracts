@@ -5,8 +5,8 @@ use cosmwasm_std::{
 };
 use cosmwasm_storage::to_length_prefixed;
 use cw20::TokenInfoResponse;
-use glow_protocol::lotto::Claim;
 use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
+use glow_protocol::lotto::Claim;
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 use terra_cosmwasm::TerraQuerier;
 

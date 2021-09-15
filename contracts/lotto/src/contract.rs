@@ -230,7 +230,7 @@ pub fn deposit(
     let amount = net_coin_amount.amount;
 
     // add amount of aUST entitled from the deposit
-    let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate; //TODO: Upgrade moneymarket version
+    let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
 
     // We are storing the deposit amount without the tax deduction, so we subsidy it for UX reasons.
     depositor_info.deposit_amount = depositor_info
@@ -250,14 +250,13 @@ pub fn deposit(
     state.shares_supply = state.shares_supply.add(minted_amount);
     state.deposit_shares = state
         .deposit_shares
-        .add(minted_amount - minted_amount * config.split_factor);
-    state.lottery_deposits = state
-        .lottery_deposits
-        .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
-
+        .add(minted_amount - minted_amount * config.split_factor); // TODO: add in update_config that split factor is 0<x<1
     state.total_deposits = state
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
+    state.lottery_deposits = state
+        .lottery_deposits
+        .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
 
     // Update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
@@ -573,6 +572,7 @@ pub fn withdraw(
             return Err(ContractError::InsufficientFunds {});
         }
         msgs.push(CosmosMsg::Bank(BankMsg::Send {
+            //TODO: at this time, the funds coming from the past redemption are still not available
             to_address: info.sender.to_string(),
             amount: vec![net_coin_amount],
         }));
@@ -614,14 +614,19 @@ pub fn claim(
     }
 
     let config = read_config(deps.storage)?;
+    let mut state = read_state(deps.storage)?;
 
     let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
     let mut to_send = claim_deposits(deps.storage, &sender_raw, &env.block, amount)?;
 
     //TODO: doing two consecutive reads here, need to refactor
     let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &sender_raw);
-    to_send += depositor.redeemable_amount;
 
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
+    to_send += depositor.redeemable_amount;
     if to_send == Uint128::zero() {
         return Err(ContractError::InsufficientClaimableFunds {});
     }
@@ -653,6 +658,7 @@ pub fn claim(
 
     depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(deps.storage, &sender_raw, &depositor)?;
+    store_state(deps.storage, &state)?;
 
     Ok(Response::new()
         .add_message(CosmosMsg::Bank(BankMsg::Send {

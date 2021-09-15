@@ -103,7 +103,7 @@ pub fn update_config(
     }
 
     if let Some(emission_cap) = emission_cap {
-        config.emission_cap = emission_cap;
+        config.emission_cap = emission_cap; // TODO: Verify is greater than floor
     }
 
     if let Some(emission_floor) = emission_floor {

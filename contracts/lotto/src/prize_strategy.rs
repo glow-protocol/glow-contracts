@@ -13,6 +13,7 @@ use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use terraswap::querier::query_token_balance;
 
+use crate::contract::compute_reward;
 use glow_protocol::lotto::ExecuteMsg;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::collections::HashMap;
@@ -26,6 +27,9 @@ pub fn execute_lottery(
 ) -> Result<Response, ContractError> {
     let mut state = read_state(deps.storage)?;
     let config = read_config(deps.storage)?;
+
+    // Compute global Glow rewards
+    compute_reward(&mut state, env.block.height);
 
     // No sent funds allowed when executing the lottery
     if !info.funds.is_empty() {
@@ -46,6 +50,8 @@ pub fn execute_lottery(
         deps.api.addr_humanize(&config.a_terra_contract)?,
         env.clone().contract.address,
     )?;
+
+    //TODO: check that total_aterra_balance > deposit_shares
 
     // Get lottery related deposits of aUST
     let lottery_aterra =
@@ -186,9 +192,6 @@ pub fn _execute_prize(
 
     state.current_lottery += 1;
     state.total_reserve = state.total_reserve.add(total_reserve_commission);
-    // println!("state: {:?}", state);
-    // println!("award_available: {}", state.award_available);
-    // println!("total_awarded_prize: {}", total_awarded_prize);
     state.award_available = state.award_available.sub(total_awarded_prize);
     store_state(deps.storage, &state)?;
 
@@ -227,8 +230,6 @@ fn assign_prize(
     distribution: &[Decimal256],
 ) -> Decimal256 {
     let number_winners = Uint256::from(winners as u64);
-
-    // println!("distribution element {:?}", matches);
 
     awardable_prize * distribution[matches as usize] / Decimal256::from_uint256(number_winners)
 }

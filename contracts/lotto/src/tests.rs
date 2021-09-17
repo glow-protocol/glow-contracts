@@ -1050,7 +1050,7 @@ fn claim() {
     )]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
-    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Claim amount that you don't have, should fail
     let info = mock_info("addr0002", &[]);

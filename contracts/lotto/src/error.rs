@@ -45,6 +45,9 @@ pub enum ContractError {
     #[error("There are no deposits to withdraw")]
     InsufficientFunds {},
 
+    #[error("The Anchor Pool is smaller than total deposits, no withdraws allowed")]
+    InsufficientPoolFunds {},
+
     #[error("There are no funds to run the lottery")]
     InsufficientLotteryFunds {},
 

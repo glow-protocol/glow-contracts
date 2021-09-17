@@ -526,6 +526,13 @@ pub fn withdraw(
 
     let mut redeem_stable = redeem_amount * epoch_state.exchange_rate;
 
+    // Double-checking Lotto pool is solvent against deposits
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * epoch_state.exchange_rate
+        < state.total_deposits
+    {
+        return Err(ContractError::InsufficientPoolFunds {});
+    }
+
     // Update global state
     state.total_tickets = state.total_tickets.sub(Uint256::from(tickets_amount));
     state.shares_supply = state.shares_supply.sub(redeem_amount_shares);

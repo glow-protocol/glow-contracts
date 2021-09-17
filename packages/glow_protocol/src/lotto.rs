@@ -57,9 +57,7 @@ pub enum ExecuteMsg {
     Withdraw {
         instant: Option<bool>,
     },
-    Claim {
-        amount: Option<Uint128>,
-    },
+    Claim {},
     ClaimRewards {},
     ExecuteLottery {},
     /// (internal) Called internally by ExecuteLottery

@@ -116,7 +116,7 @@ pub fn execute(
         } => gift_tickets(deps, env, info, combinations, recipient),
         ExecuteMsg::Sponsor { award } => sponsor(deps, info, award),
         ExecuteMsg::Withdraw { instant } => withdraw(deps, env, info, instant),
-        ExecuteMsg::Claim { amount } => claim(deps, env, info, amount),
+        ExecuteMsg::Claim {} => claim(deps, env, info),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::_ExecutePrize { balance } => _execute_prize(deps, env, info, balance),
@@ -603,21 +603,12 @@ pub fn withdraw(
 }
 
 // Send available UST to user from current redeemable balance and unbonded deposits
-pub fn claim(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    amount: Option<Uint128>,
-) -> Result<Response, ContractError> {
-    if (amount.is_some()) && (amount.unwrap().is_zero()) {
-        return Err(ContractError::InvalidClaimAmount {});
-    }
-
+pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     let config = read_config(deps.storage)?;
     let mut state = read_state(deps.storage)?;
 
     let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    let mut to_send = claim_deposits(deps.storage, &sender_raw, &env.block, amount)?;
+    let mut to_send = claim_deposits(deps.storage, &sender_raw, &env.block, None)?;
 
     //TODO: doing two consecutive reads here, need to refactor
     let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &sender_raw);
@@ -629,13 +620,6 @@ pub fn claim(
     to_send += depositor.redeemable_amount;
     if to_send == Uint128::zero() {
         return Err(ContractError::InsufficientClaimableFunds {});
-    }
-
-    // User requested more funds that the ones it's entitled to
-    if let Some(amount) = amount {
-        if amount > to_send {
-            return Err(ContractError::InsufficientClaimableFunds {});
-        }
     }
 
     // Deduct taxes on the claim
@@ -653,9 +637,6 @@ pub fn claim(
         return Err(ContractError::InsufficientFunds {});
     }
 
-    // TODO: add logic when claim amount is less than redeemable_amount
-    // TODO: should I compute here depositor reward as well?
-
     depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(deps.storage, &sender_raw, &depositor)?;
     store_state(deps.storage, &state)?;
@@ -665,14 +646,13 @@ pub fn claim(
             to_address: info.sender.to_string(),
             amount: vec![Coin {
                 denom: config.stable_denom,
-                amount: net_send, //TODO: alway sending net_send, what happens in case amount < net_send?
+                amount: net_send,
             }],
         }))
         .add_attributes(vec![
             attr("action", "claim"),
             attr("depositor", info.sender.to_string()),
             attr("redeemed_amount", net_send),
-            attr("redeemable_amount_left", depositor.redeemable_amount),
         ]))
 }
 

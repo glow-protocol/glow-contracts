@@ -1052,22 +1052,9 @@ fn claim() {
     // Correct withdraw, user has 1 ticket to be withdrawn
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    // Claim 0 amount, should fail
-    let msg = ExecuteMsg::Claim {
-        amount: Some(Uint128::zero()),
-    };
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
-
-    match res {
-        Err(ContractError::InvalidClaimAmount {}) => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
     // Claim amount that you don't have, should fail
     let info = mock_info("addr0002", &[]);
-    let msg = ExecuteMsg::Claim {
-        amount: Some(Uint128::from(10u64)),
-    };
+    let msg = ExecuteMsg::Claim {};
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
@@ -1079,9 +1066,7 @@ fn claim() {
 
     // Claim amount that you have, but still in unbonding state, should fail
     let info = mock_info("addr0001", &[]);
-    let msg = ExecuteMsg::Claim {
-        amount: Some(Uint128::from(10u64)),
-    };
+    let msg = ExecuteMsg::Claim {};
 
     let mut env = mock_env();
 
@@ -1091,7 +1076,7 @@ fn claim() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let msg = ExecuteMsg::Claim { amount: None };
+    let msg = ExecuteMsg::Claim {};
 
     println!("Block time 1: {}", env.block.time);
 
@@ -1159,7 +1144,6 @@ fn claim() {
             attr("action", "claim"),
             attr("depositor", "addr0001"),
             attr("redeemed_amount", 9_999_999u64.to_string()),
-            attr("redeemable_amount_left", Uint128::zero().to_string()),
         ]
     );
 }

@@ -561,18 +561,7 @@ pub fn withdraw(
             coin((redeem_stable * Uint256::one()).into(), "uusd"),
         )?;
 
-        // Double-check if there is enough balance to send in the contract
-        let balance = query_balance(
-            deps.as_ref(),
-            env.contract.address.to_string(),
-            String::from("uusd"),
-        )?;
-
-        if net_coin_amount.amount > balance.into() {
-            return Err(ContractError::InsufficientFunds {});
-        }
         msgs.push(CosmosMsg::Bank(BankMsg::Send {
-            //TODO: at this time, the funds coming from the past redemption are still not available
             to_address: info.sender.to_string(),
             amount: vec![net_coin_amount],
         }));

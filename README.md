@@ -12,7 +12,7 @@ Glow depends on [Anchor Protocol](https://anchorprotocol.com) and [Terraswap](ht
 
 | Contract                                            | Reference                                              | Description                                                                                                                        |
 | --------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [`core`](./contracts/core)  | [doc](https://docs.joinglow.com/contracts/collector) | Core logic of Glow protocol, prize-linked savings accounts built on top of Anchor protocol                                          |
+| [`lotto`](./contracts/lotto)  | [doc](https://docs.joinglow.com/contracts/collector) | Logic of Glow Lotto protocol, prize-linked savings accounts built on top of Anchor protocol                                          |
 | [`community`](../contracts/community) | [doc](https://docs.joinglow.com/contracts/community) | Manages the Glow Ecosystem Fund                                                                                                   |
 | [`gov`](./contracts/gov)              | [doc](https://docs.joinglow.com/contracts/gov)       | Allows Glow contracts to be controlled by decentralized governance, distributes GLOW received to GLOW stakers |
 | [`staking`](./contracts/staking)      | [doc](https://docs.joinglow.com/contracts/staking)   | Distributes GLOW rewards from block reward to LP stakers                                                                            |

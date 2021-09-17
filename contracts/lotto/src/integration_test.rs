@@ -6,7 +6,7 @@ use cw20::Cw20Coin;
 use cw_multi_test::{App, BankKeeper, Contract, ContractWrapper, Executor};
 
 use crate::contract::{
-    execute as core_execute, instantiate as core_instantiate, query as core_query,
+    execute as lotto_execute, instantiate as lotto_instantiate, query as lotto_query,
     INITIAL_DEPOSIT_AMOUNT,
 };
 
@@ -20,8 +20,8 @@ fn mock_app() -> App {
     App::new(api, env.block, bank, MockStorage::new())
 }
 
-pub fn contract_core() -> Box<dyn Contract<Empty>> {
-    let contract = ContractWrapper::new(core_execute, core_instantiate, core_query);
+pub fn contract_lotto() -> Box<dyn Contract<Empty>> {
+    let contract = ContractWrapper::new(lotto_execute, lotto_instantiate, lotto_query);
 
     Box::new(contract)
 }
@@ -64,8 +64,8 @@ fn instantiate_glow_token() {
 }
 
 #[test]
-// Instantiate GLOW core
-fn instantiate_glow_core() {
+// Instantiate GLOW Lotto
+fn instantiate_glow_lotto() {
     let mut app = mock_app();
 
     // set personal balance
@@ -74,12 +74,12 @@ fn instantiate_glow_core() {
     app.init_bank_balance(&owner, init_funds).unwrap();
 
     // set up cw20 contract with some tokens
-    let core_id = app.store_code(contract_core());
+    let lotto_id = app.store_code(contract_lotto());
     let msg = crate::tests::instantiate_msg();
 
-    let _core_addr = app
+    let _lotto_addr = app
         .instantiate_contract(
-            core_id,
+            lotto_id,
             owner,
             &msg,
             &[Coin {

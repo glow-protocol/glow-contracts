@@ -777,7 +777,7 @@ pub fn update_config(
     if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
         return Err(ContractError::Unauthorized {});
     }
-    // change owner of Glow core contract
+    // change owner of Glow lotto contract
     if let Some(owner) = owner {
         config.owner = deps.api.addr_canonicalize(&owner)?;
     }

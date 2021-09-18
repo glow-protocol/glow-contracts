@@ -8,8 +8,8 @@ use crate::state::{
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Decimal, DepsMut,
-    Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
+    attr, from_binary, to_binary, Addr, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Decimal,
+    DepsMut, Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -19,6 +19,7 @@ use glow_protocol::lotto::{
 
 use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
+use glow_protocol::querier::query_token_balance;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use moneymarket::querier::deduct_tax; //TODO: import from glow_protocol package
 use std::ops::{Add, Div, Mul};
@@ -738,11 +739,16 @@ fn withdraw() {
 
     println!("stor1: {:x?}", stor1);
 
-    let shares = (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+    // Add 1 to account for rounding error
+    let shares = Uint256::one()
+        + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
 
     let info = mock_info("addr0001", &[]);
 
-    let msg = ExecuteMsg::Withdraw { instant: None };
+    let msg = ExecuteMsg::Withdraw {
+        amount: None,
+        instant: None,
+    };
 
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR.to_string(),
@@ -808,7 +814,7 @@ fn withdraw() {
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
-                amount: Decimal256::from_uint256(Uint256::from(9999999u128)),
+                amount: Decimal256::from_uint256(Uint256::from(10000000u128)),
                 release_at: WEEK.after(&mock_env().block),
             }]
         }
@@ -855,7 +861,7 @@ fn withdraw() {
             attr("redeem_amount_anchor", shares.to_string()),
             attr(
                 "redeem_stable_amount",
-                Decimal256::from_str("9999999.933").unwrap().to_string()
+                Decimal256::from_str("10000000").unwrap().to_string()
             ),
             attr("instant_withdrawal_fee", Decimal256::zero().to_string())
         ]
@@ -889,11 +895,13 @@ fn instant_withdraw() {
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let shares = (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+    let shares = Uint256::one()
+        + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
 
     let info = mock_info("addr0001", &[]);
 
     let msg = ExecuteMsg::Withdraw {
+        amount: None,
         instant: Some(true),
     };
 
@@ -988,7 +996,7 @@ fn instant_withdraw() {
                 to_address: info.sender.to_string(),
                 amount: vec![Coin {
                     denom: "uusd".to_string(),
-                    amount: Uint128::from(8999999u128)
+                    amount: Uint128::from(9000000u128)
                 }],
             }))
         ]
@@ -1003,11 +1011,11 @@ fn instant_withdraw() {
             attr("redeem_amount_anchor", shares.to_string()),
             attr(
                 "redeem_stable_amount",
-                Decimal256::from_str("8999999.9397").unwrap().to_string()
+                Decimal256::from_str("9000000").unwrap().to_string()
             ),
             attr(
                 "instant_withdrawal_fee",
-                Decimal256::from_str("999999.9933").unwrap().to_string()
+                Decimal256::from_str("1000000").unwrap().to_string()
             )
         ]
     )
@@ -1040,14 +1048,30 @@ fn claim() {
 
     // Address withdraws one ticket
     let info = mock_info("addr0001", &[]);
-    let msg = ExecuteMsg::Withdraw { instant: None };
+    let msg = ExecuteMsg::Withdraw {
+        amount: None,
+        instant: None,
+    };
 
-    let shares = (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+    // Add one to account for rounding error
+    let shares = Uint256::one()
+        + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
         &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
     )]);
+
+    let shares = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+    let state = read_state(deps.as_ref().storage).unwrap();
+    println!("shares: {}", shares);
+    println!("pooled_deposits: {}", shares * Decimal256::permille(RATE));
+    println!("total deposits: {}", state.total_deposits);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1133,7 +1157,7 @@ fn claim() {
             to_address: "addr0001".to_string(),
             amount: vec![Coin {
                 denom: String::from("uusd"),
-                amount: Uint128::from(9_999_999u64), //TODO: should be 10_000_000
+                amount: Uint128::from(10_000_000u64),
             }],
         }))]
     );
@@ -1143,7 +1167,7 @@ fn claim() {
         vec![
             attr("action", "claim"),
             attr("depositor", "addr0001"),
-            attr("redeemed_amount", 9_999_999u64.to_string()),
+            attr("redeemed_amount", 10_000_000u64.to_string()),
         ]
     );
 }

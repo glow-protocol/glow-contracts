@@ -115,7 +115,7 @@ pub fn execute(
             recipient,
         } => gift_tickets(deps, env, info, combinations, recipient),
         ExecuteMsg::Sponsor { award } => sponsor(deps, info, award),
-        ExecuteMsg::Withdraw { instant } => withdraw(deps, env, info, instant),
+        ExecuteMsg::Withdraw { amount, instant } => withdraw(deps, env, info, amount, instant),
         ExecuteMsg::Claim {} => claim(deps, env, info),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
@@ -458,6 +458,7 @@ pub fn withdraw(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    amount: Option<Uint128>,
     instant: Option<bool>,
 ) -> Result<Response, ContractError> {
     let config = read_config(deps.storage)?;
@@ -466,8 +467,11 @@ pub fn withdraw(
     let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &sender_raw);
 
-    // Depositor does not have deposits in the pool
     if depositor.shares.is_zero() || state.shares_supply.is_zero() {
+        return Err(ContractError::InvalidWithdraw {});
+    }
+
+    if (amount.is_some()) && (amount.unwrap().is_zero()) {
         return Err(ContractError::InvalidWithdraw {});
     }
 
@@ -475,68 +479,67 @@ pub fn withdraw(
     compute_reward(&mut state, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
-    let tickets = depositor.tickets.clone();
-    let tickets_amount = depositor.tickets.len() as u128;
-
-    // Remove depositor's address from holders Sequence
-    tickets.iter().for_each(|seq| {
-        let mut holders: Vec<CanonicalAddr> = read_sequence_info(deps.storage, seq);
-        let index = holders.iter().position(|x| *x == sender_raw).unwrap();
-        holders.remove(index);
-        sequence_bucket(deps.storage)
-            .save(seq.as_bytes(), &holders)
-            .unwrap();
-    });
-
-    // Drain depositor info ticket holdings
-    depositor.tickets = vec![];
-
-    // Deduct corresponding lottery deposits
-    state.lottery_deposits = state
-        .lottery_deposits
-        .sub(depositor.deposit_amount * config.split_factor);
-
-    state.total_deposits = state.total_deposits.sub(depositor.deposit_amount);
-    depositor.deposit_amount = Decimal256::zero();
-
-    // Calculate amount of pool shares to be redeemed
-    let redeem_amount_shares = depositor.shares;
-    depositor.shares = Decimal256::zero();
-
-    // Calculate corresponding amount of deposit shares to be redeemed
-    let amount_deposit_shares = redeem_amount_shares - redeem_amount_shares * config.split_factor;
-
-    // Calculate fraction of shares to be redeemed out of the global pool
-    let withdraw_ratio = redeem_amount_shares / state.shares_supply;
-    // Get contract's total balance of aUST
+    // Calculate depositor current pooled deposits in uusd
+    let depositor_ratio = depositor.shares / state.shares_supply;
     let contract_a_balance = query_token_balance(
         &deps.querier,
         deps.api.addr_humanize(&config.a_terra_contract)?,
         env.clone().contract.address,
     )?;
-
-    // Calculate amount of aUST to be redeemed
-    let redeem_amount = withdraw_ratio * Decimal256::from_uint256(contract_a_balance);
-
-    // Calculate expected amount of UST expected to be redeemed from anchor money market
-    let epoch_state: EpochStateResponse = query_exchange_rate(
+    let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
+    let rate = query_exchange_rate(
         deps.as_ref(),
         deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-    )?;
+    )?
+    .exchange_rate;
+    let pooled_deposits = Uint256::one() * (aust_amount * rate);
 
-    let mut redeem_stable = redeem_amount * epoch_state.exchange_rate;
+    // Calculate ratio of deposits, shares and tickets to withdraw
+    let mut withdraw_ratio = Decimal256::one();
+    if let Some(amount) = amount {
+        if Uint256::from(amount) > pooled_deposits {
+            return Err(ContractError::InvalidWithdraw {});
+        } else {
+            withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), pooled_deposits);
+        }
+    }
+    let aust_to_redeem = aust_amount * withdraw_ratio;
+    let mut return_amount = pooled_deposits * withdraw_ratio;
 
     // Double-checking Lotto pool is solvent against deposits
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * epoch_state.exchange_rate
-        < state.total_deposits
-    {
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < state.total_deposits {
         return Err(ContractError::InsufficientPoolFunds {});
     }
 
+    // Remove tickets from global state and depositor
+    let tickets_amount = depositor.tickets.len() as u128;
+    let withdrawn_tickets: u128 = (Uint256::from(tickets_amount) * withdraw_ratio).into();
+    for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
+        //TODO: check if we are draining the right amount
+        let mut holders: Vec<CanonicalAddr> = read_sequence_info(deps.storage, &*seq);
+        let index = holders.iter().position(|x| *x == sender_raw).unwrap();
+        holders.remove(index);
+        sequence_bucket(deps.storage)
+            .save(seq.as_bytes(), &holders)
+            .unwrap();
+    }
+
+    let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
+    let withdrawn_shares = depositor.shares * withdraw_ratio;
+    let withdrawn_deposit_shares = withdrawn_shares - withdrawn_shares * config.split_factor;
+
+    // Update depositor info
+    depositor.deposit_amount = depositor.deposit_amount.sub(withdrawn_deposits);
+    depositor.shares = depositor.shares.sub(withdrawn_shares);
+
     // Update global state
-    state.total_tickets = state.total_tickets.sub(Uint256::from(tickets_amount));
-    state.shares_supply = state.shares_supply.sub(redeem_amount_shares);
-    state.deposit_shares = state.deposit_shares.sub(amount_deposit_shares);
+    state.total_deposits = state.total_deposits.sub(withdrawn_deposits);
+    state.lottery_deposits = state
+        .lottery_deposits
+        .sub(withdrawn_deposits * config.split_factor);
+    state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
+    state.shares_supply = state.shares_supply.sub(withdrawn_shares);
+    state.deposit_shares = state.deposit_shares.sub(withdrawn_deposit_shares);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -549,24 +552,20 @@ pub fn withdraw(
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
             contract: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-            amount: (redeem_amount * Uint256::one()).into(),
+            amount: (aust_to_redeem * Uint256::one()).into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
         })?,
     });
     msgs.push(redeem_msg);
 
-    let mut withdrawal_fee = Decimal256::zero();
-
     // Instant withdrawal. The user incurs a fee and receive the funds with this operation
+    let mut withdrawal_fee = Uint256::zero();
     if let Some(true) = instant {
         // Apply instant withdrawal fee
-        withdrawal_fee = redeem_stable * config.instant_withdrawal_fee;
-        redeem_stable = redeem_stable.sub(withdrawal_fee);
+        withdrawal_fee = return_amount * config.instant_withdrawal_fee;
+        return_amount = return_amount.sub(withdrawal_fee);
         // Discount tx taxes
-        let net_coin_amount = deduct_tax(
-            deps.as_ref(),
-            coin((redeem_stable * Uint256::one()).into(), "uusd"),
-        )?;
+        let net_coin_amount = deduct_tax(deps.as_ref(), coin((return_amount).into(), "uusd"))?;
 
         msgs.push(CosmosMsg::Bank(BankMsg::Send {
             to_address: info.sender.to_string(),
@@ -576,7 +575,7 @@ pub fn withdraw(
         // Discount tx taxes
         let net_coin_amount = deduct_tax(
             deps.as_ref(),
-            coin((redeem_stable * Uint256::one()).into(), "uusd"),
+            coin((return_amount * Uint256::one()).into(), "uusd"),
         )?;
         // Place amount in unbonding state as a claim
         depositor.unbonding_info.push(Claim {
@@ -591,9 +590,9 @@ pub fn withdraw(
     Ok(Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "withdraw_ticket"),
         attr("depositor", info.sender.to_string()),
-        attr("tickets_amount", tickets_amount.to_string()),
-        attr("redeem_amount_anchor", redeem_amount.to_string()),
-        attr("redeem_stable_amount", redeem_stable.to_string()),
+        attr("tickets_amount", withdrawn_tickets.to_string()),
+        attr("redeem_amount_anchor", aust_to_redeem.to_string()),
+        attr("redeem_stable_amount", return_amount.to_string()),
         attr("instant_withdrawal_fee", withdrawal_fee.to_string()),
     ]))
 }

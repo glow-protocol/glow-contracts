@@ -55,6 +55,7 @@ pub enum ExecuteMsg {
         award: Option<bool>,
     },
     Withdraw {
+        amount: Option<Uint128>,
         instant: Option<bool>,
     },
     Claim {},

@@ -1275,10 +1275,7 @@ fn execute_lottery() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 funds: vec![],
-                msg: to_binary(&ExecuteMsg::_ExecutePrize {
-                    balance: current_balance
-                })
-                .unwrap(),
+                msg: to_binary(&ExecuteMsg::ExecutePrize {}).unwrap(),
             }))
         ]
     );
@@ -1304,7 +1301,7 @@ fn execute_prize_no_tickets() {
 
     let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
 
-    let msg = ExecuteMsg::_ExecutePrize { balance };
+    let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg);
 
     match res {
@@ -1313,7 +1310,7 @@ fn execute_prize_no_tickets() {
     }
 
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::_ExecutePrize { balance };
+    let msg = ExecuteMsg::ExecutePrize {};
 
     /* The contract does not have UST balance, should fail
     let res = execute(&mut deps, env.clone(), msg.clone());
@@ -1345,7 +1342,8 @@ fn execute_prize_no_tickets() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: Decimal256::zero(),
-            winners: vec![]
+            winners: vec![],
+            page: "".to_string()
         }
     );
 
@@ -1425,7 +1423,7 @@ fn execute_prize_no_winners() {
 
     // Run lottery, one winner (5 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::_ExecutePrize { balance };
+    let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1437,7 +1435,8 @@ fn execute_prize_no_winners() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            winners: vec![]
+            winners: vec![],
+            page: "".to_string()
         }
     );
 
@@ -1532,9 +1531,7 @@ fn execute_prize_one_winner() {
 
     // Run lottery, one winner (5 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::_ExecutePrize {
-        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-    };
+    let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1550,7 +1547,8 @@ fn execute_prize_one_winner() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            winners: vec![(5, vec![address_raw.clone()])]
+            winners: vec![(5, vec![address_raw.clone()])],
+            page: "".to_string()
         }
     );
 
@@ -1686,9 +1684,7 @@ fn execute_prize_winners_diff_ranks() {
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::_ExecutePrize {
-        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-    };
+    let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1709,7 +1705,8 @@ fn execute_prize_winners_diff_ranks() {
             winners: vec![
                 (5, vec![address_raw_0.clone()]),
                 (4, vec![address_raw_1.clone()])
-            ]
+            ],
+            page: "".to_string()
         }
     );
 
@@ -1847,9 +1844,7 @@ fn execute_prize_winners_same_rank() {
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::_ExecutePrize {
-        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-    };
+    let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1866,7 +1861,8 @@ fn execute_prize_winners_same_rank() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            winners: vec![(5, vec![address_raw_0.clone(), address_raw_1.clone()])]
+            winners: vec![(5, vec![address_raw_0.clone(), address_raw_1.clone()])],
+            page: "".to_string()
         }
     );
 
@@ -1967,9 +1963,7 @@ fn execute_prize_many_different_winning_combinations() {
 
     // Run lottery - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::_ExecutePrize {
-        balance: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-    };
+    let msg = ExecuteMsg::ExecutePrize {};
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly

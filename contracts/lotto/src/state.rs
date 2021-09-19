@@ -68,6 +68,7 @@ pub struct LotteryInfo {
     pub awarded: bool,
     pub total_prizes: Decimal256,
     pub winners: Vec<(u8, Vec<CanonicalAddr>)>, // [(number_hits, [hitters])]
+    pub page: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -107,6 +108,7 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             awarded: false,
             total_prizes: Decimal256::zero(),
             winners: vec![],
+            page: "".to_string(),
         },
     }
 }

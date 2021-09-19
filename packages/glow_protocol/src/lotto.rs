@@ -61,10 +61,7 @@ pub enum ExecuteMsg {
     Claim {},
     ClaimRewards {},
     ExecuteLottery {},
-    /// (internal) Called internally by ExecuteLottery
-    _ExecutePrize {
-        balance: Uint256,
-    },
+    ExecutePrize {},
     ExecuteEpochOps {},
 }
 

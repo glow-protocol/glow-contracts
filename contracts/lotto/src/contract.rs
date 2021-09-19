@@ -6,7 +6,7 @@ use cosmwasm_std::{
     MessageInfo, Response, StdResult, Uint128, WasmMsg,
 };
 
-use crate::prize_strategy::{_execute_prize, execute_lottery, is_valid_sequence};
+use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_config, read_depositor_info, read_depositors, read_lottery_info, read_sequence_info,
@@ -119,7 +119,7 @@ pub fn execute(
         ExecuteMsg::Claim {} => claim(deps, env, info),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
-        ExecuteMsg::_ExecutePrize { balance } => _execute_prize(deps, env, info, balance),
+        ExecuteMsg::ExecutePrize {} => execute_prize(deps, env, info),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_operations(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,

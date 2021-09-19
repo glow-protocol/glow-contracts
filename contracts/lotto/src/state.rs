@@ -2,9 +2,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
 use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 use cw0::{Duration, Expiration};
+use cw_storage_plus::{Item, Map};
 use glow_protocol::lotto::{Claim, DepositorInfoResponse};
 
 use crate::prize_strategy::count_seq_matches;
@@ -15,6 +16,8 @@ const KEY_STATE: &[u8] = b"state";
 const PREFIX_SEQUENCE: &[u8] = b"sequence";
 const PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_DEPOSIT: &[u8] = b"depositor";
+
+pub const TICKETS: Map<&[u8], Vec<CanonicalAddr>> = Map::new("tickets");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -132,6 +135,10 @@ pub fn read_sequence_info(storage: &dyn Storage, sequence: &str) -> Vec<Canonica
         Ok(v) => v,
         _ => vec![],
     }
+}
+
+pub fn query_ticket_info(deps: Deps, ticket: &str) -> StdResult<Vec<CanonicalAddr>> {
+    TICKETS.load(deps.storage, ticket.as_ref())
 }
 
 // settings for pagination

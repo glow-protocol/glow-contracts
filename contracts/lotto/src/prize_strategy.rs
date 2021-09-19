@@ -2,21 +2,22 @@ use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
     read_config, read_depositor_info, read_lottery_info, read_matching_sequences, read_state,
-    store_depositor_info, store_lottery_info, store_state, LotteryInfo,
+    store_depositor_info, store_lottery_info, store_state, LotteryInfo, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    attr, to_binary, CanonicalAddr, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128,
-    WasmMsg,
+    attr, to_binary, Addr, CanonicalAddr, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response,
+    StdResult, Uint128, WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
+use cw_storage_plus::Bound;
 use terraswap::querier::query_token_balance;
 
 use crate::contract::compute_reward;
 use moneymarket::market::Cw20HookMsg;
-use std::collections::HashMap;
 use std::ops::{Add, Sub};
+use std::str;
 use std::usize;
 
 pub fn execute_lottery(
@@ -44,6 +45,7 @@ pub fn execute_lottery(
 
     // TODO: Get random sequence here
     let winning_sequence = String::from("00000");
+
     let lottery_info = LotteryInfo {
         sequence: winning_sequence,
         awarded: false,
@@ -113,6 +115,13 @@ pub fn execute_lottery(
     Ok(res)
 }
 
+fn calc_limit(request: Option<u32>) -> usize {
+    request.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize
+}
+
+const MAX_LIMIT: u32 = 120;
+const DEFAULT_LIMIT: u32 = 100;
+
 pub fn execute_prize(
     deps: DepsMut,
     env: Env,
@@ -131,27 +140,62 @@ pub fn execute_prize(
 
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
 
+    if lottery_info.sequence.is_empty() {
+        return Err(ContractError::InvalidLotteryPrizeExecution {});
+    }
+
     // Get winners and respective sequences
     let lucky_holders: Vec<(u8, Vec<CanonicalAddr>)> =
         read_matching_sequences(deps.as_ref(), &lottery_info.sequence);
 
-    let mut map_winners = HashMap::new();
-    for (k, mut v) in lucky_holders.clone() {
-        map_winners.entry(k).or_insert_with(Vec::new).append(&mut v)
-    }
+    let limit = calc_limit(None);
+
+    // Get bounds
+    let min_bound = &lottery_info.sequence[..2];
+    let max_bound_number = min_bound.parse::<i32>().unwrap() + 1;
+    let max_bound = &max_bound_number.to_string()[..];
+
+    // TODO: avoid next loop including function in a map
+    // Get winning tickets
+    /*
+    let winning_tickets: Vec<_> = TICKETS
+        .range(
+            deps.storage,
+            Some(Bound::Inclusive(Vec::from(min_bound))),
+            Some(Bound::Exclusive(Vec::from(max_bound))),
+            Order::Ascending,
+        )
+        .take(limit)
+        .collect()
+        .unwrap();
+
+     */
+
+    let winning_tickets: Vec<_> = TICKETS
+        .range(deps.storage, None, None, Order::Ascending)
+        .collect::<StdResult<(Vec<_>)>>()
+        .unwrap();
 
     // assign prizes
     let mut total_awarded_prize = Decimal256::zero();
     let mut total_reserve_commission = Decimal256::zero();
 
-    for (matches, winners) in map_winners.iter() {
+    for (seq, winners) in winning_tickets.into_iter() {
         let number_winners = winners.len() as u64;
+        let matches = count_seq_matches(
+            &lottery_info.sequence.clone(),
+            str::from_utf8(&*seq).unwrap(),
+        ); // TODO: improve this
         for winner in winners {
-            let mut depositor = read_depositor_info(deps.as_ref().storage, winner);
+            // TODO: improve this
+            let mut depositor = read_depositor_info(
+                deps.as_ref().storage,
+                &deps.api.addr_canonicalize(&winner.to_string()).unwrap(),
+            );
 
             let assigned = assign_prize(
                 state.award_available,
-                *matches,
+                matches,
                 number_winners,
                 &config.prize_distribution,
             );
@@ -164,7 +208,12 @@ pub fn execute_prize(
                 .redeemable_amount
                 .add(Uint128::from(amount_redeem));
 
-            store_depositor_info(deps.storage, winner, &depositor)?;
+            // TODO: improve this
+            store_depositor_info(
+                deps.storage,
+                &deps.api.addr_canonicalize(&winner.to_string()).unwrap(),
+                &depositor,
+            )?;
         }
     }
 
@@ -210,6 +259,8 @@ pub fn count_seq_matches(a: &str, b: &str) -> u8 {
     for (i, c) in a.chars().enumerate() {
         if c == b.chars().nth(i).unwrap() {
             count += 1;
+        } else {
+            break;
         }
     }
     count

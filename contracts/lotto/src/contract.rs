@@ -2,8 +2,8 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    attr, coin, to_binary, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Deps, DepsMut, Env,
-    MessageInfo, Response, StdResult, Uint128, WasmMsg,
+    attr, coin, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Deps, DepsMut,
+    Env, MessageInfo, Response, StdResult, Uint128, WasmMsg,
 };
 
 use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
@@ -11,7 +11,7 @@ use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rat
 use crate::state::{
     read_config, read_depositor_info, read_depositors, read_lottery_info, read_sequence_info,
     read_state, sequence_bucket, store_config, store_depositor_info, store_sequence_info,
-    store_state, Config, DepositorInfo, State,
+    store_state, Config, DepositorInfo, State, TICKETS,
 };
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
@@ -85,7 +85,7 @@ pub fn instantiate(
             lottery_deposits: Decimal256::zero(),
             shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
-            award_available: Decimal256::from_uint256(initial_deposit), //TODO: consider letting part of the initial deposit as idle balance
+            award_available: Decimal256::from_uint256(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
             last_reward_updated: 0,
@@ -148,8 +148,8 @@ pub fn execute(
 pub fn register_contracts(
     deps: DepsMut,
     info: MessageInfo,
-    gov_contract: String,
-    distributor_contract: String,
+    gov_contract: Addr,
+    distributor_contract: Addr,
 ) -> Result<Response, ContractError> {
     let mut config: Config = read_config(deps.storage)?;
 
@@ -165,8 +165,10 @@ pub fn register_contracts(
         return Err(ContractError::AlreadyRegistered {});
     }
 
-    config.gov_contract = deps.api.addr_canonicalize(&gov_contract)?;
-    config.distributor_contract = deps.api.addr_canonicalize(&distributor_contract)?;
+    config.gov_contract = deps.api.addr_canonicalize(&gov_contract.to_string())?; // TODO: improve
+    config.distributor_contract = deps
+        .api
+        .addr_canonicalize(&distributor_contract.to_string())?;
     store_config(deps.storage, &config)?;
 
     Ok(Response::default())
@@ -212,7 +214,7 @@ pub fn deposit(
         }
     }
 
-    let depositor = deps.api.addr_canonicalize(info.sender.as_str())?;
+    let depositor = deps.api.addr_canonicalize(info.sender.clone().as_str())?;
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
     // Compute Glow depositor rewards
@@ -240,9 +242,20 @@ pub fn deposit(
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in combinations.clone() {
-        depositor_info.tickets.push(combination.clone());
-        // Store ticket sequence in bucket
-        store_sequence_info(deps.storage, depositor.clone(), &combination)?;
+        // TODO: double-check is working. Can I remove this loop?
+
+        // TODO: refactor as it's being reused
+        let add_ticket = |a: Option<Vec<CanonicalAddr>>| -> StdResult<Vec<CanonicalAddr>> {
+            let mut b = a.unwrap_or_default();
+            b.push(depositor.clone());
+            Ok(b)
+        };
+
+        TICKETS
+            .update(deps.storage, combination.as_bytes(), add_ticket)
+            .unwrap();
+
+        depositor_info.tickets.push(combination); // TODO: consider appending the whole combinations
     }
 
     // Update global state
@@ -285,7 +298,7 @@ pub fn gift_tickets(
     env: Env,
     info: MessageInfo,
     combinations: Vec<String>,
-    to: String,
+    to: Addr,
 ) -> Result<Response, ContractError> {
     if to == info.sender {
         return Err(ContractError::InvalidGift {});
@@ -324,7 +337,7 @@ pub fn gift_tickets(
         }
     }
 
-    let recipient = deps.api.addr_canonicalize(&to)?;
+    let recipient = deps.api.addr_canonicalize(to.as_str())?;
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &recipient);
 
     // Compute Glow rewards of recipient
@@ -349,10 +362,19 @@ pub fn gift_tickets(
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in combinations.clone() {
-        depositor_info.tickets.push(combination.clone());
-        // Store ticket sequence in bucket
-        // TODO: should pass depositor as reference
-        store_sequence_info(deps.storage, recipient.clone(), &combination)?;
+        // TODO: double-check is working. Can I remove this loop?
+        // TODO: refactor as it's being reused
+        let add_ticket = |a: Option<Vec<CanonicalAddr>>| -> StdResult<Vec<CanonicalAddr>> {
+            let mut b = a.unwrap_or_default();
+            b.push(recipient.clone());
+            Ok(b)
+        };
+
+        TICKETS
+            .update(deps.storage, combination.as_bytes(), add_ticket)
+            .unwrap();
+
+        depositor_info.tickets.push(combination);
     }
 
     // Update global state
@@ -514,14 +536,20 @@ pub fn withdraw(
     // Remove tickets from global state and depositor
     let tickets_amount = depositor.tickets.len() as u128;
     let withdrawn_tickets: u128 = (Uint256::from(tickets_amount) * withdraw_ratio).into();
+
+    //TODO: check if we are draining the right amount
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
-        //TODO: check if we are draining the right amount
-        let mut holders: Vec<CanonicalAddr> = read_sequence_info(deps.storage, &*seq);
-        let index = holders.iter().position(|x| *x == sender_raw).unwrap();
-        holders.remove(index);
-        sequence_bucket(deps.storage)
-            .save(seq.as_bytes(), &holders)
-            .unwrap();
+        // TODO: double-check is working. Can I remove this loop?
+        TICKETS.update(deps.storage, seq.as_bytes(), |tickets| -> StdResult<_> {
+            let index = tickets
+                .clone()
+                .unwrap_or_default()
+                .iter()
+                .position(|x| *x == sender_raw.clone())
+                .unwrap();
+            let _elem = tickets.clone().unwrap().remove(index);
+            Ok(tickets.unwrap())
+        });
     }
 
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
@@ -768,7 +796,7 @@ pub(crate) fn compute_depositor_reward(state: &State, depositor: &mut DepositorI
 pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
-    owner: Option<String>,
+    owner: Option<Addr>,
     lottery_interval: Option<u64>,
     block_time: Option<u64>,
     ticket_price: Option<Decimal256>,
@@ -785,7 +813,7 @@ pub fn update_config(
     }
     // change owner of Glow lotto contract
     if let Some(owner) = owner {
-        config.owner = deps.api.addr_canonicalize(&owner)?;
+        config.owner = deps.api.addr_canonicalize(&owner.to_string())?; //TODO: improve
     }
 
     if let Some(lottery_interval) = lottery_interval {

@@ -2,15 +2,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub owner: String,
+    pub owner: Addr,
     pub stable_denom: String,
-    pub anchor_contract: String,
-    pub aterra_contract: String,
+    pub anchor_contract: Addr,
+    pub aterra_contract: Addr,
     pub lottery_interval: u64,
     pub block_time: u64,
     pub ticket_price: Decimal256,
@@ -29,13 +29,13 @@ pub enum ExecuteMsg {
     /// Register Contracts contract address
     RegisterContracts {
         /// Gov contract accrues protocol fees and distributes them to Glow stakers
-        gov_contract: String,
+        gov_contract: Addr,
         /// Faucet contract to drip GLOW token to users and update Glow emission rate
-        distributor_contract: String,
+        distributor_contract: Addr,
     },
     /// Update contract configuration
     UpdateConfig {
-        owner: Option<String>,
+        owner: Option<Addr>,
         lottery_interval: Option<u64>,
         block_time: Option<u64>,
         ticket_price: Option<Decimal256>,
@@ -49,7 +49,7 @@ pub enum ExecuteMsg {
     },
     Gift {
         combinations: Vec<String>,
-        recipient: String,
+        recipient: Addr,
     },
     Sponsor {
         award: Option<bool>,

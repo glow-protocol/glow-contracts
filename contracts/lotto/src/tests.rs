@@ -1,8 +1,8 @@
 use crate::contract::{execute, instantiate, query, INITIAL_DEPOSIT_AMOUNT};
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
-    read_config, read_depositor_info, read_lottery_info, read_sequence_info, read_state,
-    store_state, Config, DepositorInfo, LotteryInfo, State,
+    query_ticket_info, read_config, read_depositor_info, read_lottery_info, read_sequence_info,
+    read_state, store_state, Config, DepositorInfo, LotteryInfo, State,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -42,10 +42,10 @@ const HOUR_TIME: u64 = 3600; // in seconds
 
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
     InstantiateMsg {
-        owner: TEST_CREATOR.to_string(),
+        owner: Addr::unchecked(TEST_CREATOR),
         stable_denom: DENOM.to_string(),
-        anchor_contract: ANCHOR.to_string(),
-        aterra_contract: A_UST.to_string(),
+        anchor_contract: Addr::unchecked(ANCHOR),
+        aterra_contract: Addr::unchecked(A_UST),
         lottery_interval: WEEK_TIME,
         block_time: HOUR_TIME,
         ticket_price: Decimal256::percent(TICKET_PRICE),
@@ -83,8 +83,8 @@ fn mock_instantiate(deps: DepsMut) -> Response {
 fn mock_register_contracts(deps: DepsMut) {
     let info = mock_info(TEST_CREATOR, &[]);
     let msg = ExecuteMsg::RegisterContracts {
-        gov_contract: GOV_ADDR.to_string(),
-        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
+        gov_contract: Addr::unchecked(GOV_ADDR),
+        distributor_contract: Addr::unchecked(DISTRIBUTOR_ADDR),
     };
     let _res = execute(deps, mock_env(), info, msg)
         .expect("contract successfully executes RegisterContracts");
@@ -149,8 +149,8 @@ fn proper_initialization() {
 
     // Register contracts
     let msg = ExecuteMsg::RegisterContracts {
-        gov_contract: GOV_ADDR.to_string(),
-        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
+        gov_contract: Addr::unchecked(GOV_ADDR),
+        distributor_contract: Addr::unchecked(DISTRIBUTOR_ADDR),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -185,8 +185,8 @@ fn proper_initialization() {
 
     // Cannot register contracts again //TODO
     let _msg = ExecuteMsg::RegisterContracts {
-        gov_contract: GOV_ADDR.to_string(),
-        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
+        gov_contract: Addr::unchecked(GOV_ADDR),
+        distributor_contract: Addr::unchecked(DISTRIBUTOR_ADDR),
     };
 }
 
@@ -201,7 +201,7 @@ fn update_config() {
     let info = mock_info(TEST_CREATOR, &[]);
 
     let msg = ExecuteMsg::UpdateConfig {
-        owner: Some("owner1".to_string()),
+        owner: Some(Addr::unchecked("owner1")),
         lottery_interval: None,
         block_time: None,
         ticket_price: None,
@@ -387,11 +387,11 @@ fn deposit() {
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
-        read_sequence_info(&deps.storage, &String::from("13579")),
+        query_ticket_info(deps.as_ref(), &String::from("13579")).unwrap(),
         vec![deps.api.addr_canonicalize("addr0000").unwrap()]
     );
     assert_eq!(
-        read_sequence_info(&deps.storage, &String::from("34567")),
+        query_ticket_info(deps.as_ref(), &String::from("34567")).unwrap(),
         vec![deps.api.addr_canonicalize("addr0000").unwrap()]
     );
 
@@ -477,7 +477,7 @@ fn gift_tickets() {
     // Must deposit stable_denom coins
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("34567")],
-        recipient: "addr1111".to_string(),
+        recipient: Addr::unchecked("addr1111"),
     };
     let info = mock_info(
         "addr0000",
@@ -530,7 +530,7 @@ fn gift_tickets() {
     // Invalid recipient - you cannot make a gift to yourself
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13597"), String::from("34567")],
-        recipient: "addr0000".to_string(),
+        recipient: Addr::unchecked("addr0000"),
     };
     let info = mock_info(
         "addr0000",
@@ -548,7 +548,7 @@ fn gift_tickets() {
     // Invalid ticket sequence - more number of digits
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("135797"), String::from("34567")],
-        recipient: "addr1111".to_string(),
+        recipient: Addr::unchecked("addr1111"),
     };
     let info = mock_info(
         "addr0000",
@@ -566,7 +566,7 @@ fn gift_tickets() {
     // Invalid ticket sequence - less number of digits
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("3457")],
-        recipient: "addr1111".to_string(),
+        recipient: Addr::unchecked("addr1111"),
     };
     let info = mock_info(
         "addr0000",
@@ -584,7 +584,7 @@ fn gift_tickets() {
     // Invalid ticket sequence - only numbers allowed
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("135w9"), String::from("34567")],
-        recipient: "addr1111".to_string(),
+        recipient: Addr::unchecked("addr1111"),
     };
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
@@ -596,7 +596,7 @@ fn gift_tickets() {
     // Correct gift - gifts two tickets
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("34567")],
-        recipient: "addr1111".to_string(),
+        recipient: Addr::unchecked("addr1111"),
     };
 
     // Mock aUST-UST exchange rate
@@ -616,11 +616,11 @@ fn gift_tickets() {
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
-        read_sequence_info(deps.as_ref().storage, &String::from("13579")),
+        query_ticket_info(deps.as_ref(), &String::from("13579")).unwrap(),
         vec![deps.api.addr_canonicalize("addr1111").unwrap()]
     );
     assert_eq!(
-        read_sequence_info(deps.as_ref().storage, &String::from("34567")),
+        query_ticket_info(deps.as_ref(), &String::from("34567")).unwrap(),
         vec![deps.api.addr_canonicalize("addr1111").unwrap()]
     );
 
@@ -1299,39 +1299,11 @@ fn execute_prize_no_tickets() {
 
     let info = mock_info("addr0001", &[]);
 
-    let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
+    // Execute Lottery
+    let msg = ExecuteMsg::ExecuteLottery {};
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::ExecutePrize {};
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
-
-    match res {
-        Err(ContractError::Unauthorized {}) => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::ExecutePrize {};
-
-    /* The contract does not have UST balance, should fail
-    let res = execute(&mut deps, env.clone(), msg.clone());
-    match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "There is no UST balance to fund the prize",)
-        }
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(150_000_000_000u128),
-        }],
-    );
-
-     */
-
     // Run lottery, no winners - should run correctly
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -1419,10 +1391,15 @@ fn execute_prize_no_winners() {
         }
     );
 
-    let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
+    //let balance = Uint256::from(INITIAL_DEPOSIT_AMOUNT);
 
     // Run lottery, one winner (5 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+
+    // Execute Lottery
+    let msg = ExecuteMsg::ExecuteLottery {};
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
     let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -1531,6 +1508,11 @@ fn execute_prize_one_winner() {
 
     // Run lottery, one winner (5 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+
+    // Execute Lottery
+    let msg = ExecuteMsg::ExecuteLottery {};
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
     let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -1684,6 +1666,11 @@ fn execute_prize_winners_diff_ranks() {
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+
+    // Execute Lottery
+    let msg = ExecuteMsg::ExecuteLottery {};
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
     let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -1844,6 +1831,11 @@ fn execute_prize_winners_same_rank() {
 
     // Run lottery, one winner (5 hits), one winner (4 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+
+    // Execute Lottery
+    let msg = ExecuteMsg::ExecuteLottery {};
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
     let msg = ExecuteMsg::ExecutePrize {};
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -1963,6 +1955,11 @@ fn execute_prize_many_different_winning_combinations() {
 
     // Run lottery - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+
+    // Execute Lottery
+    let msg = ExecuteMsg::ExecuteLottery {};
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
     let msg = ExecuteMsg::ExecutePrize {};
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 

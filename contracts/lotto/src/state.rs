@@ -5,7 +5,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
 use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 use cw0::{Duration, Expiration};
-use cw_storage_plus::{Item, Map};
+use cw_storage_plus::{Item, Map, U64Key};
 use glow_protocol::lotto::{Claim, DepositorInfoResponse};
 
 use crate::prize_strategy::count_seq_matches;
@@ -19,6 +19,7 @@ pub const STATE: Item<State> = Item::new("state");
 //pub const DEPOSITORS: Map<CanonicalAddr, DepositorInfo> = Map::new("depositors");
 //pub const LOTTERY: Map<u8, LotteryInfo> = Map::new("lottery");
 pub const TICKETS: Map<&[u8], Vec<CanonicalAddr>> = Map::new("tickets");
+pub const PRIZES: Map<(Addr, U64Key), [u8; 6]> = Map::new("prizes");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -71,7 +72,7 @@ pub struct LotteryInfo {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub winners: Vec<(u8, Vec<CanonicalAddr>)>, // [(number_hits, [hitters])]
+    pub number_winners: [u8; 6],
     pub page: String,
 }
 
@@ -95,7 +96,7 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             sequence: "".to_string(),
             awarded: false,
             total_prizes: Decimal256::zero(),
-            winners: vec![],
+            number_winners: [0;6],
             page: "".to_string(),
         },
     }

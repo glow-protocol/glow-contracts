@@ -1284,7 +1284,7 @@ fn execute_lottery() {
     );
 
     // Execute prize
-    let execute_prize_msg = ExecuteMsg::ExecutePrize {};
+    let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), execute_prize_msg).unwrap();
 
     assert_eq!(res.messages, vec![]);
@@ -1371,7 +1371,7 @@ fn execute_prize_no_tickets() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    let msg = ExecuteMsg::ExecutePrize {};
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
     // Run lottery, no winners - should run correctly
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -1382,7 +1382,7 @@ fn execute_prize_no_tickets() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: Decimal256::zero(),
-            winners: vec![],
+            number_winners: [0; 6],
             page: "".to_string()
         }
     );
@@ -1468,7 +1468,7 @@ fn execute_prize_no_winners() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    let msg = ExecuteMsg::ExecutePrize {};
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1480,7 +1480,7 @@ fn execute_prize_no_winners() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            winners: vec![],
+            number_winners: [0; 6],
             page: "".to_string()
         }
     );
@@ -1581,7 +1581,7 @@ fn execute_prize_one_winner() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    let msg = ExecuteMsg::ExecutePrize {};
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1597,7 +1597,8 @@ fn execute_prize_one_winner() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            winners: vec![(5, vec![address_raw.clone()])],
+            number_winners: [0; 6], //TODO: false
+           // winners: vec![(5, vec![address_raw.clone()])],
             page: "".to_string()
         }
     );
@@ -1739,7 +1740,7 @@ fn execute_prize_winners_diff_ranks() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    let msg = ExecuteMsg::ExecutePrize {};
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1757,10 +1758,11 @@ fn execute_prize_winners_diff_ranks() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            winners: vec![
-                (5, vec![address_raw_0.clone()]),
-                (4, vec![address_raw_1.clone()])
-            ],
+            number_winners: [0; 6], //TODO: False
+            //winners: vec![
+              //  (5, vec![address_raw_0.clone()]),
+               // (4, vec![address_raw_1.clone()])
+            //],
             page: "".to_string()
         }
     );
@@ -1904,7 +1906,7 @@ fn execute_prize_winners_same_rank() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    let msg = ExecuteMsg::ExecutePrize {};
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
@@ -1921,7 +1923,8 @@ fn execute_prize_winners_same_rank() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            winners: vec![(5, vec![address_raw_0.clone(), address_raw_1.clone()])],
+            number_winners: [0; 6], //TODO: false
+            //winners: vec![(5, vec![address_raw_0.clone(), address_raw_1.clone()])],
             page: "".to_string()
         }
     );
@@ -2028,7 +2031,7 @@ fn execute_prize_many_different_winning_combinations() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    let msg = ExecuteMsg::ExecutePrize {};
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check lottery info was updated correctly

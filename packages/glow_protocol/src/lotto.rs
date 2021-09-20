@@ -61,7 +61,9 @@ pub enum ExecuteMsg {
     Claim {},
     ClaimRewards {},
     ExecuteLottery {},
-    ExecutePrize {},
+    ExecutePrize {
+        limit: Option<u32>,
+    },
     ExecuteEpochOps {},
 }
 
@@ -128,7 +130,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub winners: Vec<(u8, Vec<String>)>, // [(number_hits, [lucky_holders])]
+    pub number_winners: [u8;6], // numeber of winners per hits e.g. [0,0,3,2,0,0]
 }
 
 // We define a custom struct for each query response

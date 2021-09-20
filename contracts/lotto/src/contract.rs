@@ -119,7 +119,7 @@ pub fn execute(
         ExecuteMsg::Claim {} => claim(deps, env, info),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
-        ExecuteMsg::ExecutePrize {} => execute_prize(deps, env, info),
+        ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_operations(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,
@@ -956,18 +956,7 @@ pub fn query_lottery_info(deps: Deps, lottery_id: Option<u64>) -> StdResult<Lott
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             total_prizes: lottery.total_prizes,
-            winners: lottery
-                .winners
-                .into_iter()
-                .map(|w| {
-                    (
-                        w.0,
-                        w.1.into_iter()
-                            .map(|addr| deps.api.addr_humanize(&addr).unwrap().to_string())
-                            .collect(),
-                    )
-                })
-                .collect(),
+            number_winners: lottery.number_winners
         })
     } else {
         let current_lottery = query_state(deps, None)?.current_lottery;
@@ -977,18 +966,7 @@ pub fn query_lottery_info(deps: Deps, lottery_id: Option<u64>) -> StdResult<Lott
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             total_prizes: lottery.total_prizes,
-            winners: lottery
-                .winners
-                .into_iter()
-                .map(|w| {
-                    (
-                        w.0,
-                        w.1.into_iter()
-                            .map(|addr| deps.api.addr_humanize(&addr).unwrap().to_string())
-                            .collect(),
-                    )
-                })
-                .collect(), // transform CanonicalAddr to HumanAddr
+            number_winners: lottery.number_winners
         })
     }
 }

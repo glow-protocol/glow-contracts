@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
     read_depositor_info, read_lottery_info, read_matching_sequences, store_depositor_info,
-    store_lottery_info, LotteryInfo, CONFIG, STATE, TICKETS,
+    store_lottery_info, LotteryInfo, CONFIG, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -11,7 +11,7 @@ use cosmwasm_std::{
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
-use cw_storage_plus::Bound;
+use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
 
 use crate::contract::compute_reward;
@@ -36,10 +36,7 @@ pub fn execute_lottery(
         return Err(ContractError::InvalidLotteryExecution {});
     }
 
-    if state.next_lottery_time.is_expired(&env.block) {
-        state.next_lottery_time =
-            Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
-    } else {
+    if !state.next_lottery_time.is_expired(&env.block) {
         return Err(ContractError::LotteryInProgress {});
     }
 
@@ -54,7 +51,7 @@ pub fn execute_lottery(
         sequence: winning_sequence,
         awarded: false,
         total_prizes: Decimal256::zero(),
-        winners: vec![],
+        number_winners: [0; 6],
         page: "".to_string(),
     };
 
@@ -130,6 +127,7 @@ pub fn execute_prize(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    limit: Option<u32>,
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
@@ -142,26 +140,27 @@ pub fn execute_prize(
         return Err(ContractError::InvalidLotteryExecution {});
     }
 
+    // Execute lottery must be called before execute_prize
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
-
     if lottery_info.sequence.is_empty() {
         return Err(ContractError::InvalidLotteryPrizeExecution {});
     }
 
-    // Get winners and respective sequences
-    let lucky_holders: Vec<(u8, Vec<CanonicalAddr>)> =
-        read_matching_sequences(deps.as_ref(), &lottery_info.sequence);
+    // Calculate pagination bounds
+    let limit = calc_limit(limit);
 
-    let limit = calc_limit(None);
+    let mut min_bound = "";
+    if lottery_info.page.is_empty() {
+        min_bound = &lottery_info.sequence[..2];
+    } else {
+        min_bound = &lottery_info.page[..2];
+    }
 
-    // Get bounds
-    let min_bound = &lottery_info.sequence[..2];
+    // Get max bounds
     let max_bound_number = min_bound.parse::<i32>().unwrap() + 1;
     let max_bound = &max_bound_number.to_string()[..];
 
-    // TODO: avoid next loop including function in a map
     // Get winning tickets
-
     let winning_tickets: Vec<_> = TICKETS
         .range(
             deps.storage,
@@ -173,64 +172,65 @@ pub fn execute_prize(
         .collect::<StdResult<(Vec<_>)>>()
         .unwrap();
 
-    /*
-    let winning_tickets: Vec<_> = TICKETS
-        .range(deps.storage, None, None, Order::Ascending)
-        .collect::<StdResult<(Vec<_>)>>()
-        .unwrap();
-     */
-
-    // assign prizes
-    let mut total_awarded_prize = Decimal256::zero();
-    let mut total_reserve_commission = Decimal256::zero();
-
-    for (seq, winners) in winning_tickets.into_iter() {
-        let number_winners = winners.len() as u64;
-        let matches = count_seq_matches(
-            &lottery_info.sequence.clone(),
-            str::from_utf8(&*seq).unwrap(),
-        ); // TODO: improve this
-        for winner in winners {
-            // TODO: improve this
-            let mut depositor = read_depositor_info(
-                deps.as_ref().storage,
-                &deps.api.addr_canonicalize(&winner.to_string()).unwrap(),
-            );
-
-            let assigned = assign_prize(
-                state.award_available,
-                matches,
-                number_winners,
-                &config.prize_distribution,
-            );
-
-            total_awarded_prize += assigned;
-            let reserve_commission = apply_reserve_factor(assigned, config.reserve_factor);
-            total_reserve_commission += reserve_commission;
-            let amount_redeem = (assigned - reserve_commission) * Uint256::one();
-            depositor.redeemable_amount = depositor
-                .redeemable_amount
-                .add(Uint128::from(amount_redeem));
-
-            // TODO: improve this
-            store_depositor_info(
-                deps.storage,
-                &deps.api.addr_canonicalize(&winner.to_string()).unwrap(),
-                &depositor,
-            )?;
-        }
+    // Update pagination for next iterations, if necessary
+    if let Some(next) = TICKETS
+        .range(
+            deps.storage,
+            Some(Bound::Exclusive(winning_tickets.last().unwrap().clone().0)),
+            Some(Bound::Exclusive(Vec::from(max_bound))),
+            Order::Ascending,
+        )
+        .next()
+    {
+        lottery_info.page = String::from_utf8(next.unwrap().0).unwrap();
+    } else {
+        lottery_info.awarded = true;
     }
 
-    lottery_info.winners = lucky_holders;
-    lottery_info.awarded = true;
-    lottery_info.total_prizes = total_awarded_prize;
+    // Update holders prizes and lottery info number of winners
+    winning_tickets.iter().for_each(|sequence| -> () {
+        let matches = count_seq_matches(
+            &lottery_info.sequence.clone(),
+            str::from_utf8(&*sequence.0).unwrap(),
+        );
+        lottery_info.number_winners[matches as usize] += 1;
+        sequence.1.iter().for_each(|winner| {
+            let addr = deps.api.addr_humanize(&winner).unwrap();
+            let lottery_id: U64Key = state.current_lottery.into();
+            PRIZES.update(deps.storage, (addr, lottery_id), |hits| -> StdResult<_> {
+                let result = match hits {
+                    Some(mut winnings) => {
+                        winnings[matches as usize] += 1;
+                        winnings
+                    }
+                    None => {
+                        let mut winnings = [0; 6];
+                        winnings[matches as usize] = 1;
+                        winnings
+                    }
+                };
+                Ok(result)
+            });
+        });
+    });
 
+    // If all winners have been accounted, update lottery info and jump to next round
+    let mut total_awarded_prize = Decimal256::zero();
+    if lottery_info.awarded {
+        state.current_lottery += 1;
+        state.next_lottery_time =
+            Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
+        for (index, rank) in lottery_info.number_winners.iter().enumerate() {
+            if *rank != 0 {
+                // TODO: revise logic
+                total_awarded_prize += state.award_available * config.prize_distribution[index];
+            }
+        }
+        lottery_info.total_prizes = total_awarded_prize;
+        state.award_available = state.award_available.sub(total_awarded_prize);
+        STATE.save(deps.storage, &state)?;
+    }
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
-
-    state.current_lottery += 1;
-    state.total_reserve = state.total_reserve.add(total_reserve_commission);
-    state.award_available = state.award_available.sub(total_awarded_prize);
-    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "execute_prize"),

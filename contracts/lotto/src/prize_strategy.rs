@@ -1,8 +1,8 @@
 use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
-    read_config, read_depositor_info, read_lottery_info, read_matching_sequences, read_state,
-    store_depositor_info, store_lottery_info, store_state, LotteryInfo, TICKETS,
+    read_depositor_info, read_lottery_info, read_matching_sequences, store_depositor_info,
+    store_lottery_info, LotteryInfo, CONFIG, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -25,8 +25,8 @@ pub fn execute_lottery(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let mut state = read_state(deps.storage)?;
-    let config = read_config(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
 
     // Compute global Glow rewards
     compute_reward(&mut state, env.block.height);
@@ -41,6 +41,10 @@ pub fn execute_lottery(
             Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
     } else {
         return Err(ContractError::LotteryInProgress {});
+    }
+
+    if state.total_tickets.is_zero() {
+        return Err(ContractError::InvalidLotteryExecution {});
     }
 
     // TODO: Get random sequence here
@@ -106,7 +110,7 @@ pub fn execute_lottery(
     // TODO: add msg to drand worker fee
 
     // Store state
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     let res = Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "execute_lottery"),
@@ -127,8 +131,8 @@ pub fn execute_prize(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let mut state = read_state(deps.storage)?;
-    let config = read_config(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
 
     // Compute global Glow rewards
     compute_reward(&mut state, env.block.height);
@@ -157,7 +161,7 @@ pub fn execute_prize(
 
     // TODO: avoid next loop including function in a map
     // Get winning tickets
-    /*
+
     let winning_tickets: Vec<_> = TICKETS
         .range(
             deps.storage,
@@ -166,15 +170,15 @@ pub fn execute_prize(
             Order::Ascending,
         )
         .take(limit)
-        .collect()
+        .collect::<StdResult<(Vec<_>)>>()
         .unwrap();
 
-     */
-
+    /*
     let winning_tickets: Vec<_> = TICKETS
         .range(deps.storage, None, None, Order::Ascending)
         .collect::<StdResult<(Vec<_>)>>()
         .unwrap();
+     */
 
     // assign prizes
     let mut total_awarded_prize = Decimal256::zero();
@@ -226,7 +230,7 @@ pub fn execute_prize(
     state.current_lottery += 1;
     state.total_reserve = state.total_reserve.add(total_reserve_commission);
     state.award_available = state.award_available.sub(total_awarded_prize);
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "execute_prize"),

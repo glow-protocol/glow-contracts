@@ -10,13 +10,14 @@ use glow_protocol::lotto::{Claim, DepositorInfoResponse};
 
 use crate::prize_strategy::count_seq_matches;
 
-const KEY_CONFIG: &[u8] = b"config";
-const KEY_STATE: &[u8] = b"state";
-
 const PREFIX_SEQUENCE: &[u8] = b"sequence";
 const PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_DEPOSIT: &[u8] = b"depositor";
 
+pub const CONFIG: Item<Config> = Item::new("config");
+pub const STATE: Item<State> = Item::new("state");
+//pub const DEPOSITORS: Map<CanonicalAddr, DepositorInfo> = Map::new("depositors");
+//pub const LOTTERY: Map<u8, LotteryInfo> = Map::new("lottery");
 pub const TICKETS: Map<&[u8], Vec<CanonicalAddr>> = Map::new("tickets");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -79,22 +80,6 @@ pub struct Sequence {
     pub holders: Vec<CanonicalAddr>,
 }
 
-pub fn store_config(storage: &mut dyn Storage, data: &Config) -> StdResult<()> {
-    Singleton::new(storage, KEY_CONFIG).save(data)
-}
-
-pub fn read_config(storage: &dyn Storage) -> StdResult<Config> {
-    ReadonlySingleton::new(storage, KEY_CONFIG).load()
-}
-
-pub fn store_state(storage: &mut dyn Storage, data: &State) -> StdResult<()> {
-    Singleton::new(storage, KEY_STATE).save(data)
-}
-
-pub fn read_state(storage: &dyn Storage) -> StdResult<State> {
-    ReadonlySingleton::new(storage, KEY_STATE).load()
-}
-
 pub fn store_lottery_info(
     storage: &mut dyn Storage,
     lottery_id: u64,
@@ -145,28 +130,6 @@ pub fn query_ticket_info(deps: Deps, ticket: &str) -> StdResult<Vec<CanonicalAdd
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 
-// pub fn read_all_sequences<S: Storage, A: Api, Q: Querier>(
-//     deps: Extern<S, A, Q>,
-//     start_after: Option<CanonicalAddr>,
-//     limit: Option<u32>,
-// ) -> StdResult<Vec<(String, Vec<CanonicalAddr>)>> {
-//     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
-//         bucket_read(PREFIX_SEQUENCE, &deps.storage);
-
-//     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-//     let start = calc_range_start(start_after);
-
-//     sequence_bucket
-//         .range(start.as_deref(), None, Order::Ascending)
-//         .take(limit)
-//         .map(|elem| {
-//             let (k, v) = elem?;
-//             let sequence = String::from_utf8(k).ok().unwrap();
-//             Ok((sequence, v))
-//         })
-//         .collect()
-// }
-
 pub fn read_all_sequences(deps: Deps) -> Vec<(String, Vec<CanonicalAddr>)> {
     let sequence_bucket: ReadonlyBucket<Vec<CanonicalAddr>> =
         bucket_read(deps.storage, PREFIX_SEQUENCE);
@@ -205,34 +168,6 @@ pub fn read_all_sequences(deps: Deps) -> Vec<(String, Vec<CanonicalAddr>)> {
 
     all_sequences
 }
-
-// pub fn read_matching_sequences<S: Storage, A: Api, Q: Querier>(
-//     deps: &Extern<S, A, Q>,
-//     start_after: Option<CanonicalAddr>,
-//     limit: Option<u32>,
-//     win_sequence: &str,
-// ) -> Vec<(u8, Vec<CanonicalAddr>)> {
-//     let sequence_bucket: ReadonlyBucket<S, Vec<CanonicalAddr>> =
-//         bucket_read(PREFIX_SEQUENCE, &deps.storage);
-
-//     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-//     let start = calc_range_start(start_after);
-
-//     sequence_bucket
-//         .range(start.as_deref(), None, Order::Ascending)
-//         .take(limit)
-//         .filter_map(|elem| {
-//             let (k, v) = elem.ok()?;
-//             let sequence = String::from_utf8(k).ok()?;
-//             let number_matches = count_seq_matches(win_sequence, &sequence);
-//             if number_matches < 2 {
-//                 None
-//             } else {
-//                 Some((number_matches, v))
-//             }
-//         })
-//         .collect()
-// }
 
 pub fn read_matching_sequences(deps: Deps, win_sequence: &str) -> Vec<(u8, Vec<CanonicalAddr>)> {
     let all_sequences = read_all_sequences(deps);

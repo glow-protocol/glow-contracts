@@ -89,6 +89,7 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub owner: String,
     pub stable_denom: String,
+    pub a_terra_contract: String,
     pub anchor_contract: String,
     pub gov_contract: String,
     pub distributor_contract: String,

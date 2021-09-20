@@ -9,9 +9,9 @@ use cosmwasm_std::{
 use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    read_config, read_depositor_info, read_depositors, read_lottery_info, read_sequence_info,
-    read_state, sequence_bucket, store_config, store_depositor_info, store_sequence_info,
-    store_state, Config, DepositorInfo, State, TICKETS,
+    read_depositor_info, read_depositors, read_lottery_info, read_sequence_info, sequence_bucket,
+    store_depositor_info, store_sequence_info, Config, DepositorInfo, State, CONFIG, STATE,
+    TICKETS,
 };
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
@@ -55,7 +55,7 @@ pub fn instantiate(
         return Err(ContractError::InvalidDepositInstantiation {});
     }
 
-    store_config(
+    CONFIG.save(
         deps.storage,
         &Config {
             owner: deps.api.addr_canonicalize(msg.owner.as_str())?,
@@ -76,7 +76,7 @@ pub fn instantiate(
         },
     )?;
 
-    store_state(
+    STATE.save(
         deps.storage,
         &State {
             total_tickets: Uint256::zero(),
@@ -151,7 +151,7 @@ pub fn register_contracts(
     gov_contract: Addr,
     distributor_contract: Addr,
 ) -> Result<Response, ContractError> {
-    let mut config: Config = read_config(deps.storage)?;
+    let mut config: Config = CONFIG.load(deps.storage)?;
 
     // check permission
     if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
@@ -165,11 +165,12 @@ pub fn register_contracts(
         return Err(ContractError::AlreadyRegistered {});
     }
 
-    config.gov_contract = deps.api.addr_canonicalize(&gov_contract.to_string())?; // TODO: improve
+    config.gov_contract = deps.api.addr_canonicalize(&gov_contract.to_string())?;
     config.distributor_contract = deps
         .api
         .addr_canonicalize(&distributor_contract.to_string())?;
-    store_config(deps.storage, &config)?;
+
+    CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
 }
@@ -181,8 +182,8 @@ pub fn deposit(
     info: MessageInfo,
     combinations: Vec<String>,
 ) -> Result<Response, ContractError> {
-    let config = read_config(deps.storage)?;
-    let mut state = read_state(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     // Check deposit is in base stable denom
     let deposit_amount = info
@@ -204,7 +205,11 @@ pub fn deposit(
     }
 
     //TODO: add a time buffer here with block_time
-    if state.next_lottery_time.is_expired(&env.block) {
+
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+
+    // TODO: add check to withdraw and gift_tickets
+    if !current_lottery.sequence.is_empty() {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
@@ -273,7 +278,7 @@ pub fn deposit(
 
     // Update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -304,8 +309,8 @@ pub fn gift_tickets(
         return Err(ContractError::InvalidGift {});
     }
 
-    let config = read_config(deps.storage)?;
-    let mut state = read_state(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     // Check deposit is in base stable denom
     let deposit_amount = info
@@ -393,7 +398,7 @@ pub fn gift_tickets(
 
     // Update depositor and state information
     store_depositor_info(deps.storage, &recipient, &depositor_info)?;
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new()
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -420,8 +425,8 @@ pub fn sponsor(
     info: MessageInfo,
     award: Option<bool>,
 ) -> Result<Response, ContractError> {
-    let config = read_config(deps.storage)?;
-    let mut state = read_state(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     // Check deposit is in base stable denom
     let deposit_amount = info
@@ -467,7 +472,7 @@ pub fn sponsor(
         }));
     }
 
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "sponsorship"),
@@ -483,8 +488,8 @@ pub fn withdraw(
     amount: Option<Uint128>,
     instant: Option<bool>,
 ) -> Result<Response, ContractError> {
-    let config = read_config(deps.storage)?;
-    let mut state = read_state(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &sender_raw);
@@ -613,7 +618,7 @@ pub fn withdraw(
     }
 
     store_depositor_info(deps.storage, &sender_raw, &depositor)?;
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "withdraw_ticket"),
@@ -627,8 +632,8 @@ pub fn withdraw(
 
 // Send available UST to user from current redeemable balance and unbonded deposits
 pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    let config = read_config(deps.storage)?;
-    let mut state = read_state(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
     let mut to_send = claim_deposits(deps.storage, &sender_raw, &env.block, None)?;
@@ -662,7 +667,7 @@ pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
 
     depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(deps.storage, &sender_raw, &depositor)?;
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new()
         .add_message(CosmosMsg::Bank(BankMsg::Send {
@@ -680,9 +685,9 @@ pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
 }
 
 pub fn execute_epoch_operations(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
-    let config: Config = read_config(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
 
-    let mut state: State = read_state(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     // Compute global Glow rewards
     compute_reward(&mut state, env.block.height);
@@ -716,7 +721,7 @@ pub fn execute_epoch_operations(deps: DepsMut, env: Env) -> Result<Response, Con
 
     // Empty total reserve and store state
     state.total_reserve = Decimal256::zero();
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "execute_epoch_operations"),
@@ -730,8 +735,8 @@ pub fn claim_rewards(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let config: Config = read_config(deps.storage)?;
-    let mut state: State = read_state(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     let depositor_address = info.sender.as_str();
     let depositor_raw = deps.api.addr_canonicalize(depositor_address)?;
@@ -744,7 +749,7 @@ pub fn claim_rewards(
     let claim_amount = depositor.pending_rewards * Uint256::one();
     depositor.pending_rewards = Decimal256::zero();
 
-    store_state(deps.storage, &state)?;
+    STATE.save(deps.storage, &state)?;
     store_depositor_info(deps.storage, &depositor_raw, &depositor)?;
 
     let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {
@@ -805,7 +810,7 @@ pub fn update_config(
     split_factor: Option<Decimal256>,
     unbonding_period: Option<u64>,
 ) -> Result<Response, ContractError> {
-    let mut config: Config = read_config(deps.storage)?;
+    let mut config: Config = CONFIG.load(deps.storage)?;
 
     // check permission
     if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
@@ -876,7 +881,7 @@ pub fn update_config(
         config.block_time = Duration::Time(unbonding_period);
     }
 
-    store_config(deps.storage, &config)?;
+    CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
 }
@@ -895,11 +900,15 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let config: Config = read_config(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
 
     Ok(ConfigResponse {
         owner: deps.api.addr_humanize(&config.owner)?.to_string(),
         stable_denom: config.stable_denom,
+        a_terra_contract: deps
+            .api
+            .addr_humanize(&config.a_terra_contract)?
+            .to_string(),
         anchor_contract: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
         gov_contract: deps.api.addr_humanize(&config.gov_contract)?.to_string(),
         distributor_contract: deps
@@ -919,7 +928,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 }
 
 pub fn query_state(deps: Deps, _block_height: Option<u64>) -> StdResult<StateResponse> {
-    let state: State = read_state(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
 
     //TODO: add block_height logic
 
@@ -961,7 +970,7 @@ pub fn query_lottery_info(deps: Deps, lottery_id: Option<u64>) -> StdResult<Lott
                 .collect(),
         })
     } else {
-        let current_lottery = read_state(deps.storage)?.current_lottery;
+        let current_lottery = query_state(deps, None)?.current_lottery;
         let lottery = read_lottery_info(deps.storage, current_lottery);
         Ok(LotteryInfoResponse {
             lottery_id: current_lottery,

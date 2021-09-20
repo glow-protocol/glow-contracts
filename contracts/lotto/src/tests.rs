@@ -1,8 +1,10 @@
-use crate::contract::{execute, instantiate, query, INITIAL_DEPOSIT_AMOUNT};
+use crate::contract::{
+    execute, instantiate, query, query_config, query_state, INITIAL_DEPOSIT_AMOUNT,
+};
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
-    query_ticket_info, read_config, read_depositor_info, read_lottery_info, read_sequence_info,
-    read_state, store_state, Config, DepositorInfo, LotteryInfo, State,
+    query_ticket_info, read_depositor_info, read_lottery_info, read_sequence_info, Config,
+    DepositorInfo, LotteryInfo, State, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -15,6 +17,7 @@ use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
+    StateResponse,
 };
 
 use crate::error::ContractError;
@@ -117,16 +120,16 @@ fn proper_initialization() {
     let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(0, res.messages.len());
 
-    let config: Config = read_config(deps.as_ref().storage).unwrap();
+    let config = query_config(deps.as_ref()).unwrap();
 
     assert_eq!(
         config,
-        Config {
-            owner: deps.api.addr_canonicalize(TEST_CREATOR).unwrap(),
-            a_terra_contract: deps.api.addr_canonicalize(A_UST).unwrap(),
-            gov_contract: CanonicalAddr::from(vec![]),
-            distributor_contract: CanonicalAddr::from(vec![]),
-            anchor_contract: deps.api.addr_canonicalize(ANCHOR).unwrap(),
+        ConfigResponse {
+            owner: TEST_CREATOR.to_string(),
+            a_terra_contract: A_UST.to_string(),
+            gov_contract: "".to_string(),
+            distributor_contract: "".to_string(),
+            anchor_contract: ANCHOR.to_string(),
             stable_denom: DENOM.to_string(),
             lottery_interval: WEEK,
             block_time: HOUR,
@@ -154,20 +157,14 @@ fn proper_initialization() {
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    let config: Config = read_config(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        config.gov_contract,
-        deps.api.addr_canonicalize(GOV_ADDR).unwrap()
-    );
-    assert_eq!(
-        config.distributor_contract,
-        deps.api.addr_canonicalize(DISTRIBUTOR_ADDR).unwrap()
-    );
+    let config = query_config(deps.as_ref()).unwrap();
+    assert_eq!(config.gov_contract, GOV_ADDR.to_string());
+    assert_eq!(config.distributor_contract, DISTRIBUTOR_ADDR.to_string());
 
-    let state: State = read_state(deps.as_ref().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
     assert_eq!(
         state,
-        State {
+        StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
@@ -415,8 +412,8 @@ fn deposit() {
     let minted_shares = Decimal256::percent(TICKET_PRICE * 2u64).div(Decimal256::permille(RATE));
 
     assert_eq!(
-        read_state(&deps.storage).unwrap(),
-        State {
+        query_state(deps.as_ref(), None).unwrap(),
+        StateResponse {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
@@ -644,8 +641,8 @@ fn gift_tickets() {
     let minted_shares = Decimal256::percent(TICKET_PRICE * 2u64).div(Decimal256::permille(RATE));
 
     assert_eq!(
-        read_state(&deps.storage).unwrap(),
-        State {
+        query_state(deps.as_ref(), None).unwrap(),
+        StateResponse {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
@@ -735,7 +732,7 @@ fn withdraw() {
 
     println!("dep1: {:x?}", dep1);
 
-    let stor1 = read_state(&deps.storage).unwrap();
+    let stor1 = query_state(deps.as_ref(), None).unwrap();
 
     println!("stor1: {:x?}", stor1);
 
@@ -773,7 +770,7 @@ fn withdraw() {
 
     println!("dep2: {:x?}", dep1);
 
-    let stor1 = read_state(&deps.storage).unwrap();
+    let stor1 = query_state(deps.as_ref(), None).unwrap();
 
     println!("stor2: {:x?}", stor1);
 
@@ -821,8 +818,8 @@ fn withdraw() {
     );
 
     assert_eq!(
-        read_state(&deps.storage).unwrap(),
-        State {
+        query_state(deps.as_ref(), None).unwrap(),
+        StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
@@ -962,8 +959,8 @@ fn instant_withdraw() {
     );
 
     assert_eq!(
-        read_state(&deps.storage).unwrap(),
-        State {
+        query_state(deps.as_ref(), None).unwrap(),
+        StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
@@ -1068,7 +1065,7 @@ fn claim() {
         Addr::unchecked(MOCK_CONTRACT_ADDR),
     )
     .unwrap();
-    let state = read_state(deps.as_ref().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
     println!("shares: {}", shares);
     println!("pooled_deposits: {}", shares * Decimal256::permille(RATE));
     println!("total deposits: {}", state.total_deposits);
@@ -1211,29 +1208,6 @@ fn execute_lottery() {
         env.block.time = env.block.time.plus_seconds(time);
     }
 
-    // It should not fail, but redeem message is not called
-    // TODO: add test case
-    /*
-    let res = execute(&mut deps, env.clone(), msg.clone());
-
-    match res {
-        Err(StdError::GenericErr { msg, .. }) => {
-            assert_eq!(msg, "There is no available funds to execute the lottery",)
-        }
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-     */
-
-    // Add 10 aUST to our contract balance
-    deps.querier.with_token_balances(&[(
-        &A_UST.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(10_000_000u128),
-        )],
-    )]);
-
     // Add 100 UST to our contract balance
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR,
@@ -1247,10 +1221,50 @@ fn execute_lottery() {
 
     // TODO: add test case with deposit_shares != 0
 
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
+
+    // Lottery cannot be run with 0 tickets participating
+    match res {
+        Err(ContractError::InvalidLotteryExecution {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Correct deposit - buys two tickets
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // TODO: Test with 10 and 20, to check the pooled_deposits if statement
+    // Add 10 aUST to our contract balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &Uint128::from(10_000_000u128),
+        )],
+    )]);
+
+    // Execute lottery, now with tickets
+    let lottery_msg = ExecuteMsg::ExecuteLottery {};
+    let info = mock_info("addr0001", &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        lottery_msg.clone(),
+    )
+    .unwrap();
 
     // Directly check next_lottery_time has been set up for next week
-    let next_lottery_time = read_state(deps.as_ref().storage).unwrap().next_lottery_time;
+    let next_lottery_time = query_state(deps.as_ref(), None).unwrap().next_lottery_time;
 
     assert_eq!(
         next_lottery_time,
@@ -1259,32 +1273,86 @@ fn execute_lottery() {
 
     let current_balance = Uint256::from(100_000_000u128);
 
+    assert_eq!(res.messages, vec![]);
+
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "execute_lottery"),
+            attr("redeemed_amount", "0"),
+        ]
+    );
+
+    // Execute prize
+    let execute_prize_msg = ExecuteMsg::ExecutePrize {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), execute_prize_msg).unwrap();
+
+    assert_eq!(res.messages, vec![]);
+
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "execute_prize"),
+            attr("total_awarded_prize", "0"),
+        ]
+    );
+
+    // TODO: In this case, there should be a redeemd submsg as pooled_deposits > deposits
+    // Add 20 aUST to our contract balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &Uint128::from(20_000_000u128),
+        )],
+    )]);
+
+    // Advance one week in time
+    if let Duration::Time(time) = WEEK {
+        env.block.time = env.block.time.plus_seconds(time * 2);
+    }
+
+    // Execute 2nd lottery
+    let lottery_msg = ExecuteMsg::ExecuteLottery {};
+    let info = mock_info("addr0001", &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        lottery_msg.clone(),
+    )
+    .unwrap();
+
+    // Directly check next_lottery_time has been set up for next week
+    let next_lottery_time = query_state(deps.as_ref(), None).unwrap().next_lottery_time;
+
+    assert_eq!(
+        next_lottery_time,
+        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
+    );
+
+    let state = query_state(deps.as_ref(), None).unwrap();
+    println!("state: {:?}", state);
+
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: A_UST.to_string(),
-                funds: vec![],
-                msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: ANCHOR.to_string(),
-                    amount: to_redeem.into(),
-                    msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
-                })
-                .unwrap(),
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                funds: vec![],
-                msg: to_binary(&ExecuteMsg::ExecutePrize {}).unwrap(),
-            }))
-        ]
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: A_UST.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: ANCHOR.to_string(),
+                amount: (Uint256::one()).into(), // TODO: Calculate how much amount is redeemed?
+                msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
+            })
+            .unwrap(),
+        }))]
     );
 
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "execute_lottery"),
-            attr("redeemed_amount", to_redeem),
+            attr("redeemed_amount", "0"),
         ]
     );
 }
@@ -1319,7 +1387,7 @@ fn execute_prize_no_tickets() {
         }
     );
 
-    let state = read_state(deps.as_ref().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero()); // From the initialization of the contract
@@ -1417,7 +1485,7 @@ fn execute_prize_no_winners() {
         }
     );
 
-    let state = read_state(deps.as_ref().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
@@ -1542,7 +1610,7 @@ fn execute_prize_one_winner() {
 
     assert_eq!(prize_assigned, (mock_prize * Uint256::one()).into());
 
-    let state = read_state(deps.as_ref().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
@@ -1708,7 +1776,7 @@ fn execute_prize_winners_diff_ranks() {
     assert_eq!(prize_assigned_0, (mock_prize_0 * Uint256::one()).into());
     assert_eq!(prize_assigned_1, (mock_prize_1 * Uint256::one()).into());
 
-    let state = read_state(deps.as_ref().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
@@ -1869,7 +1937,7 @@ fn execute_prize_winners_same_rank() {
     assert_eq!(prize_assigned_0, (mock_prize_each * Uint256::one()).into());
     assert_eq!(prize_assigned_1, (mock_prize_each * Uint256::one()).into());
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(
@@ -1980,9 +2048,15 @@ fn claim_rewards_one_depositor() {
 
     let info = mock_info("addr0000", &[]);
 
-    let mut state = read_state(deps.as_ref().storage).unwrap();
+    /*
+    STATE.update(deps.as_mut().storage,  |mut state| {
+        state.glow_emission_rate = Decimal256::one();
+        Ok(state.unwrap())
+    }).unwrap();
+     */
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
     state.glow_emission_rate = Decimal256::one();
-    store_state(deps.as_mut().storage, &state).unwrap();
+    STATE.save(deps.as_mut().storage, &state);
 
     // User has no deposits, so no claimable rewards and empty msg returned
     let msg = ExecuteMsg::ClaimRewards {};
@@ -2054,9 +2128,17 @@ fn claim_rewards_multiple_depositors() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
-    let mut state = read_state(deps.as_mut().storage).unwrap();
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
     state.glow_emission_rate = Decimal256::one();
-    store_state(&mut deps.storage, &state).unwrap();
+    STATE.save(deps.as_mut().storage, &state);
+
+    //TODO: should query glow emission rate instead of hard-code
+    /*
+    STATE.update(deps.as_mut().storage,  |mut state| {
+        state.glow_emission_rate = Decimal256::one();
+        Ok(state)
+    }).unwrap();
+     */
 
     // USER 0 Deposits 20_000_000 uusd
     let msg = ExecuteMsg::Deposit {
@@ -2092,7 +2174,7 @@ fn claim_rewards_multiple_depositors() {
     // After 100 blocks
     env.block.height += 100;
 
-    let state = read_state(deps.as_mut().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
     println!("Global reward index: {:?}", state.global_reward_index);
     println!("Emission rate {:?}", state.glow_emission_rate);
     println!("Last reward updated {:?}", state.last_reward_updated);
@@ -2167,9 +2249,16 @@ fn execute_epoch_operations() {
     let info = mock_info("addr0000", &[]);
     let mut env = mock_env();
 
-    let mut state = read_state(&deps.storage).unwrap();
-    state.total_reserve = Decimal256::percent(50000); // 500
-    store_state(deps.as_mut().storage, &state).unwrap();
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
+    state.total_reserve = Decimal256::percent(50000);
+    STATE.save(deps.as_mut().storage, &state);
+
+    /*
+    STATE.update(deps.as_mut().storage,  |mut state| {
+        state.total_reserve = Decimal256::percent(50000);
+        Ok(state)
+    }).unwrap();
+     */
 
     env.block.height += 100;
 
@@ -2187,11 +2276,11 @@ fn execute_epoch_operations() {
         }))]
     );
 
-    let state = read_state(deps.as_ref().storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
     // Glow Emission rate must be 1 as hard-coded in mock querier
     assert_eq!(
         state,
-        State {
+        StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),

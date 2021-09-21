@@ -1,13 +1,13 @@
 use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
-    read_depositor_info, read_lottery_info, read_matching_sequences, store_depositor_info,
-    store_lottery_info, LotteryInfo, CONFIG, PRIZES, STATE, TICKETS,
+    read_depositor_info, read_lottery_info, store_depositor_info, store_lottery_info, LotteryInfo,
+    CONFIG, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    attr, to_binary, Addr, CanonicalAddr, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response,
-    StdResult, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
+    Uint128, WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
@@ -60,7 +60,7 @@ pub fn execute_lottery(
     // Get pooled lottery deposits in Anchor
     let aust_balance = query_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.a_terra_contract)?,
+        deps.api.addr_validate(config.a_terra_contract.as_str())?,
         env.clone().contract.address,
     )?;
 
@@ -68,11 +68,8 @@ pub fn execute_lottery(
         (state.shares_supply - state.deposit_shares) * Uint256::one(),
         state.shares_supply * Uint256::one(),
     );
-    let rate = query_exchange_rate(
-        deps.as_ref(),
-        deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-    )?
-    .exchange_rate;
+    let rate =
+        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
 
     let pooled_lottery_deposits = Decimal256::from_uint256(aust_lottery_balance) * rate;
 
@@ -90,13 +87,10 @@ pub fn execute_lottery(
 
         // Message for redeem amount operation of aUST
         let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps
-                .api
-                .addr_humanize(&config.a_terra_contract)?
-                .to_string(),
+            contract_addr: config.a_terra_contract.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20Send {
-                contract: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+                contract: config.anchor_contract.to_string(),
                 amount: (aust_to_redeem * Uint256::one()).into(),
                 msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
             })?,
@@ -195,9 +189,8 @@ pub fn execute_prize(
         );
         lottery_info.number_winners[matches as usize] += 1;
         sequence.1.iter().for_each(|winner| {
-            let addr = deps.api.addr_humanize(&winner).unwrap();
             let lottery_id: U64Key = state.current_lottery.into();
-            PRIZES.update(deps.storage, (addr, lottery_id), |hits| -> StdResult<_> {
+            PRIZES.update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
                 let result = match hits {
                     Some(mut winnings) => {
                         winnings[matches as usize] += 1;

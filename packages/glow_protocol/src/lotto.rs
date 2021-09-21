@@ -7,10 +7,10 @@ use cw0::{Duration, Expiration};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub owner: Addr,
+    pub owner: String,
     pub stable_denom: String,
-    pub anchor_contract: Addr,
-    pub aterra_contract: Addr,
+    pub anchor_contract: String,
+    pub aterra_contract: String,
     pub lottery_interval: u64,
     pub block_time: u64,
     pub ticket_price: Decimal256,
@@ -29,13 +29,13 @@ pub enum ExecuteMsg {
     /// Register Contracts contract address
     RegisterContracts {
         /// Gov contract accrues protocol fees and distributes them to Glow stakers
-        gov_contract: Addr,
+        gov_contract: String,
         /// Faucet contract to drip GLOW token to users and update Glow emission rate
-        distributor_contract: Addr,
+        distributor_contract: String,
     },
     /// Update contract configuration
     UpdateConfig {
-        owner: Option<Addr>,
+        owner: Option<String>,
         lottery_interval: Option<u64>,
         block_time: Option<u64>,
         ticket_price: Option<Decimal256>,
@@ -49,7 +49,7 @@ pub enum ExecuteMsg {
     },
     Gift {
         combinations: Vec<String>,
-        recipient: Addr,
+        recipient: String,
     },
     Sponsor {
         award: Option<bool>,
@@ -130,7 +130,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub number_winners: [u8;6], // numeber of winners per hits e.g. [0,0,3,2,0,0]
+    pub number_winners: [u8; 6], // numeber of winners per hits e.g. [0,0,3,2,0,0]
 }
 
 // We define a custom struct for each query response

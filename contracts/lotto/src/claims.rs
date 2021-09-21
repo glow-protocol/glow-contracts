@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{BlockInfo, CanonicalAddr, DepsMut, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, DepsMut, StdResult, Storage, Uint128};
 
 use crate::state::{read_depositor_info, store_depositor_info};
 use cw0::Expiration;
@@ -11,7 +11,7 @@ use glow_protocol::lotto::Claim;
 #[allow(dead_code)]
 pub fn create_claim(
     deps: DepsMut,
-    addr: &CanonicalAddr,
+    addr: &Addr,
     amount: Decimal256,
     release_at: Expiration,
 ) -> StdResult<()> {
@@ -25,7 +25,7 @@ pub fn create_claim(
 /// it removes the finished claims and returns the total amount of tokens to be released.
 pub fn claim_deposits(
     storage: &mut dyn Storage,
-    addr: &CanonicalAddr,
+    addr: &Addr,
     block: &BlockInfo,
     cap: Option<Uint128>,
 ) -> StdResult<Uint128> {

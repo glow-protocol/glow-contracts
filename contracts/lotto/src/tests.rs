@@ -3,15 +3,15 @@ use crate::contract::{
 };
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
-    query_ticket_info, read_depositor_info, read_lottery_info, read_sequence_info, Config,
-    DepositorInfo, LotteryInfo, State, STATE,
+    query_ticket_info, read_depositor_info, read_lottery_info, Config, DepositorInfo, LotteryInfo,
+    State, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Addr, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Decimal,
-    DepsMut, Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
+    attr, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env,
+    Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -45,10 +45,10 @@ const HOUR_TIME: u64 = 3600; // in seconds
 
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
     InstantiateMsg {
-        owner: Addr::unchecked(TEST_CREATOR),
+        owner: TEST_CREATOR.to_string(),
         stable_denom: DENOM.to_string(),
-        anchor_contract: Addr::unchecked(ANCHOR),
-        aterra_contract: Addr::unchecked(A_UST),
+        anchor_contract: ANCHOR.to_string(),
+        aterra_contract: A_UST.to_string(),
         lottery_interval: WEEK_TIME,
         block_time: HOUR_TIME,
         ticket_price: Decimal256::percent(TICKET_PRICE),
@@ -86,8 +86,8 @@ fn mock_instantiate(deps: DepsMut) -> Response {
 fn mock_register_contracts(deps: DepsMut) {
     let info = mock_info(TEST_CREATOR, &[]);
     let msg = ExecuteMsg::RegisterContracts {
-        gov_contract: Addr::unchecked(GOV_ADDR),
-        distributor_contract: Addr::unchecked(DISTRIBUTOR_ADDR),
+        gov_contract: GOV_ADDR.to_string(),
+        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
     let _res = execute(deps, mock_env(), info, msg)
         .expect("contract successfully executes RegisterContracts");
@@ -152,8 +152,8 @@ fn proper_initialization() {
 
     // Register contracts
     let msg = ExecuteMsg::RegisterContracts {
-        gov_contract: Addr::unchecked(GOV_ADDR),
-        distributor_contract: Addr::unchecked(DISTRIBUTOR_ADDR),
+        gov_contract: GOV_ADDR.to_string(),
+        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -182,8 +182,8 @@ fn proper_initialization() {
 
     // Cannot register contracts again //TODO
     let _msg = ExecuteMsg::RegisterContracts {
-        gov_contract: Addr::unchecked(GOV_ADDR),
-        distributor_contract: Addr::unchecked(DISTRIBUTOR_ADDR),
+        gov_contract: GOV_ADDR.to_string(),
+        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
 }
 
@@ -198,7 +198,7 @@ fn update_config() {
     let info = mock_info(TEST_CREATOR, &[]);
 
     let msg = ExecuteMsg::UpdateConfig {
-        owner: Some(Addr::unchecked("owner1")),
+        owner: Some("owner1".to_string()),
         lottery_interval: None,
         block_time: None,
         ticket_price: None,
@@ -384,19 +384,20 @@ fn deposit() {
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
-        query_ticket_info(deps.as_ref(), &String::from("13579")).unwrap(),
-        vec![deps.api.addr_canonicalize("addr0000").unwrap()]
+        query_ticket_info(deps.as_ref(), "13579").unwrap(),
+        vec![Addr::unchecked("addr0000")]
     );
     assert_eq!(
-        query_ticket_info(deps.as_ref(), &String::from("34567")).unwrap(),
-        vec![deps.api.addr_canonicalize("addr0000").unwrap()]
+        query_ticket_info(deps.as_ref(), "34567").unwrap(),
+        vec![Addr::unchecked("addr0000")]
     );
 
     // Check depositor info was updated correctly
+    // TODO: should do queries and not read state directly
     assert_eq!(
         read_depositor_info(
             deps.as_ref().storage,
-            &deps.api.addr_canonicalize("addr0000").unwrap()
+            &deps.api.addr_validate("addr0000").unwrap()
         ),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRICE * 2u64),
@@ -474,7 +475,7 @@ fn gift_tickets() {
     // Must deposit stable_denom coins
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("34567")],
-        recipient: Addr::unchecked("addr1111"),
+        recipient: "addr1111".to_string(),
     };
     let info = mock_info(
         "addr0000",
@@ -527,7 +528,7 @@ fn gift_tickets() {
     // Invalid recipient - you cannot make a gift to yourself
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13597"), String::from("34567")],
-        recipient: Addr::unchecked("addr0000"),
+        recipient: "addr0000".to_string(),
     };
     let info = mock_info(
         "addr0000",
@@ -545,7 +546,7 @@ fn gift_tickets() {
     // Invalid ticket sequence - more number of digits
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("135797"), String::from("34567")],
-        recipient: Addr::unchecked("addr1111"),
+        recipient: "addr1111".to_string(),
     };
     let info = mock_info(
         "addr0000",
@@ -563,7 +564,7 @@ fn gift_tickets() {
     // Invalid ticket sequence - less number of digits
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("3457")],
-        recipient: Addr::unchecked("addr1111"),
+        recipient: "addr1111".to_string(),
     };
     let info = mock_info(
         "addr0000",
@@ -581,7 +582,7 @@ fn gift_tickets() {
     // Invalid ticket sequence - only numbers allowed
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("135w9"), String::from("34567")],
-        recipient: Addr::unchecked("addr1111"),
+        recipient: "addr1111".to_string(),
     };
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
@@ -593,7 +594,7 @@ fn gift_tickets() {
     // Correct gift - gifts two tickets
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13579"), String::from("34567")],
-        recipient: Addr::unchecked("addr1111"),
+        recipient: "addr1111".to_string(),
     };
 
     // Mock aUST-UST exchange rate
@@ -614,18 +615,18 @@ fn gift_tickets() {
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
         query_ticket_info(deps.as_ref(), &String::from("13579")).unwrap(),
-        vec![deps.api.addr_canonicalize("addr1111").unwrap()]
+        vec![deps.api.addr_validate("addr1111").unwrap()]
     );
     assert_eq!(
         query_ticket_info(deps.as_ref(), &String::from("34567")).unwrap(),
-        vec![deps.api.addr_canonicalize("addr1111").unwrap()]
+        vec![deps.api.addr_validate("addr1111").unwrap()]
     );
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(
             deps.as_ref().storage,
-            &deps.api.addr_canonicalize("addr1111").unwrap()
+            &deps.api.addr_validate("addr1111").unwrap()
         ),
         DepositorInfo {
             deposit_amount: Decimal256::percent(TICKET_PRICE * 2u64),
@@ -727,7 +728,7 @@ fn withdraw() {
 
     let dep1 = read_depositor_info(
         deps.as_ref().storage,
-        &deps.api.addr_canonicalize("addr0001").unwrap(),
+        &deps.api.addr_validate("addr0001").unwrap(),
     );
 
     println!("dep1: {:x?}", dep1);
@@ -765,7 +766,7 @@ fn withdraw() {
 
     let dep1 = read_depositor_info(
         deps.as_ref().storage,
-        &deps.api.addr_canonicalize("addr0001").unwrap(),
+        &deps.api.addr_validate("addr0001").unwrap(),
     );
 
     println!("dep2: {:x?}", dep1);
@@ -774,10 +775,12 @@ fn withdraw() {
 
     println!("stor2: {:x?}", stor1);
 
+    let empty_addr: Vec<Addr> = vec![];
+
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
-        read_sequence_info(&deps.storage, &String::from("23456")),
-        vec![]
+        query_ticket_info(deps.as_ref(), "23456").unwrap(),
+        empty_addr
     );
 
     deps.querier.with_tax(
@@ -801,7 +804,7 @@ fn withdraw() {
     assert_eq!(
         read_depositor_info(
             deps.as_ref().storage,
-            &deps.api.addr_canonicalize("addr0001").unwrap()
+            &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
@@ -918,10 +921,12 @@ fn instant_withdraw() {
     // Correct withdraw, user has 1 ticket to be withdrawn
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
+    let empty_addr: Vec<Addr> = vec![];
+
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
-        read_sequence_info(&deps.storage, &String::from("23456")),
-        vec![]
+        query_ticket_info(deps.as_ref(), "23456").unwrap(),
+        empty_addr
     );
 
     deps.querier.with_tax(
@@ -943,10 +948,7 @@ fn instant_withdraw() {
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(
-            &deps.storage,
-            &deps.api.addr_canonicalize("addr0001").unwrap()
-        ),
+        read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
@@ -1121,10 +1123,7 @@ fn claim() {
         }],
     );
 
-    let dep = read_depositor_info(
-        &deps.storage,
-        &deps.api.addr_canonicalize("addr0001").unwrap(),
-    );
+    let dep = read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
 
     println!("DepositorInfo: {:x?}", dep);
 
@@ -1133,10 +1132,7 @@ fn claim() {
 
     // Check depositor info was updated correctly
     assert_eq!(
-        read_depositor_info(
-            &deps.storage,
-            &deps.api.addr_canonicalize("addr0001").unwrap()
-        ),
+        read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),
         DepositorInfo {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
@@ -1443,7 +1439,7 @@ fn execute_prize_no_winners() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw = deps.api.addr_canonicalize("addr0000").unwrap();
+    let address_raw = deps.api.addr_validate("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1558,7 +1554,7 @@ fn execute_prize_one_winner() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw = deps.api.addr_canonicalize("addr0000").unwrap();
+    let address_raw = deps.api.addr_validate("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1598,7 +1594,7 @@ fn execute_prize_one_winner() {
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0; 6], //TODO: false
-           // winners: vec![(5, vec![address_raw.clone()])],
+            // winners: vec![(5, vec![address_raw.clone()])],
             page: "".to_string()
         }
     );
@@ -1687,7 +1683,7 @@ fn execute_prize_winners_diff_ranks() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw_0 = deps.api.addr_canonicalize("addr0000").unwrap();
+    let address_raw_0 = deps.api.addr_validate("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1717,7 +1713,7 @@ fn execute_prize_winners_diff_ranks() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw_1 = deps.api.addr_canonicalize("addr0001").unwrap();
+    let address_raw_1 = deps.api.addr_validate("addr0001").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1760,8 +1756,8 @@ fn execute_prize_winners_diff_ranks() {
             total_prizes: awarded_prize,
             number_winners: [0; 6], //TODO: False
             //winners: vec![
-              //  (5, vec![address_raw_0.clone()]),
-               // (4, vec![address_raw_1.clone()])
+            //  (5, vec![address_raw_0.clone()]),
+            // (4, vec![address_raw_1.clone()])
             //],
             page: "".to_string()
         }
@@ -1853,7 +1849,7 @@ fn execute_prize_winners_same_rank() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw_0 = deps.api.addr_canonicalize("addr0000").unwrap();
+    let address_raw_0 = deps.api.addr_validate("addr0000").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1883,7 +1879,7 @@ fn execute_prize_winners_same_rank() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let address_raw_1 = deps.api.addr_canonicalize("addr0001").unwrap();
+    let address_raw_1 = deps.api.addr_validate("addr0001").unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(

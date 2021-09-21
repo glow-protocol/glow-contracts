@@ -2,16 +2,15 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    attr, coin, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Deps, DepsMut,
-    Env, MessageInfo, Response, StdResult, Uint128, WasmMsg,
+    attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult, Uint128, WasmMsg,
 };
 
 use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    read_depositor_info, read_depositors, read_lottery_info, read_sequence_info, sequence_bucket,
-    store_depositor_info, store_sequence_info, Config, DepositorInfo, State, CONFIG, STATE,
-    TICKETS,
+    read_depositor_info, read_depositors, read_lottery_info, store_depositor_info, Config,
+    DepositorInfo, State, CONFIG, STATE, TICKETS,
 };
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
@@ -58,12 +57,12 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
-            owner: deps.api.addr_canonicalize(msg.owner.as_str())?,
-            a_terra_contract: deps.api.addr_canonicalize(msg.aterra_contract.as_str())?,
-            gov_contract: CanonicalAddr::from(vec![]),
-            distributor_contract: CanonicalAddr::from(vec![]),
+            owner: deps.api.addr_validate(msg.owner.as_str())?,
+            a_terra_contract: deps.api.addr_validate(msg.aterra_contract.as_str())?,
+            gov_contract: Addr::unchecked(""),
+            distributor_contract: Addr::unchecked(""),
             stable_denom: msg.stable_denom.clone(),
-            anchor_contract: deps.api.addr_canonicalize(msg.anchor_contract.as_str())?,
+            anchor_contract: deps.api.addr_validate(msg.anchor_contract.as_str())?,
             lottery_interval: Duration::Time(msg.lottery_interval),
             block_time: Duration::Time(msg.block_time),
             ticket_price: msg.ticket_price,
@@ -148,27 +147,25 @@ pub fn execute(
 pub fn register_contracts(
     deps: DepsMut,
     info: MessageInfo,
-    gov_contract: Addr,
-    distributor_contract: Addr,
+    gov_contract: String,
+    distributor_contract: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
     // check permission
-    if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
+    if info.sender != config.owner {
         return Err(ContractError::Unauthorized {});
     }
 
     // can't be registered twice
-    if config.gov_contract != CanonicalAddr::from(vec![])
-        || config.distributor_contract != CanonicalAddr::from(vec![])
+    if config.gov_contract != Addr::unchecked("")
+        || config.distributor_contract != Addr::unchecked("")
     {
         return Err(ContractError::AlreadyRegistered {});
     }
 
-    config.gov_contract = deps.api.addr_canonicalize(&gov_contract.to_string())?;
-    config.distributor_contract = deps
-        .api
-        .addr_canonicalize(&distributor_contract.to_string())?;
+    config.gov_contract = deps.api.addr_validate(&gov_contract.to_string())?;
+    config.distributor_contract = deps.api.addr_validate(&distributor_contract.to_string())?;
 
     CONFIG.save(deps.storage, &config)?;
 
@@ -219,7 +216,7 @@ pub fn deposit(
         }
     }
 
-    let depositor = deps.api.addr_canonicalize(info.sender.clone().as_str())?;
+    let depositor = info.sender.clone();
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
     // Compute Glow depositor rewards
@@ -227,10 +224,8 @@ pub fn deposit(
     compute_depositor_reward(&state, &mut depositor_info);
 
     // query exchange_rate from anchor money market
-    let epoch_state: EpochStateResponse = query_exchange_rate(
-        deps.as_ref(),
-        deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-    )?;
+    let epoch_state: EpochStateResponse =
+        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
 
     // Discount tx taxes
     let net_coin_amount = deduct_tax(deps.as_ref(), coin(deposit_amount.into(), "uusd"))?;
@@ -250,7 +245,7 @@ pub fn deposit(
         // TODO: double-check is working. Can I remove this loop?
 
         // TODO: refactor as it's being reused
-        let add_ticket = |a: Option<Vec<CanonicalAddr>>| -> StdResult<Vec<CanonicalAddr>> {
+        let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
             let mut b = a.unwrap_or_default();
             b.push(depositor.clone());
             Ok(b)
@@ -282,7 +277,7 @@ pub fn deposit(
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+            contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
                 denom: config.stable_denom,
                 amount,
@@ -303,7 +298,7 @@ pub fn gift_tickets(
     env: Env,
     info: MessageInfo,
     combinations: Vec<String>,
-    to: Addr,
+    to: String,
 ) -> Result<Response, ContractError> {
     if to == info.sender {
         return Err(ContractError::InvalidGift {});
@@ -342,7 +337,7 @@ pub fn gift_tickets(
         }
     }
 
-    let recipient = deps.api.addr_canonicalize(to.as_str())?;
+    let recipient = deps.api.addr_validate(to.as_str())?;
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &recipient);
 
     // Compute Glow rewards of recipient
@@ -350,10 +345,8 @@ pub fn gift_tickets(
     compute_depositor_reward(&state, &mut depositor_info);
 
     // query exchange_rate from anchor money market
-    let epoch_state: EpochStateResponse = query_exchange_rate(
-        deps.as_ref(),
-        deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-    )?;
+    let epoch_state: EpochStateResponse =
+        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
 
     // Discount tx taxes
     let net_coin_amount = deduct_tax(deps.as_ref(), coin(deposit_amount.into(), "uusd"))?;
@@ -369,7 +362,7 @@ pub fn gift_tickets(
     for combination in combinations.clone() {
         // TODO: double-check is working. Can I remove this loop?
         // TODO: refactor as it's being reused
-        let add_ticket = |a: Option<Vec<CanonicalAddr>>| -> StdResult<Vec<CanonicalAddr>> {
+        let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
             let mut b = a.unwrap_or_default();
             b.push(recipient.clone());
             Ok(b)
@@ -402,7 +395,7 @@ pub fn gift_tickets(
 
     Ok(Response::new()
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+            contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
                 denom: config.stable_denom,
                 amount,
@@ -448,10 +441,8 @@ pub fn sponsor(
             .add(Decimal256::from_uint256(deposit_amount));
     } else {
         // query exchange_rate from anchor money market
-        let epoch_state: EpochStateResponse = query_exchange_rate(
-            deps.as_ref(),
-            deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-        )?;
+        let epoch_state: EpochStateResponse =
+            query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
         // add amount of aUST entitled from the deposit
         let minted_amount = Decimal256::from_uint256(deposit_amount) / epoch_state.exchange_rate;
 
@@ -460,7 +451,7 @@ pub fn sponsor(
             .lottery_deposits
             .add(Decimal256::from_uint256(deposit_amount));
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+            contract_addr: config.anchor_contract.to_string(),
             funds: vec![deduct_tax(
                 deps.as_ref(),
                 Coin {
@@ -491,8 +482,7 @@ pub fn withdraw(
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &sender_raw);
+    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
     if depositor.shares.is_zero() || state.shares_supply.is_zero() {
         return Err(ContractError::InvalidWithdraw {});
@@ -510,15 +500,12 @@ pub fn withdraw(
     let depositor_ratio = depositor.shares / state.shares_supply;
     let contract_a_balance = query_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.a_terra_contract)?,
+        config.a_terra_contract.clone(),
         env.clone().contract.address,
     )?;
     let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
-    let rate = query_exchange_rate(
-        deps.as_ref(),
-        deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-    )?
-    .exchange_rate;
+    let rate =
+        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
     let pooled_deposits = Uint256::one() * (aust_amount * rate);
 
     // Calculate ratio of deposits, shares and tickets to withdraw
@@ -550,7 +537,7 @@ pub fn withdraw(
                 .clone()
                 .unwrap_or_default()
                 .iter()
-                .position(|x| *x == sender_raw.clone())
+                .position(|x| *x == info.sender.clone())
                 .unwrap();
             let _elem = tickets.clone().unwrap().remove(index);
             Ok(tickets.unwrap())
@@ -578,13 +565,10 @@ pub fn withdraw(
 
     // Message for redeem amount operation of aUST
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: deps
-            .api
-            .addr_humanize(&config.a_terra_contract)?
-            .to_string(),
+        contract_addr: config.a_terra_contract.to_string(),
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+            contract: config.anchor_contract.to_string(),
             amount: (aust_to_redeem * Uint256::one()).into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
         })?,
@@ -617,7 +601,7 @@ pub fn withdraw(
         });
     }
 
-    store_depositor_info(deps.storage, &sender_raw, &depositor)?;
+    store_depositor_info(deps.storage, &info.sender, &depositor)?;
     STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_messages(msgs).add_attributes(vec![
@@ -635,11 +619,10 @@ pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    let mut to_send = claim_deposits(deps.storage, &sender_raw, &env.block, None)?;
+    let mut to_send = claim_deposits(deps.storage, &info.sender, &env.block, None)?;
 
     //TODO: doing two consecutive reads here, need to refactor
-    let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &sender_raw);
+    let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &info.sender);
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, env.block.height);
@@ -666,7 +649,7 @@ pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
     }
 
     depositor.redeemable_amount = Uint128::zero();
-    store_depositor_info(deps.storage, &sender_raw, &depositor)?;
+    store_depositor_info(deps.storage, &info.sender, &depositor)?;
     STATE.save(deps.storage, &state)?;
 
     Ok(Response::new()
@@ -695,7 +678,7 @@ pub fn execute_epoch_operations(deps: DepsMut, env: Env) -> Result<Response, Con
     // Query updated Glow emission rate and update state
     state.glow_emission_rate = query_glow_emission_rate(
         &deps.querier,
-        deps.api.addr_humanize(&config.distributor_contract)?,
+        config.distributor_contract,
         state.award_available,
         config.target_award,
         state.glow_emission_rate,
@@ -706,7 +689,7 @@ pub fn execute_epoch_operations(deps: DepsMut, env: Env) -> Result<Response, Con
     let total_reserves = state.total_reserve * Uint256::one();
     let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
         vec![CosmosMsg::Bank(BankMsg::Send {
-            to_address: deps.api.addr_humanize(&config.gov_contract)?.to_string(),
+            to_address: config.gov_contract.to_string(),
             amount: vec![deduct_tax(
                 deps.as_ref(),
                 Coin {
@@ -739,8 +722,7 @@ pub fn claim_rewards(
     let mut state = STATE.load(deps.storage)?;
 
     let depositor_address = info.sender.as_str();
-    let depositor_raw = deps.api.addr_canonicalize(depositor_address)?;
-    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &depositor_raw);
+    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, env.block.height);
@@ -750,14 +732,11 @@ pub fn claim_rewards(
     depositor.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
-    store_depositor_info(deps.storage, &depositor_raw, &depositor)?;
+    store_depositor_info(deps.storage, &info.sender, &depositor)?;
 
     let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps
-                .api
-                .addr_humanize(&config.distributor_contract)?
-                .to_string(),
+            contract_addr: config.distributor_contract.to_string(),
             funds: vec![],
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: depositor_address.to_string(),
@@ -801,7 +780,7 @@ pub(crate) fn compute_depositor_reward(state: &State, depositor: &mut DepositorI
 pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
-    owner: Option<Addr>,
+    owner: Option<String>,
     lottery_interval: Option<u64>,
     block_time: Option<u64>,
     ticket_price: Option<Decimal256>,
@@ -813,12 +792,12 @@ pub fn update_config(
     let mut config: Config = CONFIG.load(deps.storage)?;
 
     // check permission
-    if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
+    if info.sender != config.owner {
         return Err(ContractError::Unauthorized {});
     }
     // change owner of Glow lotto contract
     if let Some(owner) = owner {
-        config.owner = deps.api.addr_canonicalize(&owner.to_string())?; //TODO: improve
+        config.owner = deps.api.addr_validate(owner.as_str())?;
     }
 
     if let Some(lottery_interval) = lottery_interval {
@@ -903,18 +882,12 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = CONFIG.load(deps.storage)?;
 
     Ok(ConfigResponse {
-        owner: deps.api.addr_humanize(&config.owner)?.to_string(),
+        owner: config.owner.to_string(),
         stable_denom: config.stable_denom,
-        a_terra_contract: deps
-            .api
-            .addr_humanize(&config.a_terra_contract)?
-            .to_string(),
-        anchor_contract: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-        gov_contract: deps.api.addr_humanize(&config.gov_contract)?.to_string(),
-        distributor_contract: deps
-            .api
-            .addr_humanize(&config.distributor_contract)?
-            .to_string(),
+        a_terra_contract: config.a_terra_contract.to_string(),
+        anchor_contract: config.anchor_contract.to_string(),
+        gov_contract: config.gov_contract.to_string(),
+        distributor_contract: config.distributor_contract.to_string(),
         lottery_interval: config.lottery_interval,
         block_time: config.block_time,
         ticket_price: config.ticket_price,
@@ -956,7 +929,7 @@ pub fn query_lottery_info(deps: Deps, lottery_id: Option<u64>) -> StdResult<Lott
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             total_prizes: lottery.total_prizes,
-            number_winners: lottery.number_winners
+            number_winners: lottery.number_winners,
         })
     } else {
         let current_lottery = query_state(deps, None)?.current_lottery;
@@ -966,14 +939,14 @@ pub fn query_lottery_info(deps: Deps, lottery_id: Option<u64>) -> StdResult<Lott
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             total_prizes: lottery.total_prizes,
-            number_winners: lottery.number_winners
+            number_winners: lottery.number_winners,
         })
     }
 }
 
 pub fn query_depositor(deps: Deps, addr: String) -> StdResult<DepositorInfoResponse> {
-    let address_raw = deps.api.addr_canonicalize(&addr)?;
-    let depositor = read_depositor_info(deps.storage, &address_raw);
+    let address = deps.api.addr_validate(&addr)?;
+    let depositor = read_depositor_info(deps.storage, &address);
     Ok(DepositorInfoResponse {
         depositor: addr,
         deposit_amount: depositor.deposit_amount,
@@ -992,7 +965,7 @@ pub fn query_depositors(
     limit: Option<u32>,
 ) -> StdResult<DepositorsInfoResponse> {
     let start_after = if let Some(start_after) = start_after {
-        Some(deps.api.addr_canonicalize(&start_after)?)
+        Some(deps.api.addr_validate(&start_after)?)
     } else {
         None
     };

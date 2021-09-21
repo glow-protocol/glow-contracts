@@ -2,32 +2,29 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage, Uint128};
 use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Item, Map, U64Key};
 use glow_protocol::lotto::{Claim, DepositorInfoResponse};
 
-use crate::prize_strategy::count_seq_matches;
-
-const PREFIX_SEQUENCE: &[u8] = b"sequence";
 const PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_DEPOSIT: &[u8] = b"depositor";
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
-//pub const DEPOSITORS: Map<CanonicalAddr, DepositorInfo> = Map::new("depositors");
+//pub const DEPOSITORS: Map<&Addr, DepositorInfo> = Map::new("depositors");
 //pub const LOTTERY: Map<u8, LotteryInfo> = Map::new("lottery");
-pub const TICKETS: Map<&[u8], Vec<CanonicalAddr>> = Map::new("tickets");
-pub const PRIZES: Map<(Addr, U64Key), [u8; 6]> = Map::new("prizes");
+pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
+pub const PRIZES: Map<(&Addr, U64Key), [u8; 6]> = Map::new("prizes");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub owner: CanonicalAddr,
-    pub a_terra_contract: CanonicalAddr,
-    pub gov_contract: CanonicalAddr,
-    pub distributor_contract: CanonicalAddr,
-    pub anchor_contract: CanonicalAddr,
+    pub owner: Addr,
+    pub a_terra_contract: Addr,
+    pub gov_contract: Addr,
+    pub distributor_contract: Addr,
+    pub anchor_contract: Addr,
     pub stable_denom: String,
     pub lottery_interval: Duration, // number of blocks (or time) between lotteries
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
@@ -76,11 +73,6 @@ pub struct LotteryInfo {
     pub page: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Sequence {
-    pub holders: Vec<CanonicalAddr>,
-}
-
 pub fn store_lottery_info(
     storage: &mut dyn Storage,
     lottery_id: u64,
@@ -96,34 +88,13 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             sequence: "".to_string(),
             awarded: false,
             total_prizes: Decimal256::zero(),
-            number_winners: [0;6],
+            number_winners: [0; 6],
             page: "".to_string(),
         },
     }
 }
 
-pub fn sequence_bucket(storage: &mut dyn Storage) -> Bucket<Vec<CanonicalAddr>> {
-    bucket(storage, PREFIX_SEQUENCE)
-}
-
-pub fn store_sequence_info(
-    storage: &mut dyn Storage,
-    depositor: CanonicalAddr,
-    sequence: &str,
-) -> StdResult<()> {
-    let mut holders: Vec<CanonicalAddr> = read_sequence_info(storage, sequence);
-    holders.push(depositor);
-    sequence_bucket(storage).save(sequence.as_bytes(), &holders)
-}
-
-pub fn read_sequence_info(storage: &dyn Storage, sequence: &str) -> Vec<CanonicalAddr> {
-    match bucket_read(storage, PREFIX_SEQUENCE).load(sequence.as_bytes()) {
-        Ok(v) => v,
-        _ => vec![],
-    }
-}
-
-pub fn query_ticket_info(deps: Deps, ticket: &str) -> StdResult<Vec<CanonicalAddr>> {
+pub fn query_ticket_info(deps: Deps, ticket: &str) -> StdResult<Vec<Addr>> {
     TICKETS.load(deps.storage, ticket.as_ref())
 }
 
@@ -131,73 +102,16 @@ pub fn query_ticket_info(deps: Deps, ticket: &str) -> StdResult<Vec<CanonicalAdd
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 
-pub fn read_all_sequences(deps: Deps) -> Vec<(String, Vec<CanonicalAddr>)> {
-    let sequence_bucket: ReadonlyBucket<Vec<CanonicalAddr>> =
-        bucket_read(deps.storage, PREFIX_SEQUENCE);
-
-    // TODO: review limit value for optimization
-    let limit = 1000;
-    let mut start = None;
-
-    let mut all_sequences = vec![];
-
-    loop {
-        let mut sequences: Vec<(String, Vec<CanonicalAddr>)> = sequence_bucket
-            .range(start.as_deref(), None, Order::Ascending)
-            .take(limit)
-            .map(|elem| {
-                let (k, v) = elem.unwrap();
-                let sequence = String::from_utf8(k).ok().unwrap();
-                (sequence, v)
-            })
-            .collect();
-
-        if sequences.is_empty() {
-            break;
-        }
-
-        start = calc_sequence_range_start(Some(sequences.last().unwrap().0.as_str()));
-
-        let last_loop = sequences.len() < limit;
-
-        all_sequences.append(&mut sequences);
-
-        if last_loop {
-            break;
-        }
-    }
-
-    all_sequences
-}
-
-pub fn read_matching_sequences(deps: Deps, win_sequence: &str) -> Vec<(u8, Vec<CanonicalAddr>)> {
-    let all_sequences = read_all_sequences(deps);
-
-    all_sequences
-        .iter()
-        .filter_map(|elem| {
-            let (s, v) = elem;
-            let sequence = String::from(s);
-            let number_matches = count_seq_matches(win_sequence, &sequence);
-            if number_matches < 2 {
-                None
-            } else {
-                Some((number_matches, v.clone()))
-            }
-        })
-        .collect()
-}
-
 pub fn store_depositor_info(
     storage: &mut dyn Storage,
-    depositor: &CanonicalAddr,
+    depositor: &Addr,
     depositor_info: &DepositorInfo,
 ) -> StdResult<()> {
-    bucket(storage, PREFIX_DEPOSIT).save(depositor.as_slice(), depositor_info)
+    bucket(storage, PREFIX_DEPOSIT).save(depositor.as_bytes(), depositor_info)
 }
 
-pub fn read_depositor_info(storage: &dyn Storage, depositor: &CanonicalAddr) -> DepositorInfo {
-    match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_slice()) {
+pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> DepositorInfo {
+    match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
         _ => DepositorInfo {
             deposit_amount: Decimal256::zero(),
@@ -213,7 +127,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &CanonicalAddr) -> 
 
 pub fn read_depositors(
     deps: Deps,
-    start_after: Option<CanonicalAddr>,
+    start_after: Option<Addr>,
     limit: Option<u32>,
 ) -> StdResult<Vec<DepositorInfoResponse>> {
     let liability_bucket: ReadonlyBucket<DepositorInfo> = bucket_read(deps.storage, PREFIX_DEPOSIT);
@@ -226,7 +140,7 @@ pub fn read_depositors(
         .take(limit)
         .map(|elem| {
             let (k, v) = elem?;
-            let depositor = deps.api.addr_humanize(&CanonicalAddr::from(k))?.to_string();
+            let depositor = String::from_utf8(k).unwrap();
             Ok(DepositorInfoResponse {
                 depositor,
                 deposit_amount: v.deposit_amount,
@@ -242,9 +156,9 @@ pub fn read_depositors(
 }
 
 // this will set the first key after the provided key, by appending a 1 byte
-fn calc_range_start(start_after: Option<CanonicalAddr>) -> Option<Vec<u8>> {
+fn calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
     start_after.map(|addr| {
-        let mut v = addr.as_slice().to_vec();
+        let mut v = addr.as_bytes().to_vec();
         v.push(1);
         v
     })

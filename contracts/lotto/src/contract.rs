@@ -402,14 +402,14 @@ pub fn sponsor(
     let mut state = read_state(deps.storage)?;
 
     // Check deposit is in base stable denom
-    let deposit_amount = info
+    let sponsor_amount = info
         .funds
         .iter()
         .find(|c| c.denom == config.stable_denom)
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
 
-    if deposit_amount.is_zero() {
+    if sponsor_amount.is_zero() {
         return Err(ContractError::InvalidSponsorshipAmount {});
     }
 
@@ -418,27 +418,41 @@ pub fn sponsor(
     if let Some(true) = award {
         state.award_available = state
             .award_available
-            .add(Decimal256::from_uint256(deposit_amount));
+            .add(Decimal256::from_uint256(sponsor_amount));
     } else {
         // query exchange_rate from anchor money market
         let epoch_state: EpochStateResponse = query_exchange_rate(
             deps.as_ref(),
             deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
         )?;
-        // add amount of aUST entitled from the deposit
-        let minted_amount = Decimal256::from_uint256(deposit_amount) / epoch_state.exchange_rate;
 
+        // Discount tx taxes? we do with deposits
+        // let net_coin_amount = deduct_tax(deps.as_ref(), coin(sponsor_amount.into(), "uusd"))?;
+        // let amount = net_coin_amount.amount;
+
+        // add amount of aUST entitled from the deposit
+        let minted_amount = Decimal256::from_uint256(sponsor_amount) / epoch_state.exchange_rate;
+
+        // fetch depositor_info
+        let depositor = deps.api.addr_canonicalize(info.sender.as_str())?;
+        let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
+
+        // add sponsor_shares to depositor
+        depositor_info.sponsor_shares = depositor_info.sponsor_shares.add(minted_amount);
+        store_depositor_info(deps.storage, &depositor, &depositor_info)?;
+
+        // update global state
         state.shares_supply = state.shares_supply.add(minted_amount);
         state.lottery_deposits = state
             .lottery_deposits
-            .add(Decimal256::from_uint256(deposit_amount));
+            .add(Decimal256::from_uint256(sponsor_amount));
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
             funds: vec![deduct_tax(
                 deps.as_ref(),
                 Coin {
                     denom: config.stable_denom,
-                    amount: deposit_amount.into(),
+                    amount: sponsor_amount.into(),
                 },
             )?],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
@@ -450,7 +464,97 @@ pub fn sponsor(
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "sponsorship"),
         attr("sponsor", info.sender.to_string()),
-        attr("sponsorship_amount", deposit_amount),
+        attr("sponsorship_amount", sponsor_amount),
+    ]))
+}
+
+pub fn sponsor_withdraw(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let config = read_config(deps.storage)?;
+    let mut state = read_state(deps.storage)?;
+
+    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
+    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &sender_raw);
+
+    if depositor.sponsor_shares.is_zero() || state.shares_supply.is_zero() {
+        return Err(ContractError::InvalidSponsorWithdraw {});
+    }
+
+    // Compute GLOW reward
+    compute_reward(&mut state, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
+    // Calculate depositor current sponsor deposits in uusd
+    let depositor_ratio = depositor.sponsor_shares / state.shares_supply;
+    let contract_a_balance = query_token_balance(
+        &deps.querier,
+        deps.api.addr_humanize(&config.a_terra_contract)?,
+        env.clone().contract.address,
+    )?;
+    let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
+    let rate = query_exchange_rate(
+        deps.as_ref(),
+        deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+    )?
+    .exchange_rate;
+    let sponsor_deposits = Uint256::one() * (aust_amount * rate);
+
+    // Calculate ratio of deposits, shares and tickets to withdraw
+    let aust_to_redeem = aust_amount;
+    let return_amount = sponsor_deposits;
+
+    // Double-checking Lotto pool is solvent against deposits
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < state.total_deposits {
+        return Err(ContractError::InsufficientPoolFunds {});
+    }
+
+    let withdrawn_shares = depositor.sponsor_shares;
+
+    // Update depositor info
+    depositor.sponsor_shares = depositor.sponsor_shares.sub(withdrawn_shares);
+
+    // Update global state
+    state.lottery_deposits = state
+        .lottery_deposits
+        .sub(Decimal256::from_uint256(sponsor_deposits));
+    state.shares_supply = state.shares_supply.sub(withdrawn_shares);
+
+    let mut msgs: Vec<CosmosMsg> = vec![];
+
+    // Message for redeem amount operation of aUST
+    let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: deps
+            .api
+            .addr_humanize(&config.a_terra_contract)?
+            .to_string(),
+        funds: vec![],
+        msg: to_binary(&Cw20ExecuteMsg::Send {
+            contract: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+            amount: (aust_to_redeem * Uint256::one()).into(),
+            msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
+        })?,
+    });
+    msgs.push(redeem_msg);
+
+    // Discount tx taxes
+    let net_coin_amount = deduct_tax(deps.as_ref(), coin((return_amount).into(), "uusd"))?;
+
+    msgs.push(CosmosMsg::Bank(BankMsg::Send {
+        to_address: info.sender.to_string(),
+        amount: vec![net_coin_amount],
+    }));
+
+    store_depositor_info(deps.storage, &sender_raw, &depositor)?;
+    store_state(deps.storage, &state)?;
+
+    Ok(Response::new().add_messages(msgs).add_attributes(vec![
+        attr("action", "withdraw_sponsor"),
+        attr("depositor", info.sender.to_string()),
+        attr("redeem_amount_anchor", aust_to_redeem.to_string()),
+        attr("redeem_stable_amount", return_amount.to_string()),
     ]))
 }
 

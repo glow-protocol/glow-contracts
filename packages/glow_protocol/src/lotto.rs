@@ -54,6 +54,7 @@ pub enum ExecuteMsg {
     Sponsor {
         award: Option<bool>,
     },
+    SponsorWithdraw {},
     Withdraw {
         amount: Option<Uint128>,
         instant: Option<bool>,

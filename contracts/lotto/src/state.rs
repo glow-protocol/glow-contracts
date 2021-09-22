@@ -60,7 +60,6 @@ pub struct DepositorInfo {
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
-    // pub sponsor_deposits: Decimal256,
     pub sponsor_shares: Decimal256,
 }
 

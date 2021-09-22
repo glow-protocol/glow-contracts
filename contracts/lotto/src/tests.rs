@@ -19,9 +19,8 @@ use glow_protocol::lotto::{
 
 use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
-use glow_protocol::querier::query_token_balance;
+use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use moneymarket::querier::deduct_tax; //TODO: import from glow_protocol package
 use std::ops::{Add, Div, Mul};
 use std::str::FromStr;
 
@@ -698,7 +697,6 @@ fn gift_tickets() {
     // TODO: deposit fails when current lottery deposit time is expired
 }
 
-// TODO: write sponsor testcases
 #[test]
 fn sponsor() {
     // Initialize contract
@@ -711,26 +709,11 @@ fn sponsor() {
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
     deps.querier.with_tax(
         Decimal::percent(1),
-        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
+        &[(&"uusd".to_string(), &Uint128::from(1_000_000u128))],
     );
-
-    // let sponsor_amount_minus_tax = deduct_tax(
-    //     deps.as_ref(),
-    //     Coin {
-    //         denom: String::from("uusd"),
-    //         amount: Uint128::from(sponsor_amount),
-    //     },
-    // )
-    // .unwrap()
-    // .amount;
-
-    // println!(
-    //     "TEST: sponsor_amount_minus_tax: {}, exchange_rate: {}",
-    //     sponsor_amount_minus_tax,
-    //     Decimal256::permille(RATE)
-    // );
 
     // Address sponsor
     let info = mock_info(
@@ -744,21 +727,56 @@ fn sponsor() {
     let msg = ExecuteMsg::Sponsor { award: None };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg.clone());
-    println!("{:?}", _res);
+    // println!("{:?}", _res);
 
     let depositor_info = read_depositor_info(
         deps.as_ref().storage,
         &deps.api.addr_canonicalize("addr0001").unwrap(),
     );
 
-    // println!("depositor_info: {:x?}", depositor_info);
+    let state = read_state(&deps.storage).unwrap();
 
-    assert_eq!(
-        depositor_info.sponsor_shares,
-        Decimal256::from_uint256(sponsor_amount) / Decimal256::permille(RATE)
+    let sponsor_amount_minus_tax = deduct_tax(
+        deps.as_ref(),
+        Coin {
+            denom: String::from("uusd"),
+            amount: Uint128::from(sponsor_amount),
+        },
     )
+    .unwrap()
+    .amount;
+
+    let minted_shares =
+        Decimal256::from_uint256(sponsor_amount_minus_tax) / Decimal256::permille(RATE);
+
+    assert_eq!(depositor_info.sponsor_shares, minted_shares);
+
+    assert_eq!(state.shares_supply, minted_shares);
 
     // withdraw sponsor
+
+    let app_shares = (Decimal256::from_uint256(sponsor_amount_minus_tax)
+        / Decimal256::permille(RATE))
+        * Uint256::one();
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &app_shares.into())],
+    )]);
+
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::SponsorWithdraw {};
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_canonicalize("addr0001").unwrap(),
+    );
+
+    let state = read_state(&deps.storage).unwrap();
+
+    assert_eq!(depositor_info.sponsor_shares, Decimal256::zero());
+    assert_eq!(state.shares_supply, Decimal256::zero());
 }
 
 #[test]

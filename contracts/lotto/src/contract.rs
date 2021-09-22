@@ -115,6 +115,7 @@ pub fn execute(
             recipient,
         } => gift_tickets(deps, env, info, combinations, recipient),
         ExecuteMsg::Sponsor { award } => sponsor(deps, info, award),
+        ExecuteMsg::SponsorWithdraw {} => sponsor_withdraw(deps, env, info),
         ExecuteMsg::Withdraw { amount, instant } => withdraw(deps, env, info, amount, instant),
         ExecuteMsg::Claim {} => claim(deps, env, info),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
@@ -426,12 +427,12 @@ pub fn sponsor(
             deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
         )?;
 
-        // Discount tx taxes? we do with deposits
-        // let net_coin_amount = deduct_tax(deps.as_ref(), coin(sponsor_amount.into(), "uusd"))?;
-        // let amount = net_coin_amount.amount;
+        // Discount tx taxes
+        let net_coin_amount = deduct_tax(deps.as_ref(), coin(sponsor_amount.into(), "uusd"))?;
+        let amount = net_coin_amount.amount;
 
         // add amount of aUST entitled from the deposit
-        let minted_amount = Decimal256::from_uint256(sponsor_amount) / epoch_state.exchange_rate;
+        let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
 
         // fetch depositor_info
         let depositor = deps.api.addr_canonicalize(info.sender.as_str())?;
@@ -448,13 +449,10 @@ pub fn sponsor(
             .add(Decimal256::from_uint256(sponsor_amount));
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-            funds: vec![deduct_tax(
-                deps.as_ref(),
-                Coin {
-                    denom: config.stable_denom,
-                    amount: sponsor_amount.into(),
-                },
-            )?],
+            funds: vec![Coin {
+                denom: config.stable_denom,
+                amount,
+            }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         }));
     }

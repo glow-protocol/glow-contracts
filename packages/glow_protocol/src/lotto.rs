@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -62,9 +62,8 @@ pub enum ExecuteMsg {
     Claim {},
     ClaimRewards {},
     ExecuteLottery {},
-    /// (internal) Called internally by ExecuteLottery
-    _ExecutePrize {
-        balance: Uint256,
+    ExecutePrize {
+        limit: Option<u32>,
     },
     ExecuteEpochOps {},
 }
@@ -93,6 +92,7 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub owner: String,
     pub stable_denom: String,
+    pub a_terra_contract: String,
     pub anchor_contract: String,
     pub gov_contract: String,
     pub distributor_contract: String,
@@ -131,7 +131,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub winners: Vec<(u8, Vec<String>)>, // [(number_hits, [lucky_holders])]
+    pub number_winners: [u8; 6], // numeber of winners per hits e.g. [0,0,3,2,0,0]
 }
 
 // We define a custom struct for each query response

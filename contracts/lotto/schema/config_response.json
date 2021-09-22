@@ -3,6 +3,7 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
+    "a_terra_contract",
     "anchor_contract",
     "block_time",
     "distributor_contract",
@@ -19,6 +20,9 @@
     "unbonding_period"
   ],
   "properties": {
+    "a_terra_contract": {
+      "type": "string"
+    },
     "anchor_contract": {
       "type": "string"
     },

@@ -67,7 +67,7 @@ pub fn query_glow_emission_rate(
 
 #[allow(dead_code)]
 pub fn query_depositor_claims(deps: Deps, addr: String) -> StdResult<Vec<Claim>> {
-    let address_raw = deps.api.addr_canonicalize(&addr)?;
+    let address_raw = deps.api.addr_validate(&addr)?;
     let claims = read_depositor_info(deps.storage, &address_raw).unbonding_info;
     Ok(claims)
 }

@@ -453,12 +453,11 @@ pub fn sponsor(
         let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
 
         // fetch depositor_info
-        let depositor = deps.api.addr_canonicalize(info.sender.as_str())?;
-        let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
+        let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
         // add sponsor_shares to depositor
         depositor_info.sponsor_shares = depositor_info.sponsor_shares.add(minted_amount);
-        store_depositor_info(deps.storage, &depositor, &depositor_info)?;
+        store_depositor_info(deps.storage, &info.sender, &depositor_info)?;
 
         // update global state
         state.shares_supply = state.shares_supply.add(minted_amount);
@@ -489,11 +488,10 @@ pub fn sponsor_withdraw(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let config = read_config(deps.storage)?;
-    let mut state = read_state(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &sender_raw);
+    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
     if depositor.sponsor_shares.is_zero() || state.shares_supply.is_zero() {
         return Err(ContractError::InvalidSponsorWithdraw {});
@@ -507,15 +505,12 @@ pub fn sponsor_withdraw(
     let depositor_ratio = depositor.sponsor_shares / state.shares_supply;
     let contract_a_balance = query_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.a_terra_contract)?,
+        config.a_terra_contract.clone(),
         env.clone().contract.address,
     )?;
     let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
-    let rate = query_exchange_rate(
-        deps.as_ref(),
-        deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
-    )?
-    .exchange_rate;
+    let rate =
+        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
     let sponsor_deposits = Uint256::one() * (aust_amount * rate);
 
     // Calculate ratio of deposits, shares and tickets to withdraw
@@ -542,13 +537,10 @@ pub fn sponsor_withdraw(
 
     // Message for redeem amount operation of aUST
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: deps
-            .api
-            .addr_humanize(&config.a_terra_contract)?
-            .to_string(),
+        contract_addr: config.a_terra_contract.to_string(),
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: deps.api.addr_humanize(&config.anchor_contract)?.to_string(),
+            contract: config.anchor_contract.to_string(),
             amount: (aust_to_redeem * Uint256::one()).into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
         })?,
@@ -563,8 +555,8 @@ pub fn sponsor_withdraw(
         amount: vec![net_coin_amount],
     }));
 
-    store_depositor_info(deps.storage, &sender_raw, &depositor)?;
-    store_state(deps.storage, &state)?;
+    store_depositor_info(deps.storage, &info.sender, &depositor)?;
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "withdraw_sponsor"),

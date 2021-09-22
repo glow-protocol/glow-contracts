@@ -729,10 +729,10 @@ fn sponsor() {
 
     let depositor_info = read_depositor_info(
         deps.as_ref().storage,
-        &deps.api.addr_canonicalize("addr0001").unwrap(),
+        &deps.api.addr_validate("addr0001").unwrap(),
     );
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
 
     let sponsor_amount_minus_tax = deduct_tax(
         deps.as_ref(),
@@ -768,10 +768,10 @@ fn sponsor() {
 
     let depositor_info = read_depositor_info(
         deps.as_ref().storage,
-        &deps.api.addr_canonicalize("addr0001").unwrap(),
+        &deps.api.addr_validate("addr0001").unwrap(),
     );
 
-    let state = read_state(&deps.storage).unwrap();
+    let state = query_state(deps.as_ref(), None).unwrap();
 
     assert_eq!(depositor_info.sponsor_shares, Decimal256::zero());
     assert_eq!(state.shares_supply, Decimal256::zero());

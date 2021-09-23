@@ -459,6 +459,58 @@ fn deposit() {
         ]
     );
 
+    // test round-up tickets
+    let deposit_amount =
+        Decimal256::percent((TICKET_PRICE as f64 * 1.6f64).round() as u64) * Uint256::one();
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: deposit_amount.into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("14657")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 3);
+
+    // println!("depositor_info: {:x?}", depositor_info);
+
+    // deposit again
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("19876")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 5);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("19876")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 6);
+
     // TODO: cover more cases eg. sequential buys and repeated ticket in same buy
     // TODO: deposit fails when current lottery deposit time is expired
     // TODO: correct base denom, deposit greater than tickets test case

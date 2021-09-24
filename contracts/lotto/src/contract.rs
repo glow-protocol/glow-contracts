@@ -222,7 +222,7 @@ pub fn deposit(
     // check if we need to round up number of combinations based on depositor total deposits
     if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
         / config.ticket_price)
-        > (Decimal256::from_uint256(Uint256::from(
+        >= (Decimal256::from_uint256(Uint256::from(
             (depositor_info.tickets.len() + combinations.len()) as u128,
         )) + Decimal256::one())
     {

@@ -461,7 +461,8 @@ fn deposit() {
 
     // test round-up tickets
     let deposit_amount =
-        Decimal256::percent((TICKET_PRICE as f64 * 1.6f64).round() as u64) * Uint256::one();
+        Decimal256::percent(TICKET_PRICE) * Decimal256::from_ratio(3, 2) * Uint256::one();
+
     let info = mock_info(
         "addr0000",
         &[Coin {
@@ -499,7 +500,7 @@ fn deposit() {
     assert_eq!(depositor_info.tickets.len(), 5);
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("19876")],
+        combinations: vec![String::from("45636")],
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -510,6 +511,19 @@ fn deposit() {
     );
 
     assert_eq!(depositor_info.tickets.len(), 6);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("45636")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 8);
 
     // TODO: cover more cases eg. sequential buys and repeated ticket in same buy
     // TODO: deposit fails when current lottery deposit time is expired

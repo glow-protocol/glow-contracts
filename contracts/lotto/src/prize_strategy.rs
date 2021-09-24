@@ -6,8 +6,8 @@ use crate::state::{
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
+    Storage, Uint128, WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
@@ -105,7 +105,10 @@ pub fn execute_lottery(
 
     let res = Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "execute_lottery"),
-        attr("redeemed_amount", aust_to_redeem.to_string()),
+        attr(
+            "redeemed_amount",
+            (aust_to_redeem * Uint256::one()).to_string(),
+        ),
     ]);
     Ok(res)
 }
@@ -136,6 +139,7 @@ pub fn execute_prize(
 
     // Execute lottery must be called before execute_prize
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
+    let current_lottery = state.current_lottery;
     if lottery_info.sequence.is_empty() {
         return Err(ContractError::InvalidLotteryPrizeExecution {});
     }
@@ -147,7 +151,7 @@ pub fn execute_prize(
     if lottery_info.page.is_empty() {
         min_bound = &lottery_info.sequence[..2];
     } else {
-        min_bound = &lottery_info.page[..2];
+        min_bound = &lottery_info.page;
     }
 
     // Get max bounds
@@ -166,53 +170,55 @@ pub fn execute_prize(
         .collect::<StdResult<(Vec<_>)>>()
         .unwrap();
 
-    // Update pagination for next iterations, if necessary
-    if let Some(next) = TICKETS
-        .range(
-            deps.storage,
-            Some(Bound::Exclusive(winning_tickets.last().unwrap().clone().0)),
-            Some(Bound::Exclusive(Vec::from(max_bound))),
-            Order::Ascending,
-        )
-        .next()
-    {
-        lottery_info.page = String::from_utf8(next.unwrap().0).unwrap();
+    if !winning_tickets.is_empty() {
+        // Update pagination for next iterations, if necessary
+        if let Some(next) = TICKETS
+            .range(
+                deps.storage,
+                Some(Bound::Exclusive(winning_tickets.last().unwrap().clone().0)),
+                Some(Bound::Exclusive(Vec::from(max_bound))),
+                Order::Ascending,
+            )
+            .next()
+        {
+            lottery_info.page = String::from_utf8(next.unwrap().0).unwrap();
+        } else {
+            lottery_info.awarded = true;
+        }
+
+        // Update holders prizes and lottery info number of winners
+        winning_tickets.iter().for_each(|sequence| -> () {
+            let matches = count_seq_matches(
+                &lottery_info.sequence.clone(),
+                str::from_utf8(&*sequence.0).unwrap(),
+            );
+            lottery_info.number_winners[matches as usize] += sequence.1.len() as u32;
+            sequence.1.iter().for_each(|winner| {
+                let lottery_id: U64Key = state.current_lottery.into();
+                // TODO: revisit to avoid multiple state r-w
+                PRIZES.update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
+                    let result = match hits {
+                        Some(mut winnings) => {
+                            winnings[matches as usize] += 1;
+                            winnings
+                        }
+                        None => {
+                            let mut winnings = [0; 6];
+                            winnings[matches as usize] = 1;
+                            winnings
+                        }
+                    };
+                    Ok(result)
+                });
+            });
+        });
     } else {
         lottery_info.awarded = true;
     }
 
-    // Update holders prizes and lottery info number of winners
-    winning_tickets.iter().for_each(|sequence| -> () {
-        let matches = count_seq_matches(
-            &lottery_info.sequence.clone(),
-            str::from_utf8(&*sequence.0).unwrap(),
-        );
-        lottery_info.number_winners[matches as usize] += 1;
-        sequence.1.iter().for_each(|winner| {
-            let lottery_id: U64Key = state.current_lottery.into();
-            PRIZES.update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
-                let result = match hits {
-                    Some(mut winnings) => {
-                        winnings[matches as usize] += 1;
-                        winnings
-                    }
-                    None => {
-                        let mut winnings = [0; 6];
-                        winnings[matches as usize] = 1;
-                        winnings
-                    }
-                };
-                Ok(result)
-            });
-        });
-    });
-
     // If all winners have been accounted, update lottery info and jump to next round
     let mut total_awarded_prize = Decimal256::zero();
     if lottery_info.awarded {
-        state.current_lottery += 1;
-        state.next_lottery_time =
-            Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
                 // TODO: revise logic
@@ -220,10 +226,14 @@ pub fn execute_prize(
             }
         }
         lottery_info.total_prizes = total_awarded_prize;
+        state.current_lottery += 1;
+
+        state.next_lottery_time =
+            Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
         state.award_available = state.award_available.sub(total_awarded_prize);
         STATE.save(deps.storage, &state)?;
     }
-    store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
+    store_lottery_info(deps.storage, current_lottery, &lottery_info)?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "execute_prize"),
@@ -261,4 +271,23 @@ pub fn count_seq_matches(a: &str, b: &str) -> u8 {
         }
     }
     count
+}
+
+pub fn assert_holder(
+    storage: &dyn Storage,
+    combination: &String,
+    holder: Addr,
+    max_holders: u8,
+) -> Result<(), ContractError> {
+    if let Some(holders) = TICKETS.may_load(storage, combination.as_bytes()).unwrap() {
+        if holders.contains(&holder) {
+            return Err(ContractError::InvalidHolderSequence {});
+        }
+
+        if holders.len() > max_holders as usize {
+            return Err(ContractError::InvalidHolderSequence {});
+        }
+    }
+
+    Ok(())
 }

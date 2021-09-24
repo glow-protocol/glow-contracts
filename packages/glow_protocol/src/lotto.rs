@@ -14,6 +14,7 @@ pub struct InstantiateMsg {
     pub lottery_interval: u64,
     pub block_time: u64,
     pub ticket_price: Decimal256,
+    pub max_holders: u8,
     pub prize_distribution: Vec<Decimal256>,
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256,
@@ -58,7 +59,9 @@ pub enum ExecuteMsg {
         amount: Option<Uint128>,
         instant: Option<bool>,
     },
-    Claim {},
+    Claim {
+        lottery: Option<u64>,
+    },
     ClaimRewards {},
     ExecuteLottery {},
     ExecutePrize {
@@ -98,6 +101,7 @@ pub struct ConfigResponse {
     pub lottery_interval: Duration,
     pub block_time: Duration,
     pub ticket_price: Decimal256,
+    pub max_holders: u8,
     pub prize_distribution: Vec<Decimal256>,
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256,
@@ -130,7 +134,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub number_winners: [u8; 6], // numeber of winners per hits e.g. [0,0,3,2,0,0]
+    pub number_winners: [u32; 6], // numeber of winners per hits e.g. [0,0,3,2,0,0]
 }
 
 // We define a custom struct for each query response

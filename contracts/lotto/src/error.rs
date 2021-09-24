@@ -21,6 +21,9 @@ pub enum ContractError {
     #[error("Sequence must be 5 digits between 0-9")]
     InvalidSequence {},
 
+    #[error("The sender already owns the ticket or the ticket max holder has been reached")]
+    InvalidHolderSequence {},
+
     #[error("Gift tickets to oneself is not allowed")]
     InvalidGift {},
 

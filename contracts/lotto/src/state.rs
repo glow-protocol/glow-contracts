@@ -16,7 +16,7 @@ pub const STATE: Item<State> = Item::new("state");
 //pub const DEPOSITORS: Map<&Addr, DepositorInfo> = Map::new("depositors");
 //pub const LOTTERY: Map<u8, LotteryInfo> = Map::new("lottery");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
-pub const PRIZES: Map<(&Addr, U64Key), [u8; 6]> = Map::new("prizes");
+pub const PRIZES: Map<(&Addr, U64Key), [u32; 6]> = Map::new("prizes");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -29,6 +29,7 @@ pub struct Config {
     pub lottery_interval: Duration, // number of blocks (or time) between lotteries
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
     pub ticket_price: Decimal256, // prize of a ticket in stable_denom
+    pub max_holders: u8,      // Max number of holders per ticket
     pub prize_distribution: Vec<Decimal256>, // [0, 0, 0.05, 0.15, 0.3, 0.5]
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
@@ -69,7 +70,7 @@ pub struct LotteryInfo {
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub number_winners: [u8; 6],
+    pub number_winners: [u32; 6],
     pub page: String,
 }
 
@@ -96,6 +97,11 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
 
 pub fn query_ticket_info(deps: Deps, ticket: &str) -> StdResult<Vec<Addr>> {
     TICKETS.load(deps.storage, ticket.as_ref())
+}
+
+pub fn query_prizes(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<[u32; 6]> {
+    let lottery_key = U64Key::from(lottery_id);
+    PRIZES.load(deps.storage, (address, lottery_key))
 }
 
 // settings for pagination

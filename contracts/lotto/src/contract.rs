@@ -3,10 +3,10 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, Uint128, WasmMsg,
+    Response, StdError, StdResult, Uint128, WasmMsg,
 };
 
-use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
+use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, store_depositor_info, Config,
@@ -66,6 +66,7 @@ pub fn instantiate(
             lottery_interval: Duration::Time(msg.lottery_interval),
             block_time: Duration::Time(msg.block_time),
             ticket_price: msg.ticket_price,
+            max_holders: msg.max_holders,
             prize_distribution: msg.prize_distribution,
             target_award: msg.target_award,
             reserve_factor: msg.reserve_factor,
@@ -115,7 +116,7 @@ pub fn execute(
         } => gift_tickets(deps, env, info, combinations, recipient),
         ExecuteMsg::Sponsor { award } => sponsor(deps, info, award),
         ExecuteMsg::Withdraw { amount, instant } => withdraw(deps, env, info, amount, instant),
-        ExecuteMsg::Claim {} => claim(deps, env, info),
+        ExecuteMsg::Claim { lottery } => claim(deps, env, info, lottery),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
@@ -241,8 +242,15 @@ pub fn deposit(
 
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
-    for combination in combinations.clone() {
+    for combination in combinations {
         // TODO: double-check is working. Can I remove this loop?
+
+        assert_holder(
+            deps.storage,
+            &combination,
+            info.sender.clone(),
+            config.max_holders,
+        );
 
         // TODO: refactor as it's being reused
         let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
@@ -360,7 +368,14 @@ pub fn gift_tickets(
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in combinations.clone() {
-        // TODO: double-check is working. Can I remove this loop?
+        // TODO: test assert_holder
+        assert_holder(
+            deps.storage,
+            &combination,
+            recipient.clone(),
+            config.max_holders,
+        );
+
         // TODO: refactor as it's being reused
         let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
             let mut b = a.unwrap_or_default();
@@ -532,16 +547,19 @@ pub fn withdraw(
     //TODO: check if we are draining the right amount
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
         // TODO: double-check is working. Can I remove this loop?
-        TICKETS.update(deps.storage, seq.as_bytes(), |tickets| -> StdResult<_> {
-            let index = tickets
-                .clone()
-                .unwrap_or_default()
-                .iter()
-                .position(|x| *x == info.sender.clone())
-                .unwrap();
-            let _elem = tickets.clone().unwrap().remove(index);
-            Ok(tickets.unwrap())
-        });
+        TICKETS.update(
+            deps.storage,
+            seq.as_bytes(),
+            |mut tickets| -> StdResult<_> {
+                let mut new_tickets = tickets.unwrap();
+                let index = new_tickets
+                    .iter()
+                    .position(|x| *x == info.sender.clone())
+                    .unwrap();
+                let _elem = new_tickets.remove(index);
+                Ok(new_tickets)
+            },
+        );
     }
 
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
@@ -615,7 +633,12 @@ pub fn withdraw(
 }
 
 // Send available UST to user from current redeemable balance and unbonded deposits
-pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+pub fn claim(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    _lottery: Option<u64>,
+) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
@@ -891,6 +914,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         lottery_interval: config.lottery_interval,
         block_time: config.block_time,
         ticket_price: config.ticket_price,
+        max_holders: config.max_holders,
         prize_distribution: config.prize_distribution,
         target_award: config.target_award,
         reserve_factor: config.reserve_factor,

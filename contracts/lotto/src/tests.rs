@@ -1953,7 +1953,7 @@ fn execute_prize_winners_same_rank() {
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             sponsor_amount: Decimal256::zero(),
-            tickets: vec![String::from("00001")]
+            tickets: vec![String::from("00001")],
             unbonding_info: vec![]
         }
     );
@@ -2128,6 +2128,7 @@ fn execute_prize_one_winner_multiple_ranks() {
                 String::from("00003"),
                 String::from("01003")
             ],
+            sponsor_amount: Decimal256::zero(),
             unbonding_info: vec![]
         }
     );

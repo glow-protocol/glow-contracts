@@ -30,7 +30,7 @@ pub struct Config {
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
     pub ticket_price: Decimal256, // prize of a ticket in stable_denom
     pub max_holders: u8,      // Max number of holders per ticket
-    pub prize_distribution: Vec<Decimal256>, // [0, 0, 0.05, 0.15, 0.3, 0.5]
+    pub prize_distribution: [Decimal256; 6], // [0, 0, 0.05, 0.15, 0.3, 0.5] //TODO: convert to fixed-array
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256,   // what % of interest goes to saving and which one lotto pool
@@ -58,7 +58,6 @@ pub struct State {
 pub struct DepositorInfo {
     pub deposit_amount: Decimal256,
     pub shares: Decimal256,
-    pub redeemable_amount: Uint128,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
@@ -122,7 +121,6 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
         _ => DepositorInfo {
             deposit_amount: Decimal256::zero(),
             shares: Decimal256::zero(),
-            redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -151,7 +149,6 @@ pub fn read_depositors(
                 depositor,
                 deposit_amount: v.deposit_amount,
                 shares: v.shares,
-                redeemable_amount: v.redeemable_amount,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
                 tickets: v.tickets,

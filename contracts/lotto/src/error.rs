@@ -54,8 +54,11 @@ pub enum ContractError {
     #[error("There are no funds to run the lottery")]
     InsufficientLotteryFunds {},
 
-    #[error("Gift ticket amount must be greater than zero")]
+    #[error("Invalid claim amount")]
     InvalidClaimAmount {},
+
+    #[error("Lottery claim is invalid, as lottery has not still being awarded")]
+    InvalidLotteryClaim {},
 
     #[error("There not enough claimable funds for the given user")]
     InsufficientClaimableFunds {},

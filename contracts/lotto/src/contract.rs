@@ -10,7 +10,7 @@ use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_va
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, store_depositor_info, Config,
-    DepositorInfo, State, CONFIG, STATE, TICKETS,
+    DepositorInfo, State, CONFIG, PRIZES, STATE, TICKETS,
 };
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
@@ -27,6 +27,7 @@ use terraswap::querier::query_token_balance;
 
 use crate::claims::claim_deposits; //TODO: is the claim.rs needed? Consider refactoring
 use crate::error::ContractError;
+use cw_storage_plus::U64Key;
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
@@ -637,21 +638,48 @@ pub fn claim(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    _lottery: Option<u64>,
+    lottery: Option<u64>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
     let mut to_send = claim_deposits(deps.storage, &info.sender, &env.block, None)?;
-
-    //TODO: doing two consecutive reads here, need to refactor
     let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &info.sender);
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
-    to_send += depositor.redeemable_amount;
+    if let Some(lottery_id) = lottery {
+        let lottery = read_lottery_info(deps.storage, lottery_id);
+        if !lottery.awarded {
+            return Err(ContractError::InsufficientClaimableFunds {});
+        }
+        println!("hi");
+        //Calculate and add to to_send
+        let lottery_key: U64Key = U64Key::from(lottery_id);
+        let prizes = PRIZES
+            .may_load(deps.storage, (&info.sender, lottery_key))
+            .unwrap();
+        if let Some(prize) = prizes {
+            for i in 2..6 {
+                if lottery.number_winners[i] == 0 {
+                    continue;
+                }
+                let ranked_price: Uint256 =
+                    (lottery.total_prizes * config.prize_distribution[i]) * Uint256::one();
+
+                let amount: Uint128 = ranked_price
+                    .multiply_ratio(prize[i], lottery.number_winners[i])
+                    .into();
+
+                to_send += amount;
+            }
+        }
+    }
+
+    println!("to_send: {}", to_send);
+
     if to_send == Uint128::zero() {
         return Err(ContractError::InsufficientClaimableFunds {});
     }
@@ -671,7 +699,6 @@ pub fn claim(
         return Err(ContractError::InsufficientFunds {});
     }
 
-    depositor.redeemable_amount = Uint128::zero();
     store_depositor_info(deps.storage, &info.sender, &depositor)?;
     STATE.save(deps.storage, &state)?;
 
@@ -807,7 +834,7 @@ pub fn update_config(
     lottery_interval: Option<u64>,
     block_time: Option<u64>,
     ticket_price: Option<Decimal256>,
-    prize_distribution: Option<Vec<Decimal256>>,
+    prize_distribution: Option<[Decimal256; 6]>,
     reserve_factor: Option<Decimal256>,
     split_factor: Option<Decimal256>,
     unbonding_period: Option<u64>,
@@ -975,7 +1002,6 @@ pub fn query_depositor(deps: Deps, addr: String) -> StdResult<DepositorInfoRespo
         depositor: addr,
         deposit_amount: depositor.deposit_amount,
         shares: depositor.shares,
-        redeemable_amount: depositor.redeemable_amount,
         reward_index: depositor.reward_index,
         pending_rewards: depositor.pending_rewards,
         tickets: depositor.tickets,

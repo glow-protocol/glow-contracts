@@ -2108,6 +2108,142 @@ fn execute_prize_one_winner_multiple_ranks() {
 }
 
 #[test]
+fn execute_prize_multiple_winners_one_ticket() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    // Add 150_000 UST to our contract balance
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR,
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("00000")],
+    };
+
+    // User 0 buys winning ticket - 5 hits
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+
+    // User 1 buys winning ticket - 5 hits
+    let info = mock_info(
+        "addr1111",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+
+    // User 2 buys winning ticket - 5 hits
+    let info = mock_info(
+        "addr2222",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+
+    let address_0 = deps.api.addr_validate("addr0000").unwrap();
+    let address_1 = deps.api.addr_validate("addr1111").unwrap();
+    let address_2 = deps.api.addr_validate("addr2222").unwrap();
+
+    let ticket = query_ticket_info(deps.as_ref(), "00000").unwrap();
+
+    assert_eq!(
+        ticket,
+        vec![address_0.clone(), address_1.clone(), address_2.clone()]
+    );
+
+    let mut env = mock_env();
+    // Advance one week in time
+    if let Duration::Time(time) = WEEK {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
+    //Add aterra balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &Uint128::from(31_000_000u128),
+        )],
+    )]);
+
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+
+    // Execute Lottery
+    let msg = ExecuteMsg::ExecuteLottery {};
+    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    let state = query_state(deps.as_ref(), None).unwrap();
+    // total prize
+    let total_prize = calculate_total_prize(
+        state.shares_supply,
+        state.deposit_shares,
+        Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
+        Uint256::from(31_000_000u128),
+        3,
+    );
+
+    let awarded_prize = total_prize * Decimal256::percent(50);
+
+    assert_eq!(
+        read_lottery_info(deps.as_ref().storage, 0u64),
+        LotteryInfo {
+            sequence: "00000".to_string(),
+            awarded: true,
+            total_prizes: awarded_prize,
+            number_winners: [0, 0, 0, 0, 0, 3],
+            page: "".to_string()
+        }
+    );
+
+    let prizes = query_prizes(deps.as_ref(), &address_0, 0u64).unwrap();
+    assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
+
+    let state = query_state(deps.as_ref(), None).unwrap();
+    assert_eq!(state.current_lottery, 1u64);
+    assert_eq!(state.total_reserve, Decimal256::zero());
+
+    // From the initialization of the contract
+    assert_eq!(state.award_available, total_prize - awarded_prize);
+
+    assert_eq!(res.messages, vec![]);
+
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "execute_prize"),
+            attr("total_awarded_prize", awarded_prize.to_string()),
+        ]
+    );
+}
+
+#[test]
 fn execute_prize_pagination() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);

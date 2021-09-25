@@ -179,7 +179,7 @@ pub fn deposit(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    combinations: Vec<String>,
+    mut combinations: Vec<String>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
@@ -220,6 +220,19 @@ pub fn deposit(
 
     let depositor = info.sender.clone();
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
+
+    // check if we need to round up number of combinations based on depositor total deposits
+    if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
+        / config.ticket_price)
+        >= (Decimal256::from_uint256(Uint256::from(
+            (depositor_info.tickets.len() + combinations.len()) as u128,
+        )) + Decimal256::one())
+    {
+        let current_time = env.block.time.nanos();
+        let sequence = &current_time.to_string()[current_time.to_string().len() - 5..];
+
+        combinations.push(sequence.to_string());
+    }
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, env.block.height);

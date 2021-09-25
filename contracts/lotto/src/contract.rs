@@ -447,16 +447,19 @@ pub fn sponsor(
 
         // Discount tx taxes
         let net_coin_amount = deduct_tax(deps.as_ref(), coin(sponsor_amount.into(), "uusd"))?;
-        let amount = net_coin_amount.amount;
+        let net_sponsor_amount = net_coin_amount.amount;
 
         // add amount of aUST entitled from the deposit
-        let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
+        let minted_amount =
+            Decimal256::from_uint256(net_sponsor_amount) / epoch_state.exchange_rate;
 
         // fetch depositor_info
         let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
-        // add sponsor_shares to depositor
-        depositor_info.sponsor_shares = depositor_info.sponsor_shares.add(minted_amount);
+        // add sponsor_amount to depositor
+        depositor_info.sponsor_amount = depositor_info
+            .sponsor_amount
+            .add(Decimal256::from_uint256(net_sponsor_amount));
         store_depositor_info(deps.storage, &info.sender, &depositor_info)?;
 
         // update global state
@@ -468,7 +471,7 @@ pub fn sponsor(
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
                 denom: config.stable_denom,
-                amount,
+                amount: net_sponsor_amount,
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         }));
@@ -493,7 +496,7 @@ pub fn sponsor_withdraw(
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
-    if depositor.sponsor_shares.is_zero() || state.shares_supply.is_zero() {
+    if depositor.sponsor_amount.is_zero() || state.shares_supply.is_zero() {
         return Err(ContractError::InvalidSponsorWithdraw {});
     }
 
@@ -501,37 +504,27 @@ pub fn sponsor_withdraw(
     compute_reward(&mut state, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
-    // Calculate depositor current sponsor deposits in uusd
-    let depositor_ratio = depositor.sponsor_shares / state.shares_supply;
+    // Calculate aust amount to redeem based on depositor sponsor_amount
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
         env.clone().contract.address,
     )?;
-    let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
     let rate =
         query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
-    let sponsor_deposits = Uint256::one() * (aust_amount * rate);
-
-    // Calculate ratio of deposits, shares and tickets to withdraw
-    let aust_to_redeem = aust_amount;
-    let return_amount = sponsor_deposits;
+    let aust_to_redeem = depositor.sponsor_amount / rate;
 
     // Double-checking Lotto pool is solvent against deposits
     if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < state.total_deposits {
         return Err(ContractError::InsufficientPoolFunds {});
     }
 
-    let withdrawn_shares = depositor.sponsor_shares;
-
     // Update depositor info
-    depositor.sponsor_shares = depositor.sponsor_shares.sub(withdrawn_shares);
+    depositor.sponsor_amount = Decimal256::zero();
 
     // Update global state
-    state.lottery_deposits = state
-        .lottery_deposits
-        .sub(Decimal256::from_uint256(sponsor_deposits));
-    state.shares_supply = state.shares_supply.sub(withdrawn_shares);
+    state.lottery_deposits = state.lottery_deposits.sub(depositor.sponsor_amount);
+    state.shares_supply = state.shares_supply.sub(aust_to_redeem);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -548,7 +541,10 @@ pub fn sponsor_withdraw(
     msgs.push(redeem_msg);
 
     // Discount tx taxes
-    let net_coin_amount = deduct_tax(deps.as_ref(), coin((return_amount).into(), "uusd"))?;
+    let net_coin_amount = deduct_tax(
+        deps.as_ref(),
+        coin((depositor.sponsor_amount * Uint256::one()).into(), "uusd"),
+    )?;
 
     msgs.push(CosmosMsg::Bank(BankMsg::Send {
         to_address: info.sender.to_string(),
@@ -562,7 +558,7 @@ pub fn sponsor_withdraw(
         attr("action", "withdraw_sponsor"),
         attr("depositor", info.sender.to_string()),
         attr("redeem_amount_anchor", aust_to_redeem.to_string()),
-        attr("redeem_stable_amount", return_amount.to_string()),
+        attr("redeem_stable_amount", depositor.sponsor_amount.to_string()),
     ]))
 }
 

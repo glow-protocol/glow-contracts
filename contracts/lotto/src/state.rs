@@ -62,7 +62,7 @@ pub struct DepositorInfo {
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
-    pub sponsor_shares: Decimal256,
+    pub sponsor_amount: Decimal256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -120,7 +120,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![],
         },

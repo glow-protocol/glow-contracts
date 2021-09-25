@@ -404,7 +404,7 @@ fn deposit() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
             unbonding_info: vec![]
         }
@@ -634,7 +634,7 @@ fn gift_tickets() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
             unbonding_info: vec![]
         }
@@ -747,7 +747,10 @@ fn sponsor() {
     let minted_shares =
         Decimal256::from_uint256(sponsor_amount_minus_tax) / Decimal256::permille(RATE);
 
-    assert_eq!(depositor_info.sponsor_shares, minted_shares);
+    assert_eq!(
+        depositor_info.sponsor_amount,
+        Decimal256::from_uint256(sponsor_amount_minus_tax)
+    );
 
     assert_eq!(state.shares_supply, minted_shares);
 
@@ -773,7 +776,7 @@ fn sponsor() {
 
     let state = query_state(deps.as_ref(), None).unwrap();
 
-    assert_eq!(depositor_info.sponsor_shares, Decimal256::zero());
+    assert_eq!(depositor_info.sponsor_amount, Decimal256::zero());
     assert_eq!(state.shares_supply, Decimal256::zero());
 }
 
@@ -893,7 +896,7 @@ fn withdraw() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
                 amount: Decimal256::from_uint256(Uint256::from(10000000u128)),
@@ -1037,7 +1040,7 @@ fn instant_withdraw() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![]
         }
@@ -1222,7 +1225,7 @@ fn claim() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![]
         }
@@ -1534,7 +1537,7 @@ fn execute_prize_no_winners() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("11111")],
             unbonding_info: vec![]
         }
@@ -1650,7 +1653,7 @@ fn execute_prize_one_winner() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }
@@ -1780,7 +1783,7 @@ fn execute_prize_winners_diff_ranks() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }
@@ -1811,7 +1814,7 @@ fn execute_prize_winners_diff_ranks() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("00100")],
             unbonding_info: vec![]
         }
@@ -1948,7 +1951,7 @@ fn execute_prize_winners_same_rank() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }
@@ -1979,7 +1982,7 @@ fn execute_prize_winners_same_rank() {
             redeemable_amount: Uint128::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            sponsor_amount: Decimal256::zero(),
             tickets: vec![String::from("00000")],
             unbonding_info: vec![]
         }

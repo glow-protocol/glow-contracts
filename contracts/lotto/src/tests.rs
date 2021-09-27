@@ -22,9 +22,8 @@ use glow_protocol::lotto::{
 
 use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
-use glow_protocol::querier::query_token_balance;
+use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use moneymarket::querier::deduct_tax; //TODO: import from glow_protocol package
 use std::ops::{Add, Div, Mul};
 use std::str::FromStr;
 

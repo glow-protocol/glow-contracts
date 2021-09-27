@@ -14,7 +14,7 @@ use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
 
-use crate::contract::compute_reward;
+use crate::helpers::compute_reward;
 use moneymarket::market::Cw20HookMsg;
 use std::ops::{Add, Sub};
 use std::str;
@@ -228,7 +228,6 @@ pub fn execute_prize(
     if lottery_info.awarded {
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
-                // TODO: revise logic
                 total_awarded_prize += state.award_available * config.prize_distribution[index];
             }
         }

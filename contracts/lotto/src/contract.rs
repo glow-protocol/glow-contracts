@@ -1,37 +1,32 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
-use cosmwasm_std::{
-    attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult, Uint128, WasmMsg,
-};
-
+use crate::error::ContractError;
+use crate::helpers::{claim_deposits, compute_depositor_reward, compute_reward};
 use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, store_depositor_info, Config,
     DepositorInfo, State, CONFIG, PRIZES, STATE, TICKETS,
 };
+use cosmwasm_bignumber::{Decimal256, Uint256};
+use cosmwasm_std::{
+    attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, StdError, StdResult, Uint128, WasmMsg,
+};
+use cw0::Duration;
+use cw20::Cw20ExecuteMsg;
+use cw_storage_plus::U64Key;
+use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
     InstantiateMsg, LotteryInfoResponse, PrizeInfoResponse, QueryMsg, StateResponse,
     TicketInfoResponse,
 };
-
-use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-
-use cosmwasm_bignumber::{Decimal256, Uint256};
-
-use cw0::Duration;
-use cw20::Cw20ExecuteMsg;
-use terraswap::querier::query_token_balance;
-
-use crate::claims::claim_deposits; //TODO: is the claim.rs needed? Consider refactoring
-use crate::error::ContractError;
-use cw_storage_plus::U64Key;
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
+use terraswap::querier::query_token_balance;
 
 // We are asking the contract owner to provide an initial reserve to start accruing interest
 // Also, reserve accrues interest but it's not entitled to tickets, so no prizes
@@ -122,7 +117,7 @@ pub fn execute(
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
-        ExecuteMsg::ExecuteEpochOps {} => execute_epoch_operations(deps, env),
+        ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,
             lottery_interval,
@@ -573,7 +568,6 @@ pub fn withdraw(
 
     //TODO: check if we are draining the right amount
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
-        // TODO: double-check is working. Can I remove this loop?
         TICKETS.update(
             deps.storage,
             seq.as_bytes(),
@@ -743,7 +737,7 @@ pub fn claim(
         ]))
 }
 
-pub fn execute_epoch_operations(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
+pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
     let mut state = STATE.load(deps.storage)?;
@@ -827,29 +821,6 @@ pub fn claim_rewards(
         attr("action", "claim_rewards"),
         attr("claim_amount", claim_amount),
     ]))
-}
-
-/// Compute distributed reward and update global reward index
-pub fn compute_reward(state: &mut State, block_height: u64) {
-    if state.last_reward_updated >= block_height {
-        return;
-    }
-
-    let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
-    let reward_accrued = passed_blocks * state.glow_emission_rate;
-
-    if !reward_accrued.is_zero() && !state.total_deposits.is_zero() {
-        state.global_reward_index += reward_accrued / state.total_deposits;
-    }
-
-    state.last_reward_updated = block_height;
-}
-
-/// Compute reward amount a borrower received
-pub(crate) fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
-    depositor.pending_rewards +=
-        depositor.deposit_amount * (state.global_reward_index - depositor.reward_index);
-    depositor.reward_index = state.global_reward_index;
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1,24 +1,31 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, DepsMut, StdResult, Storage, Uint128};
 
-use crate::state::{read_depositor_info, store_depositor_info};
+use crate::state::{read_depositor_info, store_depositor_info, DepositorInfo, State};
 use cw0::Expiration;
 use glow_protocol::lotto::Claim;
 
-// TODO: helper functions should be methods, check cw_controllers
-/// This creates a claim, such that the given address can claim an amount of tokens after
-/// the release date. Fn not used at the moment
-#[allow(dead_code)]
-pub fn create_claim(
-    deps: DepsMut,
-    addr: &Addr,
-    amount: Decimal256,
-    release_at: Expiration,
-) -> StdResult<()> {
-    let mut depositor = read_depositor_info(deps.as_ref().storage, addr);
-    depositor.unbonding_info.push(Claim { amount, release_at });
-    store_depositor_info(deps.storage, addr, &depositor)?;
-    Ok(())
+/// Compute distributed reward and update global reward index
+pub fn compute_reward(state: &mut State, block_height: u64) {
+    if state.last_reward_updated >= block_height {
+        return;
+    }
+
+    let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
+    let reward_accrued = passed_blocks * state.glow_emission_rate;
+
+    if !reward_accrued.is_zero() && !state.total_deposits.is_zero() {
+        state.global_reward_index += reward_accrued / state.total_deposits;
+    }
+
+    state.last_reward_updated = block_height;
+}
+
+/// Compute reward amount a borrower received
+pub fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
+    depositor.pending_rewards +=
+        depositor.deposit_amount * (state.global_reward_index - depositor.reward_index);
+    depositor.reward_index = state.global_reward_index;
 }
 
 /// This iterates over all mature claims for the address, and removes them, up to an optional cap.

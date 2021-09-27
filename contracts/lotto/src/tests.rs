@@ -1,10 +1,11 @@
 use crate::contract::{
-    execute, instantiate, query, query_config, query_state, INITIAL_DEPOSIT_AMOUNT,
+    execute, instantiate, query, query_config, query_state, query_ticket_info,
+    INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
-    query_prizes, query_ticket_info, read_depositor_info, read_lottery_info, Config, DepositorInfo,
-    LotteryInfo, State, STATE,
+    query_prizes, read_depositor_info, read_lottery_info, Config, DepositorInfo, LotteryInfo,
+    State, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -94,7 +95,7 @@ fn mock_register_contracts(deps: DepsMut) {
         .expect("contract successfully executes RegisterContracts");
 }
 
-#[allow(dead_code)] //TODO: use this fn
+#[allow(dead_code)]
 fn mock_env_height(height: u64, time: u64) -> Env {
     let mut env = mock_env();
     env.block.height = height;
@@ -281,9 +282,6 @@ fn update_config() {
     }
 }
 
-// TODO: deposit fails when current lottery deposit time is expired
-// TODO: test buy only one ticket
-
 #[test]
 fn deposit() {
     // Initialize contract
@@ -371,30 +369,23 @@ fn deposit() {
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    /*
-    deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + TICKET_PRICE,
-        }],
-    );
-     */
-
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
-        query_ticket_info(deps.as_ref(), "13579").unwrap(),
+        query_ticket_info(deps.as_ref(), String::from("13579"))
+            .unwrap()
+            .holders,
         vec![Addr::unchecked("addr0000")]
     );
     assert_eq!(
-        query_ticket_info(deps.as_ref(), "34567").unwrap(),
+        query_ticket_info(deps.as_ref(), String::from("34567"))
+            .unwrap()
+            .holders,
         vec![Addr::unchecked("addr0000")]
     );
 
     // Check depositor info was updated correctly
-    // TODO: should do queries and not read state directly
     assert_eq!(
         read_depositor_info(
             deps.as_ref().storage,
@@ -425,7 +416,7 @@ fn deposit() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
-            last_reward_updated: 12345, //TODO: hardcoded. why this value?
+            last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
         }
@@ -483,8 +474,6 @@ fn deposit() {
 
     assert_eq!(depositor_info.tickets.len(), 3);
 
-    // println!("depositor_info: {:x?}", depositor_info);
-
     // deposit again
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("19876")],
@@ -500,7 +489,7 @@ fn deposit() {
     assert_eq!(depositor_info.tickets.len(), 5);
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("45636")],
+        combinations: vec![String::from("45637")],
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -513,7 +502,7 @@ fn deposit() {
     assert_eq!(depositor_info.tickets.len(), 6);
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("45636")],
+        combinations: vec![String::from("45639")],
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -525,9 +514,69 @@ fn deposit() {
 
     assert_eq!(depositor_info.tickets.len(), 8);
 
-    // TODO: cover more cases eg. sequential buys and repeated ticket in same buy
-    // TODO: deposit fails when current lottery deposit time is expired
-    // TODO: correct base denom, deposit greater than tickets test case
+    // Test sequential buys of the same ticket by the same address (should fail)
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("88888")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("88888")],
+    };
+
+    // We let users have a repeated ticket
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // Ticket is already owner by 10 holders
+    let addresses_count = 10u64;
+    let addresses_range = 0..addresses_count;
+    let addresses = addresses_range
+        .map(|c| format!("addr{:0>4}", c))
+        .collect::<Vec<String>>();
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    for (index, address) in addresses.iter().enumerate() {
+        // Users buys winning ticket
+        let msg = ExecuteMsg::Deposit {
+            combinations: vec![String::from("66666")],
+        };
+        let info = mock_info(
+            address.as_str(),
+            &[Coin {
+                denom: "uusd".to_string(),
+                amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+            }],
+        );
+
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    }
+
+    let holders = query_ticket_info(deps.as_ref(), String::from("66666"))
+        .unwrap()
+        .holders;
+    println!("holders: {:?}", holders);
+    println!("len: {:?}", holders.len());
+
+    // 11th holder with same sequence, should fail
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("66666")],
+    };
+    let info = mock_info(
+        "addr1111",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidHolderSequence {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }
 
 #[test]
@@ -680,11 +729,15 @@ fn gift_tickets() {
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
-        query_ticket_info(deps.as_ref(), &String::from("13579")).unwrap(),
+        query_ticket_info(deps.as_ref(), String::from("13579"))
+            .unwrap()
+            .holders,
         vec![deps.api.addr_validate("addr1111").unwrap()]
     );
     assert_eq!(
-        query_ticket_info(deps.as_ref(), &String::from("34567")).unwrap(),
+        query_ticket_info(deps.as_ref(), String::from("34567"))
+            .unwrap()
+            .holders,
         vec![deps.api.addr_validate("addr1111").unwrap()]
     );
 
@@ -844,7 +897,9 @@ fn withdraw() {
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
-        query_ticket_info(deps.as_ref(), "23456").unwrap(),
+        query_ticket_info(deps.as_ref(), String::from("23456"))
+            .unwrap()
+            .holders,
         empty_addr
     );
 
@@ -989,7 +1044,9 @@ fn instant_withdraw() {
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
-        query_ticket_info(deps.as_ref(), "23456").unwrap(),
+        query_ticket_info(deps.as_ref(), String::from("23456"))
+            .unwrap()
+            .holders,
         empty_addr
     );
 
@@ -2352,10 +2409,10 @@ fn execute_prize_multiple_winners_one_ticket() {
     let address_1 = deps.api.addr_validate("addr1111").unwrap();
     let address_2 = deps.api.addr_validate("addr2222").unwrap();
 
-    let ticket = query_ticket_info(deps.as_ref(), "00000").unwrap();
+    let ticket = query_ticket_info(deps.as_ref(), String::from("00000")).unwrap();
 
     assert_eq!(
-        ticket,
+        ticket.holders,
         vec![address_0.clone(), address_1.clone(), address_2.clone()]
     );
 

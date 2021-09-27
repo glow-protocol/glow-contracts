@@ -80,6 +80,13 @@ pub enum QueryMsg {
     LotteryInfo {
         lottery_id: Option<u64>,
     },
+    TicketInfo {
+        sequence: String,
+    },
+    PrizeInfo {
+        address: String,
+        lottery_id: u64,
+    },
     Depositor {
         address: String,
     },
@@ -159,4 +166,16 @@ pub struct DepositorsInfoResponse {
 pub struct Claim {
     pub amount: Decimal256,
     pub release_at: Expiration,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct TicketInfoResponse {
+    pub holders: Vec<Addr>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PrizeInfoResponse {
+    pub holder: Addr,
+    pub lottery_id: u64,
+    pub matches: [u32; 6],
 }

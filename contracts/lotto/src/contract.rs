@@ -14,7 +14,8 @@ use crate::state::{
 };
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
-    InstantiateMsg, LotteryInfoResponse, QueryMsg, StateResponse,
+    InstantiateMsg, LotteryInfoResponse, PrizeInfoResponse, QueryMsg, StateResponse,
+    TicketInfoResponse,
 };
 
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -179,7 +180,7 @@ pub fn deposit(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    mut combinations: Vec<String>,
+    combinations: Vec<String>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
@@ -203,13 +204,13 @@ pub fn deposit(
         return Err(ContractError::InsufficientDepositAmount(amount_tickets));
     }
 
-    //TODO: add a time buffer here with block_time
-
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-
     if !current_lottery.sequence.is_empty() {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
+
+    let depositor = info.sender.clone();
+    let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
     for combination in combinations.clone() {
         if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
@@ -217,9 +218,7 @@ pub fn deposit(
         }
     }
 
-    let depositor = info.sender.clone();
-    let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
-
+    let mut new_combinations = combinations.clone();
     // check if we need to round up number of combinations based on depositor total deposits
     if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
         / config.ticket_price)
@@ -230,10 +229,9 @@ pub fn deposit(
         let current_time = env.block.time.nanos();
         let sequence = &current_time.to_string()[current_time.to_string().len() - 5..];
 
-        combinations.push(sequence.to_string());
+        new_combinations.push(sequence.to_string());
     }
 
-    // Compute Glow depositor rewards
     compute_reward(&mut state, env.block.height);
     compute_depositor_reward(&state, &mut depositor_info);
 
@@ -255,28 +253,25 @@ pub fn deposit(
 
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
-    for combination in combinations {
-        // TODO: double-check is working. Can I remove this loop?
+    for combination in new_combinations {
+        if let Some(holders) = TICKETS
+            .may_load(deps.storage, combination.as_bytes())
+            .unwrap()
+        {
+            if holders.len() >= config.max_holders as usize {
+                return Err(ContractError::InvalidHolderSequence {});
+            }
+        }
 
-        assert_holder(
-            deps.storage,
-            &combination,
-            info.sender.clone(),
-            config.max_holders,
-        );
-
-        // TODO: refactor as it's being reused
         let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
             let mut b = a.unwrap_or_default();
             b.push(depositor.clone());
             Ok(b)
         };
-
         TICKETS
             .update(deps.storage, combination.as_bytes(), add_ticket)
             .unwrap();
-
-        depositor_info.tickets.push(combination); // TODO: consider appending the whole combinations
+        depositor_info.tickets.push(combination);
     }
 
     // Update global state
@@ -284,7 +279,7 @@ pub fn deposit(
     state.shares_supply = state.shares_supply.add(minted_amount);
     state.deposit_shares = state
         .deposit_shares
-        .add(minted_amount - minted_amount * config.split_factor); // TODO: add in update_config that split factor is 0<x<1
+        .add(minted_amount - minted_amount * config.split_factor);
     state.total_deposits = state
         .total_deposits
         .add(Decimal256::from_uint256(deposit_amount));
@@ -347,9 +342,7 @@ pub fn gift_tickets(
         return Err(ContractError::InsufficientGiftDepositAmount(amount_tickets));
     }
 
-    //TODO: add a time buffer here with block_time
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-
     if !current_lottery.sequence.is_empty() {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
@@ -362,6 +355,20 @@ pub fn gift_tickets(
 
     let recipient = deps.api.addr_validate(to.as_str())?;
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &recipient);
+
+    let mut new_combinations = combinations.clone();
+    // check if we need to round up number of combinations based on depositor total deposits
+    if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
+        / config.ticket_price)
+        >= (Decimal256::from_uint256(Uint256::from(
+            (depositor_info.tickets.len() + combinations.len()) as u128,
+        )) + Decimal256::one())
+    {
+        let current_time = env.block.time.nanos();
+        let sequence = &current_time.to_string()[current_time.to_string().len() - 5..];
+
+        new_combinations.push(sequence.to_string());
+    }
 
     // Compute Glow rewards of recipient
     compute_reward(&mut state, env.block.height);
@@ -383,15 +390,15 @@ pub fn gift_tickets(
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in combinations.clone() {
-        // TODO: test assert_holder
-        assert_holder(
-            deps.storage,
-            &combination,
-            recipient.clone(),
-            config.max_holders,
-        );
+        if let Some(holders) = TICKETS
+            .may_load(deps.storage, combination.as_bytes())
+            .unwrap()
+        {
+            if holders.len() >= config.max_holders as usize {
+                return Err(ContractError::InvalidHolderSequence {});
+            }
+        }
 
-        // TODO: refactor as it's being reused
         let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
             let mut b = a.unwrap_or_default();
             b.push(recipient.clone());
@@ -942,11 +949,38 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::LotteryInfo { lottery_id } => {
             to_binary(&query_lottery_info(deps, env, lottery_id)?)
         }
+        QueryMsg::TicketInfo { sequence } => to_binary(&query_ticket_info(deps, sequence)?),
+        QueryMsg::PrizeInfo {
+            address,
+            lottery_id,
+        } => to_binary(&query_prizes(deps, address, lottery_id)?),
         QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, address)?),
         QueryMsg::Depositors { start_after, limit } => {
             to_binary(&query_depositors(deps, start_after, limit)?)
         }
     }
+}
+
+pub fn query_ticket_info(deps: Deps, ticket: String) -> StdResult<TicketInfoResponse> {
+    let holders = TICKETS
+        .may_load(deps.storage, ticket.as_ref())?
+        .unwrap_or_default();
+    Ok(TicketInfoResponse { holders })
+}
+
+pub fn query_prizes(deps: Deps, address: String, lottery_id: u64) -> StdResult<PrizeInfoResponse> {
+    let lottery_key = U64Key::from(lottery_id);
+    let addr = deps.api.addr_validate(&address)?;
+
+    let matches = PRIZES
+        .may_load(deps.storage, (&addr, lottery_key))?
+        .unwrap_or_default();
+
+    Ok(PrizeInfoResponse {
+        holder: addr,
+        lottery_id,
+        matches,
+    })
 }
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {

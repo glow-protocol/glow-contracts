@@ -94,15 +94,6 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
     }
 }
 
-pub fn query_ticket_info(deps: Deps, ticket: &str) -> StdResult<Vec<Addr>> {
-    TICKETS.load(deps.storage, ticket.as_ref())
-}
-
-pub fn query_prizes(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<[u32; 6]> {
-    let lottery_key = U64Key::from(lottery_id);
-    PRIZES.load(deps.storage, (address, lottery_key))
-}
-
 // settings for pagination
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
@@ -174,4 +165,9 @@ fn calc_sequence_range_start(start_after: Option<&str>) -> Option<Vec<u8>> {
         v.push(1);
         v
     })
+}
+
+pub fn query_prizes(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<[u32; 6]> {
+    let lottery_key = U64Key::from(lottery_id);
+    PRIZES.load(deps.storage, (address, lottery_key))
 }

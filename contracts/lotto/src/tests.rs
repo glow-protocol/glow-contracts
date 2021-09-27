@@ -119,7 +119,9 @@ fn proper_initialization() {
         }],
     );
 
-    let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let env = mock_env();
+
+    let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     let config = query_config(deps.as_ref()).unwrap();
@@ -159,12 +161,12 @@ fn proper_initialization() {
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
 
-    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
     let config = query_config(deps.as_ref()).unwrap();
     assert_eq!(config.gov_contract, GOV_ADDR.to_string());
     assert_eq!(config.distributor_contract, DISTRIBUTOR_ADDR.to_string());
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), env, None).unwrap();
     assert_eq!(
         state,
         StateResponse {
@@ -177,7 +179,7 @@ fn proper_initialization() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
-            last_reward_updated: 0,
+            last_reward_updated: 12345, // hard-coded
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
         }
@@ -412,7 +414,7 @@ fn deposit() {
     let minted_shares = Decimal256::percent(TICKET_PRICE * 2u64).div(Decimal256::permille(RATE));
 
     assert_eq!(
-        query_state(deps.as_ref(), None).unwrap(),
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
         StateResponse {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
@@ -706,7 +708,7 @@ fn gift_tickets() {
     let minted_shares = Decimal256::percent(TICKET_PRICE * 2u64).div(Decimal256::permille(RATE));
 
     assert_eq!(
-        query_state(deps.as_ref(), None).unwrap(),
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
         StateResponse {
             total_tickets: Uint256::from(2u64),
             total_reserve: Decimal256::zero(),
@@ -797,7 +799,7 @@ fn withdraw() {
 
     println!("dep1: {:x?}", dep1);
 
-    let stor1 = query_state(deps.as_ref(), None).unwrap();
+    let stor1 = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     println!("stor1: {:x?}", stor1);
 
@@ -835,7 +837,7 @@ fn withdraw() {
 
     println!("dep2: {:x?}", dep1);
 
-    let stor1 = query_state(deps.as_ref(), None).unwrap();
+    let stor1 = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     println!("stor2: {:x?}", stor1);
 
@@ -884,7 +886,7 @@ fn withdraw() {
     );
 
     assert_eq!(
-        query_state(deps.as_ref(), None).unwrap(),
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
         StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
@@ -1023,7 +1025,7 @@ fn instant_withdraw() {
     );
 
     assert_eq!(
-        query_state(deps.as_ref(), None).unwrap(),
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
         StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
@@ -1129,7 +1131,7 @@ fn claim() {
         Addr::unchecked(MOCK_CONTRACT_ADDR),
     )
     .unwrap();
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     println!("shares: {}", shares);
     println!("pooled_deposits: {}", shares * Decimal256::permille(RATE));
     println!("total deposits: {}", state.total_deposits);
@@ -1303,7 +1305,7 @@ fn claim_lottery_single_winner() {
 
     // Check lottery info was updated correctly
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     let total_prize = calculate_total_prize(
         state.shares_supply,
@@ -1331,7 +1333,7 @@ fn claim_lottery_single_winner() {
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero(),);
@@ -1492,7 +1494,9 @@ fn execute_lottery() {
     .unwrap();
 
     // Directly check next_lottery_time has been set up for next week
-    let next_lottery_time = query_state(deps.as_ref(), None).unwrap().next_lottery_time;
+    let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
+        .unwrap()
+        .next_lottery_time;
 
     assert_eq!(
         next_lottery_time,
@@ -1561,14 +1565,16 @@ fn execute_lottery() {
     let res = execute(deps.as_mut(), env.clone(), info.clone(), execute_prize_msg).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
-    let next_lottery_time = query_state(deps.as_ref(), None).unwrap().next_lottery_time;
+    let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
+        .unwrap()
+        .next_lottery_time;
 
     assert_eq!(
         next_lottery_time,
         Expiration::AtTime(env.block.time).add(WEEK).unwrap()
     );
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     println!("state: {:?}", state);
 }
 
@@ -1695,7 +1701,7 @@ fn execute_prize_no_winners() {
         }
     );
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
@@ -1799,7 +1805,7 @@ fn execute_prize_one_winner() {
 
     // Check lottery info was updated correctly
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     let total_prize = calculate_total_prize(
         state.shares_supply,
@@ -1817,7 +1823,7 @@ fn execute_prize_one_winner() {
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
-            number_winners: [0, 0, 0, 0, 0, 1], //TODO: false
+            number_winners: [0, 0, 0, 0, 0, 1],
             page: "".to_string()
         }
     );
@@ -1825,7 +1831,7 @@ fn execute_prize_one_winner() {
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero(),);
@@ -1949,7 +1955,7 @@ fn execute_prize_winners_diff_ranks() {
 
     // Check lottery info was updated correctly
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     let total_prize = calculate_total_prize(
         state.shares_supply,
@@ -1973,7 +1979,6 @@ fn execute_prize_winners_diff_ranks() {
             page: "".to_string()
         }
     );
-    
 
     let prizes = query_prizes(deps.as_ref(), &address_raw_0, 0u64).unwrap();
     assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
@@ -1981,7 +1986,7 @@ fn execute_prize_winners_diff_ranks() {
     let prizes = query_prizes(deps.as_ref(), &address_raw_1, 0u64).unwrap();
     assert_eq!(prizes, [0, 0, 1, 0, 0, 0]);
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
 
@@ -2102,7 +2107,7 @@ fn execute_prize_winners_same_rank() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     // total prize
     let total_prize = calculate_total_prize(
         state.shares_supply,
@@ -2125,7 +2130,7 @@ fn execute_prize_winners_same_rank() {
         }
     );
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero(),);
 
@@ -2243,7 +2248,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     // total prize
     let total_prize = calculate_total_prize(
         state.shares_supply,
@@ -2269,7 +2274,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(prizes, [0, 0, 0, 0, 3, 1]);
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
@@ -2379,7 +2384,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     // total prize
     let total_prize = calculate_total_prize(
         state.shares_supply,
@@ -2405,7 +2410,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     let prizes = query_prizes(deps.as_ref(), &address_0, 0u64).unwrap();
     assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
@@ -2672,7 +2677,7 @@ fn claim_rewards_multiple_depositors() {
     // After 100 blocks
     env.block.height += 100;
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
     println!("Global reward index: {:?}", state.global_reward_index);
     println!("Emission rate {:?}", state.glow_emission_rate);
     println!("Last reward updated {:?}", state.last_reward_updated);
@@ -2774,7 +2779,7 @@ fn execute_epoch_operations() {
         }))]
     );
 
-    let state = query_state(deps.as_ref(), None).unwrap();
+    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
     // Glow Emission rate must be 1 as hard-coded in mock querier
     assert_eq!(
         state,

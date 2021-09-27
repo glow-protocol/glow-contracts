@@ -207,7 +207,6 @@ pub fn deposit(
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
 
-    // TODO: add check to withdraw and gift_tickets
     if !current_lottery.sequence.is_empty() {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
@@ -349,7 +348,9 @@ pub fn gift_tickets(
     }
 
     //TODO: add a time buffer here with block_time
-    if state.next_lottery_time.is_expired(&env.block) {
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+
+    if !current_lottery.sequence.is_empty() {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
@@ -519,6 +520,11 @@ pub fn withdraw(
 
     if (amount.is_some()) && (amount.unwrap().is_zero()) {
         return Err(ContractError::InvalidWithdraw {});
+    }
+
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if !current_lottery.sequence.is_empty() {
+        return Err(ContractError::LotteryAlreadyStarted {});
     }
 
     // Compute GLOW reward
@@ -929,11 +935,13 @@ pub fn update_config(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::State { block_height } => to_binary(&query_state(deps, block_height)?),
-        QueryMsg::LotteryInfo { lottery_id } => to_binary(&query_lottery_info(deps, lottery_id)?),
+        QueryMsg::State { block_height } => to_binary(&query_state(deps, env, block_height)?),
+        QueryMsg::LotteryInfo { lottery_id } => {
+            to_binary(&query_lottery_info(deps, env, lottery_id)?)
+        }
         QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, address)?),
         QueryMsg::Depositors { start_after, limit } => {
             to_binary(&query_depositors(deps, start_after, limit)?)
@@ -964,10 +972,23 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     })
 }
 
-pub fn query_state(deps: Deps, _block_height: Option<u64>) -> StdResult<StateResponse> {
-    let state = STATE.load(deps.storage)?;
+pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
+    let mut state = STATE.load(deps.storage)?;
 
-    //TODO: add block_height logic
+    let block_height = if let Some(block_height) = block_height {
+        block_height
+    } else {
+        env.block.height
+    };
+
+    if block_height < state.last_reward_updated {
+        return Err(StdError::generic_err(
+            "Block_height must be greater than last_reward_updated",
+        ));
+    }
+
+    // Compute reward rate with given block height
+    compute_reward(&mut state, block_height);
 
     Ok(StateResponse {
         total_tickets: state.total_tickets,
@@ -985,7 +1006,11 @@ pub fn query_state(deps: Deps, _block_height: Option<u64>) -> StdResult<StateRes
     })
 }
 
-pub fn query_lottery_info(deps: Deps, lottery_id: Option<u64>) -> StdResult<LotteryInfoResponse> {
+pub fn query_lottery_info(
+    deps: Deps,
+    env: Env,
+    lottery_id: Option<u64>,
+) -> StdResult<LotteryInfoResponse> {
     if let Some(id) = lottery_id {
         let lottery = read_lottery_info(deps.storage, id);
         Ok(LotteryInfoResponse {
@@ -996,7 +1021,7 @@ pub fn query_lottery_info(deps: Deps, lottery_id: Option<u64>) -> StdResult<Lott
             number_winners: lottery.number_winners,
         })
     } else {
-        let current_lottery = query_state(deps, None)?.current_lottery;
+        let current_lottery = query_state(deps, env, None)?.current_lottery;
         let lottery = read_lottery_info(deps.storage, current_lottery);
         Ok(LotteryInfoResponse {
             lottery_id: current_lottery,

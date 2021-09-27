@@ -103,7 +103,7 @@ pub fn update_config(
     }
 
     if let Some(emission_cap) = emission_cap {
-        config.emission_cap = emission_cap; // TODO: Verify is greater than floor
+        config.emission_cap = emission_cap;
     }
 
     if let Some(emission_floor) = emission_floor {
@@ -116,6 +116,12 @@ pub fn update_config(
 
     if let Some(decrement_multiplier) = decrement_multiplier {
         config.decrement_multiplier = decrement_multiplier;
+    }
+
+    if config.emission_cap < config.emission_floor {
+        return Err(StdError::generic_err(
+            "Emission cap must be greater than floor",
+        ));
     }
 
     store_config(deps.storage, &config)?;
@@ -261,7 +267,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 }
 
 // todo: change to match pattern
-// todo: test logic
 #[allow(clippy::comparison_chain)]
 fn query_glow_emission_rate(
     deps: Deps,

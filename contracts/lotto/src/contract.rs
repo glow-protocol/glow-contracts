@@ -903,7 +903,6 @@ pub fn update_config(
         if split_factor > Decimal256::one() {
             return Err(ContractError::InvalidSplitFactor {});
         }
-
         config.split_factor = split_factor;
     }
 
@@ -912,13 +911,6 @@ pub fn update_config(
     }
 
     if let Some(unbonding_period) = unbonding_period {
-        // Note: Unbonding period COULD be smaller than lottery interval if the owner reduces the lottery interval.
-        // This check is meant to catch update_config human errors.
-        if let Duration::Time(lottery_interval) = config.lottery_interval {
-            if unbonding_period < lottery_interval {
-                return Err(ContractError::InvalidUnbondingPeriod {});
-            }
-        }
         config.block_time = Duration::Time(unbonding_period);
     }
 

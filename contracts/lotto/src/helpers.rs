@@ -85,22 +85,3 @@ pub fn calculate_winner_prize(
     }
     to_send
 }
-
-pub fn calculate_total_prize(
-    shares_supply: Decimal256,
-    deposit_shares: Decimal256,
-    initial_balance: Decimal256,
-    aust_balance: Uint256,
-    total_tickets: u64,
-) -> Decimal256 {
-    let aust_lottery_balance = aust_balance.multiply_ratio(
-        (shares_supply - deposit_shares) * Uint256::one(),
-        shares_supply * Uint256::one(),
-    );
-
-    let lottery_deposits =
-        Decimal256::from_uint256(aust_lottery_balance) * Decimal256::permille(RATE);
-    let net_yield = lottery_deposits
-        - (Decimal256::percent(TICKET_PRICE * total_tickets)) * Decimal256::percent(SPLIT_FACTOR);
-    initial_balance + net_yield
-}

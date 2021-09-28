@@ -161,12 +161,12 @@ fn proper_initialization() {
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
 
-    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
     let config = query_config(deps.as_ref()).unwrap();
     assert_eq!(config.gov_contract, GOV_ADDR.to_string());
     assert_eq!(config.distributor_contract, DISTRIBUTOR_ADDR.to_string());
 
-    let state = query_state(deps.as_ref(), env, None).unwrap();
+    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
     assert_eq!(
         state,
         StateResponse {
@@ -186,10 +186,12 @@ fn proper_initialization() {
     );
 
     // Cannot register contracts again //TODO
-    let _msg = ExecuteMsg::RegisterContracts {
-        gov_contract: GOV_ADDR.to_string(),
-        distributor_contract: DISTRIBUTOR_ADDR.to_string(),
-    };
+    let res = execute(deps.as_mut(), env, info, msg);
+
+    match res {
+        Err(ContractError::AlreadyRegistered {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }
 
 #[test]

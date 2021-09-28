@@ -844,17 +844,6 @@ fn withdraw() {
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let dep1 = read_depositor_info(
-        deps.as_ref().storage,
-        &deps.api.addr_validate("addr0001").unwrap(),
-    );
-
-    println!("dep1: {:x?}", dep1);
-
-    let stor1 = query_state(deps.as_ref(), mock_env(), None).unwrap();
-
-    println!("stor1: {:x?}", stor1);
-
     // Add 1 to account for rounding error
     let shares = Uint256::one()
         + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
@@ -882,19 +871,7 @@ fn withdraw() {
     // Correct withdraw, user has 1 ticket to be withdrawn
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let dep1 = read_depositor_info(
-        deps.as_ref().storage,
-        &deps.api.addr_validate("addr0001").unwrap(),
-    );
-
-    println!("dep2: {:x?}", dep1);
-
-    let stor1 = query_state(deps.as_ref(), mock_env(), None).unwrap();
-
-    println!("stor2: {:x?}", stor1);
-
     let empty_addr: Vec<Addr> = vec![];
-
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
         query_ticket_info(deps.as_ref(), String::from("23456"))
@@ -917,8 +894,6 @@ fn withdraw() {
     )
     .unwrap()
     .amount;
-
-    // TODO: use below redeem amount instead of hardcoded unbonding info
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -984,6 +959,134 @@ fn withdraw() {
             ),
             attr("instant_withdrawal_fee", Decimal256::zero().to_string())
         ]
+    );
+
+    // Withdraw with a given amount
+    for index in 0..10 {
+        // Users buys winning ticket
+        let msg = ExecuteMsg::Deposit {
+            combinations: vec![format!("{:0>5}", index)],
+            // combinations: vec![String::from("00000")],
+        };
+        let info = mock_info(
+            "addr2222",
+            &[Coin {
+                denom: "uusd".to_string(),
+                amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+            }],
+        );
+
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    }
+
+    let dep = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr2222").unwrap(),
+    );
+
+    println!("depositor: {:?}", dep);
+    // Add 1 to account for rounding error
+    let shares = Uint256::one()
+        + (Decimal256::percent(TICKET_PRICE * 10) / Decimal256::permille(RATE)) * Uint256::one();
+
+    let info = mock_info("addr2222", &[]);
+
+    // Withdraws half of its tickets
+    let msg = ExecuteMsg::Withdraw {
+        amount: Some((Decimal256::percent(5 * TICKET_PRICE) * Uint256::one()).into()),
+        instant: None,
+    };
+
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR.to_string(),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + deposit_amount,
+        }],
+    );
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+    )]);
+
+    // Correct withdraw, user has 5 tickets to be withdrawn
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr2222").unwrap()
+        )
+        .tickets,
+        vec![
+            String::from("00005"),
+            String::from("00006"),
+            String::from("00007"),
+            String::from("00008"),
+            String::from("00009")
+        ]
+    );
+
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None)
+            .unwrap()
+            .total_tickets,
+        Uint256::from(5u64)
+    );
+
+    // Check ticket map is updated correctly
+    assert_eq!(
+        query_ticket_info(deps.as_ref(), String::from("00002"))
+            .unwrap()
+            .holders,
+        empty_addr
+    );
+
+    assert_eq!(
+        query_ticket_info(deps.as_ref(), String::from("00005"))
+            .unwrap()
+            .holders,
+        vec![Addr::unchecked("addr2222")]
+    );
+
+    // Withdraws a very small amount, burns a ticket as rounding
+    let msg = ExecuteMsg::Withdraw {
+        amount: Some(Uint128::from(1u128)),
+        instant: None,
+    };
+
+    // Correct withdraw, one ticket gets withdrawn
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // Check depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr2222").unwrap()
+        )
+        .tickets,
+        vec![
+            String::from("00006"),
+            String::from("00007"),
+            String::from("00008"),
+            String::from("00009")
+        ]
+    );
+
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None)
+            .unwrap()
+            .total_tickets,
+        Uint256::from(4u64)
+    );
+    // Check ticket map is updated correctly
+    assert_eq!(
+        query_ticket_info(deps.as_ref(), String::from("00005"))
+            .unwrap()
+            .holders,
+        empty_addr
     );
 }
 

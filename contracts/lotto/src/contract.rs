@@ -562,11 +562,21 @@ pub fn withdraw(
         return Err(ContractError::InsufficientPoolFunds {});
     }
 
-    // Remove tickets from global state and depositor
     let tickets_amount = depositor.tickets.len() as u128;
-    let withdrawn_tickets: u128 = (Uint256::from(tickets_amount) * withdraw_ratio).into();
 
-    //TODO: check if we are draining the right amount
+    // Check for rounding error
+    let rounded_tickets = Uint256::from(tickets_amount) * withdraw_ratio;
+    let decimal_tickets = Decimal256::from_uint256(Uint256::from(tickets_amount)) * withdraw_ratio;
+
+    let mut withdrawn_tickets: u128 = rounded_tickets.into();
+    if decimal_tickets != Decimal256::from_uint256(rounded_tickets) {
+        withdrawn_tickets += 1u128;
+    }
+
+    if withdrawn_tickets > tickets_amount {
+        return Err(ContractError::InvalidWithdraw {});
+    }
+
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
         TICKETS.update(
             deps.storage,
@@ -675,7 +685,6 @@ pub fn claim(
         if !lottery.awarded {
             return Err(ContractError::InsufficientClaimableFunds {});
         }
-        println!("hi");
         //Calculate and add to to_send
         let lottery_key: U64Key = U64Key::from(lottery_id);
         let prizes = PRIZES
@@ -697,8 +706,6 @@ pub fn claim(
             }
         }
     }
-
-    println!("to_send: {}", to_send);
 
     if to_send == Uint128::zero() {
         return Err(ContractError::InsufficientClaimableFunds {});

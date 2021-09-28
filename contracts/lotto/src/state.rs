@@ -95,7 +95,7 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
 }
 
 // settings for pagination
-const MAX_LIMIT: u32 = 30;
+const MAX_LIMIT: u32 = 100;
 const DEFAULT_LIMIT: u32 = 10;
 
 pub fn store_depositor_info(

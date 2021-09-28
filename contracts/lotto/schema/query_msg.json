@@ -61,6 +61,52 @@
     {
       "type": "object",
       "required": [
+        "ticket_info"
+      ],
+      "properties": {
+        "ticket_info": {
+          "type": "object",
+          "required": [
+            "sequence"
+          ],
+          "properties": {
+            "sequence": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "prize_info"
+      ],
+      "properties": {
+        "prize_info": {
+          "type": "object",
+          "required": [
+            "address",
+            "lottery_id"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "depositor"
       ],
       "properties": {

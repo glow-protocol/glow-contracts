@@ -68,7 +68,9 @@
               ],
               "items": {
                 "$ref": "#/definitions/Decimal256"
-              }
+              },
+              "maxItems": 6,
+              "minItems": 6
             },
             "reserve_factor": {
               "anyOf": [
@@ -220,7 +222,17 @@
       ],
       "properties": {
         "claim": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "lottery": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
         }
       },
       "additionalProperties": false

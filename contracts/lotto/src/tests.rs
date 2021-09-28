@@ -1156,8 +1156,6 @@ fn instant_withdraw() {
     .unwrap()
     .amount;
 
-    // TODO: use below redeem amount instead of hardcoded unbonding info
-
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),

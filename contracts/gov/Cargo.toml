@@ -35,14 +35,14 @@ overflow-checks = true
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-cw20 = "0.8.0-rc2"
-terraswap = "2.4.0"
-cosmwasm-std = { version = "0.16.0", features = ["iterator"] }
-cosmwasm-storage = { version = "0.16.0", features = ["iterator"] }
-glow-protocol = { version = "0.2.0-rc2", path = "../../packages/glow_protocol" }
+cw20 = "0.8.0"
+terraswap = "2.3.0"
+cosmwasm-std = "0.16.0"
+cosmwasm-storage = "0.16.0"
+glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-thiserror = { version = "1.0.20" }
+thiserror = "1.0.20"
 hex = "0.4"
 
 [dev-dependencies]

@@ -35,10 +35,10 @@ backtraces = ["cosmwasm-std/backtraces"]
 
 
 [dependencies]
-glow-protocol = { version = "0.2.0-rc2", path = "../../packages/glow_protocol" }
-cw20 = "0.8.0-rc2"
-cosmwasm-std = { version = "0.16.0", features = ["iterator"] }
-cosmwasm-storage = { version = "0.16.0", features = ["iterator"] }
+glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
+cw20 = "0.8.0"
+cosmwasm-std = "0.16.0"
+cosmwasm-storage = "0.16.0"
 schemars = "0.8.1"
 sha3 = { version = "0.9.1", default-features = false }
 hex = "0.4"

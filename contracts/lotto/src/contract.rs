@@ -2,7 +2,9 @@
 use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
-use crate::helpers::{claim_deposits, compute_depositor_reward, compute_reward};
+use crate::helpers::{
+    calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
+};
 use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
@@ -695,19 +697,12 @@ pub fn claim(
                 return Err(ContractError::InvalidLotteryClaim {});
             }
 
-            for i in 2..6 {
-                if lottery.number_winners[i] == 0 {
-                    continue;
-                }
-                let ranked_price: Uint256 =
-                    (lottery.total_prizes * config.prize_distribution[i]) * Uint256::one();
-
-                let amount: Uint128 = ranked_price
-                    .multiply_ratio(prize.matches[i], lottery.number_winners[i])
-                    .into();
-
-                to_send += amount;
-            }
+            to_send += calculate_winner_prize(
+                lottery.total_prizes,
+                prize.matches,
+                lottery.number_winners,
+                config.prize_distribution,
+            );
 
             PRIZES.save(
                 deps.storage,

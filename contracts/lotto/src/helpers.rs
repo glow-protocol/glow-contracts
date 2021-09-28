@@ -63,3 +63,44 @@ pub fn claim_deposits(
     store_depositor_info(storage, addr, &depositor)?;
     Ok(to_send)
 }
+
+pub fn calculate_winner_prize(
+    total_awarded: Decimal256,
+    address_rank: [u32; 6],
+    lottery_winners: [u32; 6],
+    prize_dis: [Decimal256; 6],
+) -> Uint128 {
+    let mut to_send: Uint128 = Uint128::zero();
+    for i in 2..6 {
+        if lottery_winners[i] == 0 {
+            continue;
+        }
+        let ranked_price: Uint256 = (total_awarded * prize_dis[i]) * Uint256::one();
+
+        let amount: Uint128 = ranked_price
+            .multiply_ratio(address_rank[i], lottery_winners[i])
+            .into();
+
+        to_send += amount;
+    }
+    to_send
+}
+
+pub fn calculate_total_prize(
+    shares_supply: Decimal256,
+    deposit_shares: Decimal256,
+    initial_balance: Decimal256,
+    aust_balance: Uint256,
+    total_tickets: u64,
+) -> Decimal256 {
+    let aust_lottery_balance = aust_balance.multiply_ratio(
+        (shares_supply - deposit_shares) * Uint256::one(),
+        shares_supply * Uint256::one(),
+    );
+
+    let lottery_deposits =
+        Decimal256::from_uint256(aust_lottery_balance) * Decimal256::permille(RATE);
+    let net_yield = lottery_deposits
+        - (Decimal256::percent(TICKET_PRICE * total_tickets)) * Decimal256::percent(SPLIT_FACTOR);
+    initial_balance + net_yield
+}

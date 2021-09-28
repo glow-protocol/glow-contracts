@@ -2,6 +2,7 @@ use crate::contract::{
     execute, instantiate, query, query_config, query_state, query_ticket_info,
     INITIAL_DEPOSIT_AMOUNT,
 };
+use crate::helpers::{calculate_total_prize, calculate_winner_prize};
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, Config, DepositorInfo, LotteryInfo,
@@ -185,7 +186,7 @@ fn proper_initialization() {
         }
     );
 
-    // Cannot register contracts again //TODO
+    // Cannot register contracts again
     let res = execute(deps.as_mut(), env, info, msg);
 
     match res {
@@ -717,16 +718,6 @@ fn gift_tickets() {
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    /*
-    deps.querier.update_balance(
-        HumanAddr::from(MOCK_CONTRACT_ADDR),
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + TICKET_PRICE),
-        }],
-    );
-     */
-
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was stored correctly in both sequence buckets
@@ -809,12 +800,7 @@ fn gift_tickets() {
             ),
         ]
     );
-
-    // TODO: cover more cases eg. sequential buys and repeated ticket in same buy
-    // TODO: deposit fails when current lottery deposit time is expired
 }
-
-// TODO: write sponsor testcases
 
 #[test]
 fn withdraw() {
@@ -1334,12 +1320,7 @@ fn claim() {
     }
     println!("Block time 2: {}", env.block.time);
     // TODO: change also the exchange rate here
-
-    // TODO: add case asking for more amount that the one we have (which is non-zero)
-    // TODO: add case asking for an amount (not None) that we do have
-    // TODO: add case where contract balances are not enough to fulfill claim
-
-    // TODO: this update is not needed (??)
+    // This update is not needed (??)
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR,
         vec![Coin {
@@ -2974,48 +2955,4 @@ fn execute_epoch_operations() {
             glow_emission_rate: Decimal256::one()
         }
     );
-}
-
-// TODO: Refactor tests
-// TODO: Test prize_strategy functions combinations (without wasm)
-
-fn calculate_total_prize(
-    shares_supply: Decimal256,
-    deposit_shares: Decimal256,
-    initial_balance: Decimal256,
-    aust_balance: Uint256,
-    total_tickets: u64,
-) -> Decimal256 {
-    let aust_lottery_balance = aust_balance.multiply_ratio(
-        (shares_supply - deposit_shares) * Uint256::one(),
-        shares_supply * Uint256::one(),
-    );
-
-    let lottery_deposits =
-        Decimal256::from_uint256(aust_lottery_balance) * Decimal256::permille(RATE);
-    let net_yield = lottery_deposits
-        - (Decimal256::percent(TICKET_PRICE * total_tickets)) * Decimal256::percent(SPLIT_FACTOR);
-    initial_balance + net_yield
-}
-// TODO: can use in contract as well
-fn calculate_winner_prize(
-    total_awarded: Decimal256,
-    address_rank: [u32; 6],
-    lottery_winners: [u32; 6],
-    prize_dis: [Decimal256; 6],
-) -> Uint128 {
-    let mut to_send: Uint128 = Uint128::zero();
-    for i in 2..6 {
-        if lottery_winners[i] == 0 {
-            continue;
-        }
-        let ranked_price: Uint256 = (total_awarded * prize_dis[i]) * Uint256::one();
-
-        let amount: Uint128 = ranked_price
-            .multiply_ratio(address_rank[i], lottery_winners[i])
-            .into();
-
-        to_send += amount;
-    }
-    to_send
 }

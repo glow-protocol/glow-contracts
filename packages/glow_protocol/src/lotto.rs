@@ -177,5 +177,6 @@ pub struct TicketInfoResponse {
 pub struct PrizeInfoResponse {
     pub holder: Addr,
     pub lottery_id: u64,
+    pub claimed: bool,
     pub matches: [u32; 6],
 }

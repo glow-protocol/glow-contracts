@@ -5,7 +5,7 @@ use crate::contract::{
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, Config, DepositorInfo, LotteryInfo,
-    State, STATE,
+    PrizeInfo, State, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -1490,7 +1490,13 @@ fn claim_lottery_single_winner() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
-    assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
+    assert_eq!(
+        prizes,
+        PrizeInfo {
+            claimed: false,
+            matches: [0, 0, 0, 0, 0, 1]
+        }
+    );
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
@@ -1510,9 +1516,18 @@ fn claim_lottery_single_winner() {
 
     let prize = calculate_winner_prize(
         awarded_prize,
-        prizes,
+        prizes.matches,
         lottery.number_winners,
         query_config(deps.as_ref()).unwrap().prize_distribution,
+    );
+
+    let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
+    assert_eq!(
+        prizes,
+        PrizeInfo {
+            claimed: true,
+            matches: [0, 0, 0, 0, 0, 1]
+        }
     );
 
     assert_eq!(
@@ -1988,7 +2003,7 @@ fn execute_prize_one_winner() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
-    assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
+    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 1]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
@@ -2140,10 +2155,10 @@ fn execute_prize_winners_diff_ranks() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw_0, 0u64).unwrap();
-    assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
+    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 1]);
 
     let prizes = query_prizes(deps.as_ref(), &address_raw_1, 0u64).unwrap();
-    assert_eq!(prizes, [0, 0, 1, 0, 0, 0]);
+    assert_eq!(prizes.matches, [0, 0, 1, 0, 0, 0]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
@@ -2431,7 +2446,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
-    assert_eq!(prizes, [0, 0, 0, 0, 3, 1]);
+    assert_eq!(prizes.matches, [0, 0, 0, 0, 3, 1]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
@@ -2567,7 +2582,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_0, 0u64).unwrap();
-    assert_eq!(prizes, [0, 0, 0, 0, 0, 1]);
+    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 1]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);

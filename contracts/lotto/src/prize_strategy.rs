@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
     read_depositor_info, read_lottery_info, store_depositor_info, store_lottery_info, LotteryInfo,
-    CONFIG, PRIZES, STATE, TICKETS,
+    PrizeInfo, CONFIG, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -205,14 +205,17 @@ pub fn execute_prize(
                 // TODO: revisit to avoid multiple state r-w
                 PRIZES.update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
                     let result = match hits {
-                        Some(mut winnings) => {
-                            winnings[matches as usize] += 1;
-                            winnings
+                        Some(mut prize) => {
+                            prize.matches[matches as usize] += 1;
+                            prize
                         }
                         None => {
                             let mut winnings = [0; 6];
                             winnings[matches as usize] = 1;
-                            winnings
+                            PrizeInfo {
+                                claimed: false,
+                                matches: winnings,
+                            }
                         }
                     };
                     Ok(result)

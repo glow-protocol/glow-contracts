@@ -16,7 +16,7 @@ pub const STATE: Item<State> = Item::new("state");
 //pub const DEPOSITORS: Map<&Addr, DepositorInfo> = Map::new("depositors");
 //pub const LOTTERY: Map<u8, LotteryInfo> = Map::new("lottery");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
-pub const PRIZES: Map<(&Addr, U64Key), [u32; 6]> = Map::new("prizes");
+pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -71,6 +71,20 @@ pub struct LotteryInfo {
     pub total_prizes: Decimal256,
     pub number_winners: [u32; 6],
     pub page: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PrizeInfo {
+    pub claimed: bool,
+    pub matches: [u32; 6],
+}
+impl Default for PrizeInfo {
+    fn default() -> Self {
+        PrizeInfo {
+            claimed: false,
+            matches: [0; 6],
+        }
+    }
 }
 
 pub fn store_lottery_info(
@@ -167,7 +181,7 @@ fn calc_sequence_range_start(start_after: Option<&str>) -> Option<Vec<u8>> {
     })
 }
 
-pub fn query_prizes(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<[u32; 6]> {
+pub fn query_prizes(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<PrizeInfo> {
     let lottery_key = U64Key::from(lottery_id);
     PRIZES.load(deps.storage, (address, lottery_key))
 }

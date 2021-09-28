@@ -7,7 +7,7 @@ use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_va
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, store_depositor_info, Config,
-    DepositorInfo, State, CONFIG, PRIZES, STATE, TICKETS,
+    DepositorInfo, PrizeInfo, State, CONFIG, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -688,9 +688,13 @@ pub fn claim(
         //Calculate and add to to_send
         let lottery_key: U64Key = U64Key::from(lottery_id);
         let prizes = PRIZES
-            .may_load(deps.storage, (&info.sender, lottery_key))
+            .may_load(deps.storage, (&info.sender, lottery_key.clone()))
             .unwrap();
         if let Some(prize) = prizes {
+            if prize.claimed {
+                return Err(ContractError::InvalidLotteryClaim {});
+            }
+
             for i in 2..6 {
                 if lottery.number_winners[i] == 0 {
                     continue;
@@ -699,11 +703,20 @@ pub fn claim(
                     (lottery.total_prizes * config.prize_distribution[i]) * Uint256::one();
 
                 let amount: Uint128 = ranked_price
-                    .multiply_ratio(prize[i], lottery.number_winners[i])
+                    .multiply_ratio(prize.matches[i], lottery.number_winners[i])
                     .into();
 
                 to_send += amount;
             }
+
+            PRIZES.save(
+                deps.storage,
+                (&info.sender, lottery_key),
+                &PrizeInfo {
+                    claimed: true,
+                    matches: prize.matches,
+                },
+            );
         }
     }
 
@@ -950,14 +963,15 @@ pub fn query_prizes(deps: Deps, address: String, lottery_id: u64) -> StdResult<P
     let lottery_key = U64Key::from(lottery_id);
     let addr = deps.api.addr_validate(&address)?;
 
-    let matches = PRIZES
+    let prize_info = PRIZES
         .may_load(deps.storage, (&addr, lottery_key))?
         .unwrap_or_default();
 
     Ok(PrizeInfoResponse {
         holder: addr,
         lottery_id,
-        matches,
+        claimed: prize_info.claimed,
+        matches: prize_info.matches,
     })
 }
 

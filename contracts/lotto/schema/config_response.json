@@ -10,6 +10,7 @@
     "gov_contract",
     "instant_withdrawal_fee",
     "lottery_interval",
+    "max_holders",
     "owner",
     "prize_distribution",
     "reserve_factor",
@@ -41,6 +42,11 @@
     "lottery_interval": {
       "$ref": "#/definitions/Duration"
     },
+    "max_holders": {
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
+    },
     "owner": {
       "type": "string"
     },
@@ -48,7 +54,9 @@
       "type": "array",
       "items": {
         "$ref": "#/definitions/Decimal256"
-      }
+      },
+      "maxItems": 6,
+      "minItems": 6
     },
     "reserve_factor": {
       "$ref": "#/definitions/Decimal256"

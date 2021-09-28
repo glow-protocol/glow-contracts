@@ -15,7 +15,7 @@ pub struct InstantiateMsg {
     pub block_time: u64,
     pub ticket_price: Decimal256,
     pub max_holders: u8,
-    pub prize_distribution: Vec<Decimal256>,
+    pub prize_distribution: [Decimal256; 6],
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
@@ -40,7 +40,7 @@ pub enum ExecuteMsg {
         lottery_interval: Option<u64>,
         block_time: Option<u64>,
         ticket_price: Option<Decimal256>,
-        prize_distribution: Option<Vec<Decimal256>>,
+        prize_distribution: Option<[Decimal256; 6]>,
         reserve_factor: Option<Decimal256>,
         split_factor: Option<Decimal256>,
         unbonding_period: Option<u64>,
@@ -81,6 +81,13 @@ pub enum QueryMsg {
     LotteryInfo {
         lottery_id: Option<u64>,
     },
+    TicketInfo {
+        sequence: String,
+    },
+    PrizeInfo {
+        address: String,
+        lottery_id: u64,
+    },
     Depositor {
         address: String,
     },
@@ -103,7 +110,7 @@ pub struct ConfigResponse {
     pub block_time: Duration,
     pub ticket_price: Decimal256,
     pub max_holders: u8,
-    pub prize_distribution: Vec<Decimal256>,
+    pub prize_distribution: [Decimal256; 6],
     pub target_award: Decimal256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
@@ -144,7 +151,6 @@ pub struct DepositorInfoResponse {
     pub depositor: String,
     pub deposit_amount: Decimal256,
     pub shares: Decimal256,
-    pub redeemable_amount: Uint128,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
@@ -161,4 +167,17 @@ pub struct DepositorsInfoResponse {
 pub struct Claim {
     pub amount: Decimal256,
     pub release_at: Expiration,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct TicketInfoResponse {
+    pub holders: Vec<Addr>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PrizeInfoResponse {
+    pub holder: Addr,
+    pub lottery_id: u64,
+    pub claimed: bool,
+    pub matches: [u32; 6],
 }

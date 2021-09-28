@@ -31,18 +31,18 @@ overflow-checks = true
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-cw20 = "0.8.0-rc2"
+cw20 = "0.8.0"
 cw0 = "0.8.0"
-terraswap = "2.4.0"
-moneymarket = { git = "https://github.com/Anchor-Protocol/money-market-contracts", rev = "92d5a5b1a247693ffb63197a1a890d86b6c820db"}
-glow-protocol = { version = "0.2.0-rc2", path = "../../packages/glow_protocol" }
-cosmwasm-std = { version = "0.16.0", features = ["iterator"] }
-cosmwasm-storage = { version = "0.16.0", features = ["iterator"] }
+terraswap = "2.3.0"
+moneymarket = "0.3.0"
+glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
+cosmwasm-std = "0.16.0"
+cosmwasm-storage = "0.16.0"
 cosmwasm-bignumber = "2.2.0"
 schemars = "0.8.1"
 sha3 = "0.9.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-snafu = { version = "0.6.3" }
+snafu = "0.6.3"
 terra-cosmwasm = "2.2.0"
 thiserror = { version = "1.0.20" }
 cw-storage-plus = "0.9.0"

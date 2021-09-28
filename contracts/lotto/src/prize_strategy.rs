@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
     read_depositor_info, read_lottery_info, store_depositor_info, store_lottery_info, LotteryInfo,
-    CONFIG, PRIZES, STATE, TICKETS,
+    PrizeInfo, CONFIG, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -14,7 +14,7 @@ use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
 
-use crate::contract::compute_reward;
+use crate::helpers::compute_reward;
 use moneymarket::market::Cw20HookMsg;
 use std::ops::{Add, Sub};
 use std::str;
@@ -205,14 +205,17 @@ pub fn execute_prize(
                 // TODO: revisit to avoid multiple state r-w
                 PRIZES.update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
                     let result = match hits {
-                        Some(mut winnings) => {
-                            winnings[matches as usize] += 1;
-                            winnings
+                        Some(mut prize) => {
+                            prize.matches[matches as usize] += 1;
+                            prize
                         }
                         None => {
                             let mut winnings = [0; 6];
                             winnings[matches as usize] = 1;
-                            winnings
+                            PrizeInfo {
+                                claimed: false,
+                                matches: winnings,
+                            }
                         }
                     };
                     Ok(result)
@@ -228,7 +231,6 @@ pub fn execute_prize(
     if lottery_info.awarded {
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
-                // TODO: revise logic
                 total_awarded_prize += state.award_available * config.prize_distribution[index];
             }
         }

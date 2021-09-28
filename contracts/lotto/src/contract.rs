@@ -8,8 +8,9 @@ use crate::helpers::{
 use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    read_depositor_info, read_depositors, read_lottery_info, store_depositor_info, Config,
-    DepositorInfo, PrizeInfo, State, CONFIG, PRIZES, STATE, TICKETS,
+    read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
+    store_depositor_info, store_sponsor_info, Config, DepositorInfo, PrizeInfo, SponsorInfo, State,
+    CONFIG, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -81,9 +82,11 @@ pub fn instantiate(
             total_tickets: Uint256::zero(),
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
+            total_sponsor_amount: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            shares_supply: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
+            lottery_shares: Decimal256::zero(),
+            sponsor_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
@@ -274,7 +277,9 @@ pub fn deposit(
 
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    state.shares_supply = state.shares_supply.add(minted_amount);
+    state.lottery_shares = state
+        .lottery_shares
+        .add(minted_amount * config.split_factor);
     state.deposit_shares = state
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
@@ -412,7 +417,9 @@ pub fn gift_tickets(
 
     // Update global state
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    state.shares_supply = state.shares_supply.add(minted_amount);
+    state.lottery_shares = state
+        .lottery_shares
+        .add(minted_amount * config.split_factor);
     state.deposit_shares = state
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
@@ -487,20 +494,21 @@ pub fn sponsor(
         let minted_amount =
             Decimal256::from_uint256(net_sponsor_amount) / epoch_state.exchange_rate;
 
-        // fetch depositor_info
-        let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
+        // fetch sponsor_info
+        let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
         // add sponsor_amount to depositor
-        depositor_info.sponsor_amount = depositor_info
-            .sponsor_amount
+        sponsor_info.amount = sponsor_info
+            .amount
             .add(Decimal256::from_uint256(net_sponsor_amount));
-        store_depositor_info(deps.storage, &info.sender, &depositor_info)?;
+        sponsor_info.shares = sponsor_info.shares.add(minted_amount);
+        store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
 
         // update global state
-        state.shares_supply = state.shares_supply.add(minted_amount);
-        state.lottery_deposits = state
-            .lottery_deposits
-            .add(Decimal256::from_uint256(sponsor_amount));
+        state.total_sponsor_amount = state
+            .total_sponsor_amount
+            .add(Decimal256::from_uint256(net_sponsor_amount));
+        state.sponsor_shares = state.sponsor_shares.add(minted_amount);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
@@ -528,17 +536,13 @@ pub fn sponsor_withdraw(
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
+    let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
-    if depositor.sponsor_amount.is_zero() || state.shares_supply.is_zero() {
+    if sponsor_info.amount.is_zero() || state.sponsor_shares.is_zero() {
         return Err(ContractError::InvalidSponsorWithdraw {});
     }
 
-    // Compute GLOW reward
-    compute_reward(&mut state, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
-
-    // Calculate aust amount to redeem based on depositor sponsor_amount
+    // Calculate aust amount to redeem based on depositor amount
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
@@ -546,19 +550,20 @@ pub fn sponsor_withdraw(
     )?;
     let rate =
         query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
-    let aust_to_redeem = depositor.sponsor_amount / rate;
+    let aust_to_redeem = sponsor_info.amount / rate;
 
-    // Double-checking Lotto pool is solvent against deposits
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < state.total_deposits {
-        return Err(ContractError::InsufficientPoolFunds {});
+    // Double-checking Lotto pool is solvent against sponsors
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < state.sponsor_shares {
+        return Err(ContractError::InsufficientSponsorFunds {});
     }
 
-    // Update depositor info
-    depositor.sponsor_amount = Decimal256::zero();
-
     // Update global state
-    state.lottery_deposits = state.lottery_deposits.sub(depositor.sponsor_amount);
-    state.shares_supply = state.shares_supply.sub(aust_to_redeem);
+    state.total_sponsor_amount = state.total_sponsor_amount.sub(sponsor_info.amount);
+    state.sponsor_shares = state.sponsor_shares.sub(sponsor_info.shares);
+
+    // Update depositor info
+    sponsor_info.amount = Decimal256::zero();
+    sponsor_info.shares = Decimal256::zero();
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -577,7 +582,7 @@ pub fn sponsor_withdraw(
     // Discount tx taxes
     let net_coin_amount = deduct_tax(
         deps.as_ref(),
-        coin((depositor.sponsor_amount * Uint256::one()).into(), "uusd"),
+        coin((sponsor_info.amount * Uint256::one()).into(), "uusd"),
     )?;
 
     msgs.push(CosmosMsg::Bank(BankMsg::Send {
@@ -585,14 +590,14 @@ pub fn sponsor_withdraw(
         amount: vec![net_coin_amount],
     }));
 
-    store_depositor_info(deps.storage, &info.sender, &depositor)?;
+    store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
     STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "withdraw_sponsor"),
         attr("depositor", info.sender.to_string()),
         attr("redeem_amount_anchor", aust_to_redeem.to_string()),
-        attr("redeem_stable_amount", depositor.sponsor_amount.to_string()),
+        attr("redeem_stable_amount", sponsor_info.amount.to_string()),
     ]))
 }
 
@@ -608,7 +613,9 @@ pub fn withdraw(
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
-    if depositor.shares.is_zero() || state.shares_supply.is_zero() {
+    let shares_supply = state.lottery_shares + state.deposit_shares + state.sponsor_shares;
+
+    if depositor.shares.is_zero() || shares_supply.is_zero() {
         return Err(ContractError::InvalidWithdraw {});
     }
 
@@ -626,7 +633,7 @@ pub fn withdraw(
     compute_depositor_reward(&state, &mut depositor);
 
     // Calculate depositor current pooled deposits in uusd
-    let depositor_ratio = depositor.shares / state.shares_supply;
+    let depositor_ratio = depositor.shares / shares_supply;
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
@@ -687,6 +694,7 @@ pub fn withdraw(
 
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
     let withdrawn_shares = depositor.shares * withdraw_ratio;
+    let withdrawn_lottery_shares = withdrawn_shares * config.split_factor;
     let withdrawn_deposit_shares = withdrawn_shares - withdrawn_shares * config.split_factor;
 
     // Update depositor info
@@ -699,7 +707,7 @@ pub fn withdraw(
         .lottery_deposits
         .sub(withdrawn_deposits * config.split_factor);
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
-    state.shares_supply = state.shares_supply.sub(withdrawn_shares);
+    state.lottery_shares = state.lottery_shares.sub(withdrawn_lottery_shares);
     state.deposit_shares = state.deposit_shares.sub(withdrawn_deposit_shares);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
@@ -1097,9 +1105,11 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
         total_tickets: state.total_tickets,
         total_reserve: state.total_reserve,
         total_deposits: state.total_deposits,
+        total_sponsor_amount: state.total_sponsor_amount,
         lottery_deposits: state.lottery_deposits,
-        shares_supply: state.shares_supply,
         deposit_shares: state.deposit_shares,
+        lottery_shares: state.lottery_shares,
+        sponsor_shares: state.sponsor_shares,
         award_available: state.award_available,
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,

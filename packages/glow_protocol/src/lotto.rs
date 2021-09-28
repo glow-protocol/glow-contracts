@@ -55,6 +55,7 @@ pub enum ExecuteMsg {
     Sponsor {
         award: Option<bool>,
     },
+    SponsorWithdraw {},
     Withdraw {
         amount: Option<Uint128>,
         instant: Option<bool>,
@@ -124,8 +125,10 @@ pub struct StateResponse {
     pub total_reserve: Decimal256,
     pub total_deposits: Decimal256,
     pub lottery_deposits: Decimal256,
-    pub shares_supply: Decimal256,
+    pub total_sponsor_amount: Decimal256,
     pub deposit_shares: Decimal256,
+    pub lottery_shares: Decimal256,
+    pub sponsor_shares: Decimal256,
     pub award_available: Decimal256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,

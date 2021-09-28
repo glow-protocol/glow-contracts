@@ -10,6 +10,7 @@ use glow_protocol::lotto::{Claim, DepositorInfoResponse};
 
 const PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_DEPOSIT: &[u8] = b"depositor";
+const PREFIX_SPONSOR: &[u8] = b"sponsor";
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
@@ -43,9 +44,11 @@ pub struct State {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
     pub total_deposits: Decimal256,
+    pub total_sponsor_amount: Decimal256,
     pub lottery_deposits: Decimal256,
-    pub shares_supply: Decimal256,
+    pub lottery_shares: Decimal256,
     pub deposit_shares: Decimal256,
+    pub sponsor_shares: Decimal256,
     pub award_available: Decimal256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
@@ -62,6 +65,12 @@ pub struct DepositorInfo {
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SponsorInfo {
+    pub amount: Decimal256,
+    pub shares: Decimal256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -130,6 +139,24 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![],
+        },
+    }
+}
+
+pub fn store_sponsor_info(
+    storage: &mut dyn Storage,
+    sponsor: &Addr,
+    sponsor_info: &SponsorInfo,
+) -> StdResult<()> {
+    bucket(storage, PREFIX_SPONSOR).save(sponsor.as_bytes(), sponsor_info)
+}
+
+pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
+    match bucket_read(storage, PREFIX_SPONSOR).load(sponsor.as_bytes()) {
+        Ok(v) => v,
+        _ => SponsorInfo {
+            amount: Decimal256::zero(),
+            shares: Decimal256::zero(),
         },
     }
 }

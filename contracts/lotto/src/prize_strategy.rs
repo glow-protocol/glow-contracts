@@ -65,8 +65,8 @@ pub fn execute_lottery(
     )?;
 
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
-        (state.shares_supply - state.deposit_shares) * Uint256::one(),
-        state.shares_supply * Uint256::one(),
+        (state.lottery_shares + state.sponsor_shares) * Uint256::one(),
+        (state.deposit_shares + state.lottery_shares + state.sponsor_shares) * Uint256::one(),
     );
     let rate =
         query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
@@ -81,7 +81,8 @@ pub fn execute_lottery(
             return Err(ContractError::InsufficientLotteryFunds {});
         }
     } else {
-        let amount_to_redeem = pooled_lottery_deposits - state.lottery_deposits;
+        let amount_to_redeem =
+            pooled_lottery_deposits - state.lottery_deposits - state.total_sponsor_amount;
         aust_to_redeem = amount_to_redeem / rate;
         state.award_available += amount_to_redeem;
 

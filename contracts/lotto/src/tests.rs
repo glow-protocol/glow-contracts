@@ -5,8 +5,8 @@ use crate::contract::{
 use crate::helpers::calculate_winner_prize;
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
-    query_prizes, read_depositor_info, read_lottery_info, Config, DepositorInfo, LotteryInfo,
-    PrizeInfo, State, STATE,
+    query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, Config, DepositorInfo,
+    LotteryInfo, PrizeInfo, State, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -175,7 +175,9 @@ fn proper_initialization() {
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            shares_supply: Decimal256::zero(),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: Decimal256::zero(),
+            sponsor_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
@@ -414,8 +416,10 @@ fn deposit() {
             total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
-            shares_supply: minted_shares,
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            sponsor_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
@@ -760,8 +764,10 @@ fn gift_tickets() {
             total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
-            shares_supply: minted_shares,
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            sponsor_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
@@ -800,6 +806,93 @@ fn gift_tickets() {
             ),
         ]
     );
+}
+
+#[test]
+fn sponsor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    let sponsor_amount = 100_000_000u128;
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::from(1_000_000u128))],
+    );
+
+    // Address sponsor
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(sponsor_amount),
+        }],
+    );
+
+    let msg = ExecuteMsg::Sponsor { award: None };
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    println!("{:?}", _res);
+
+    let sponsor_info = read_sponsor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0001").unwrap(),
+    );
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+
+    let net_amount = deduct_tax(
+        deps.as_ref(),
+        Coin {
+            denom: String::from("uusd"),
+            amount: Uint128::from(sponsor_amount),
+        },
+    )
+    .unwrap()
+    .amount;
+
+    let minted_shares = Decimal256::from_uint256(net_amount) / Decimal256::permille(RATE);
+
+    assert_eq!(sponsor_info.amount, Decimal256::from_uint256(net_amount));
+    assert_eq!(sponsor_info.shares, minted_shares);
+
+    assert_eq!(
+        state.total_sponsor_amount,
+        Decimal256::from_uint256(net_amount)
+    );
+    assert_eq!(state.sponsor_shares, minted_shares);
+
+    // withdraw sponsor
+
+    let app_shares =
+        (Decimal256::from_uint256(net_amount) / Decimal256::permille(RATE)) * Uint256::one();
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &app_shares.into())],
+    )]);
+
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::SponsorWithdraw {};
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let sponsor_info = read_sponsor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0001").unwrap(),
+    );
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+
+    assert_eq!(sponsor_info.amount, Decimal256::zero());
+    assert_eq!(sponsor_info.shares, Decimal256::zero());
+    assert_eq!(state.total_sponsor_amount, Decimal256::zero());
+    assert_eq!(state.sponsor_shares, Decimal256::zero());
 }
 
 #[test]
@@ -909,8 +1002,10 @@ fn withdraw() {
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            shares_supply: Decimal256::zero(),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
+            sponsor_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
@@ -1176,8 +1271,10 @@ fn instant_withdraw() {
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            shares_supply: Decimal256::zero(),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
+            sponsor_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
@@ -1448,8 +1545,9 @@ fn claim_lottery_single_winner() {
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     let total_prize = calculate_total_prize(
-        state.shares_supply,
+        state.lottery_shares,
         state.deposit_shares,
+        state.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
         Uint256::from(20_000_000u128),
         1,
@@ -1963,8 +2061,9 @@ fn execute_prize_one_winner() {
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     let total_prize = calculate_total_prize(
-        state.shares_supply,
+        state.lottery_shares,
         state.deposit_shares,
+        state.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
         Uint256::from(20_000_000u128),
         1,
@@ -2113,8 +2212,9 @@ fn execute_prize_winners_diff_ranks() {
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     let total_prize = calculate_total_prize(
-        state.shares_supply,
+        state.lottery_shares,
         state.deposit_shares,
+        state.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
         Uint256::from(30_000_000u128),
         2,
@@ -2265,8 +2365,9 @@ fn execute_prize_winners_same_rank() {
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     // total prize
     let total_prize = calculate_total_prize(
-        state.shares_supply,
+        state.lottery_shares,
         state.deposit_shares,
+        state.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
         Uint256::from(30_000_000u128),
         2,
@@ -2406,8 +2507,9 @@ fn execute_prize_one_winner_multiple_ranks() {
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     // total prize
     let total_prize = calculate_total_prize(
-        state.shares_supply,
+        state.lottery_shares,
         state.deposit_shares,
+        state.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
         Uint256::from(55_000_000u128),
         5,
@@ -2542,8 +2644,9 @@ fn execute_prize_multiple_winners_one_ticket() {
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     // total prize
     let total_prize = calculate_total_prize(
-        state.shares_supply,
+        state.lottery_shares,
         state.deposit_shares,
+        state.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
         Uint256::from(31_000_000u128),
         3,
@@ -2943,8 +3046,10 @@ fn execute_epoch_operations() {
             total_reserve: Decimal256::zero(),
             total_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            shares_supply: Decimal256::zero(),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
+            sponsor_shares: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             last_reward_updated: 12445,
@@ -2956,15 +3061,16 @@ fn execute_epoch_operations() {
 }
 
 fn calculate_total_prize(
-    shares_supply: Decimal256,
+    lottery_shares: Decimal256,
     deposit_shares: Decimal256,
+    sponsor_shares: Decimal256,
     initial_balance: Decimal256,
     aust_balance: Uint256,
     total_tickets: u64,
 ) -> Decimal256 {
-    let aust_lottery_balance = aust_balance.multiply_ratio(
-        (shares_supply - deposit_shares) * Uint256::one(),
-        shares_supply * Uint256::one(),
+    let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
+        (lottery_shares + sponsor_shares) * Uint256::one(),
+        (deposit_shares + lottery_shares + sponsor_shares) * Uint256::one(),
     );
 
     let lottery_deposits =

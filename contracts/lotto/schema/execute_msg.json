@@ -188,6 +188,18 @@
     {
       "type": "object",
       "required": [
+        "sponsor_withdraw"
+      ],
+      "properties": {
+        "sponsor_withdraw": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "withdraw"
       ],
       "properties": {

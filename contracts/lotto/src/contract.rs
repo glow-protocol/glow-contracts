@@ -7,7 +7,11 @@ use crate::helpers::{
 };
 use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
-use crate::state::{read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info, store_depositor_info, store_sponsor_info, Config, DepositorInfo, PrizeInfo, SponsorInfo, State, CONFIG, PRIZES, STATE, TICKETS, POOL, Pool};
+use crate::state::{
+    read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
+    store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo,
+    State, CONFIG, POOL, PRIZES, STATE, TICKETS,
+};
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
@@ -17,12 +21,15 @@ use cw0::Duration;
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::{Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg, InstantiateMsg, LotteryInfoResponse, PrizeInfoResponse, QueryMsg, StateResponse, TicketInfoResponse, PoolResponse};
+use glow_protocol::lotto::{
+    Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
+    InstantiateMsg, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg, StateResponse,
+    TicketInfoResponse,
+};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
 use terraswap::querier::query_token_balance;
-
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 100_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
@@ -81,7 +88,7 @@ pub fn instantiate(
         },
     )?;
 
-        POOL.save(
+    POOL.save(
         deps.storage,
         &Pool {
             total_deposits: Decimal256::zero(),
@@ -231,7 +238,7 @@ pub fn deposit(
         new_combinations.push(sequence.to_string());
     }
 
-    compute_reward(&mut state, &pool,env.block.height);
+    compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor_info);
 
     // query exchange_rate from anchor money market
@@ -275,9 +282,7 @@ pub fn deposit(
 
     // Update global state and pool
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    pool.lottery_shares = pool
-        .lottery_shares
-        .add(minted_amount * config.split_factor);
+    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
     pool.deposit_shares = pool
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
@@ -417,9 +422,7 @@ pub fn gift_tickets(
 
     // Update global state and pool
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    pool.lottery_shares = pool
-        .lottery_shares
-        .add(minted_amount * config.split_factor);
+    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
     pool.deposit_shares = pool
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
@@ -639,7 +642,7 @@ pub fn withdraw(
     }
 
     // Compute GLOW reward
-    compute_reward(&mut state, &pool,env.block.height);
+    compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
     // Calculate depositor current pooled deposits in uusd
@@ -789,7 +792,7 @@ pub fn claim(
     let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &info.sender);
 
     // Compute Glow depositor rewards
-    compute_reward(&mut state, &pool,env.block.height);
+    compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
     if let Some(lottery_id) = lottery {
@@ -868,7 +871,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     let mut state = STATE.load(deps.storage)?;
 
     // Compute global Glow rewards
-    compute_reward(&mut state, &pool,env.block.height);
+    compute_reward(&mut state, &pool, env.block.height);
 
     // Query updated Glow emission rate and update state
     state.glow_emission_rate = query_glow_emission_rate(
@@ -921,7 +924,7 @@ pub fn claim_rewards(
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
     // Compute Glow depositor rewards
-    compute_reward(&mut state, &pool,env.block.height);
+    compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
     let claim_amount = depositor.pending_rewards * Uint256::one();

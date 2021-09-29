@@ -1,7 +1,7 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, DepsMut, StdResult, Storage, Uint128};
 
-use crate::state::{read_depositor_info, store_depositor_info, DepositorInfo, State, Pool};
+use crate::state::{read_depositor_info, store_depositor_info, DepositorInfo, Pool, State};
 use cw0::Expiration;
 use glow_protocol::lotto::Claim;
 

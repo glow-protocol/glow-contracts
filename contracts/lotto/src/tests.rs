@@ -1,4 +1,7 @@
-use crate::contract::{execute, instantiate, query, query_config, query_state, query_ticket_info, INITIAL_DEPOSIT_AMOUNT, query_pool};
+use crate::contract::{
+    execute, instantiate, query, query_config, query_pool, query_state, query_ticket_info,
+    INITIAL_DEPOSIT_AMOUNT,
+};
 use crate::helpers::calculate_winner_prize;
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
@@ -14,7 +17,10 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::{Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StateResponse, PoolResponse};
+use glow_protocol::lotto::{
+    Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, PoolResponse,
+    QueryMsg, StateResponse,
+};
 
 use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
@@ -423,7 +429,7 @@ fn deposit() {
         }
     );
 
-        assert_eq!(
+    assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
@@ -777,7 +783,7 @@ fn gift_tickets() {
         }
     );
 
-        assert_eq!(
+    assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
@@ -1022,7 +1028,7 @@ fn withdraw() {
         }
     );
 
-        assert_eq!(
+    assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: Decimal256::zero(),
@@ -1297,7 +1303,7 @@ fn instant_withdraw() {
         }
     );
 
-        assert_eq!(
+    assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: Decimal256::zero(),
@@ -1567,7 +1573,6 @@ fn claim_lottery_single_winner() {
 
     // Check lottery info was updated correctly
     let pool = query_pool(deps.as_ref()).unwrap();
-
 
     let total_prize = calculate_total_prize(
         pool.lottery_shares,
@@ -2777,7 +2782,9 @@ fn execute_prize_pagination() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    let msg = ExecuteMsg::ExecutePrize { limit: Some(100u32) };
+    let msg = ExecuteMsg::ExecutePrize {
+        limit: Some(100u32),
+    };
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
     // Check lottery info was updated correctly

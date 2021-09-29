@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
     read_depositor_info, read_lottery_info, store_depositor_info, store_lottery_info, LotteryInfo,
-    PrizeInfo, CONFIG, PRIZES, STATE, TICKETS, POOL
+    PrizeInfo, CONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -133,7 +133,7 @@ pub fn execute_prize(
     let pool = POOL.load(deps.storage)?;
 
     // Compute global Glow rewards
-    compute_reward(&mut state, &pool,env.block.height);
+    compute_reward(&mut state, &pool, env.block.height);
 
     // No sent funds allowed when executing the lottery
     if !info.funds.is_empty() {
@@ -158,7 +158,7 @@ pub fn execute_prize(
     }
 
     // Get max bounds
-    let max_bound_number = min_bound.parse::<i32>().unwrap() + 1;
+    let max_bound_number = min_bound[..2].parse::<i32>().unwrap() + 1;
     let mut max_bound = String::new();
     if max_bound_number < 10 {
         max_bound = format!("{}{}", 0, max_bound_number);
@@ -177,7 +177,7 @@ pub fn execute_prize(
             Order::Ascending,
         )
         .take(limit)
-        .collect::<StdResult<(Vec<_>)>>()
+        .collect::<StdResult<Vec<_>>>()
         .unwrap();
 
     if !winning_tickets.is_empty() {

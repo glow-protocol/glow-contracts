@@ -14,6 +14,7 @@ const PREFIX_SPONSOR: &[u8] = b"sponsor";
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
+pub const POOL: Item<Pool> = Item::new("pool");
 //pub const DEPOSITORS: Map<&Addr, DepositorInfo> = Map::new("depositors");
 //pub const LOTTERY: Map<u8, LotteryInfo> = Map::new("lottery");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
@@ -43,18 +44,22 @@ pub struct Config {
 pub struct State {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
-    pub total_deposits: Decimal256,
-    pub total_sponsor_amount: Decimal256,
-    pub lottery_deposits: Decimal256,
-    pub lottery_shares: Decimal256,
-    pub deposit_shares: Decimal256,
-    pub sponsor_shares: Decimal256,
     pub award_available: Decimal256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub last_reward_updated: u64,
     pub global_reward_index: Decimal256,
     pub glow_emission_rate: Decimal256,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Pool {
+    pub total_deposits: Decimal256,
+    pub total_sponsor_amount: Decimal256,
+    pub lottery_deposits: Decimal256,
+    pub lottery_shares: Decimal256,
+    pub deposit_shares: Decimal256,
+    pub sponsor_shares: Decimal256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -39,6 +39,18 @@
     {
       "type": "object",
       "required": [
+        "pool"
+      ],
+      "properties": {
+        "pool": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "lottery_info"
       ],
       "properties": {

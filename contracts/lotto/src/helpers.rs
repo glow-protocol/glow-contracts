@@ -1,12 +1,12 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, DepsMut, StdResult, Storage, Uint128};
 
-use crate::state::{read_depositor_info, store_depositor_info, DepositorInfo, State};
+use crate::state::{read_depositor_info, store_depositor_info, DepositorInfo, State, Pool};
 use cw0::Expiration;
 use glow_protocol::lotto::Claim;
 
 /// Compute distributed reward and update global reward index
-pub fn compute_reward(state: &mut State, block_height: u64) {
+pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     if state.last_reward_updated >= block_height {
         return;
     }
@@ -14,8 +14,8 @@ pub fn compute_reward(state: &mut State, block_height: u64) {
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    if !reward_accrued.is_zero() && !state.total_deposits.is_zero() {
-        state.global_reward_index += reward_accrued / state.total_deposits;
+    if !reward_accrued.is_zero() && !pool.total_deposits.is_zero() {
+        state.global_reward_index += reward_accrued / pool.total_deposits;
     }
 
     state.last_reward_updated = block_height;

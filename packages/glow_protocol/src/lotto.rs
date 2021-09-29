@@ -78,6 +78,7 @@ pub enum QueryMsg {
     State {
         block_height: Option<u64>,
     },
+    Pool {},
     LotteryInfo {
         lottery_id: Option<u64>,
     },
@@ -123,12 +124,6 @@ pub struct ConfigResponse {
 pub struct StateResponse {
     pub total_tickets: Uint256,
     pub total_reserve: Decimal256,
-    pub total_deposits: Decimal256,
-    pub lottery_deposits: Decimal256,
-    pub total_sponsor_amount: Decimal256,
-    pub deposit_shares: Decimal256,
-    pub lottery_shares: Decimal256,
-    pub sponsor_shares: Decimal256,
     pub award_available: Decimal256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
@@ -139,12 +134,23 @@ pub struct StateResponse {
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PoolResponse {
+    pub total_deposits: Decimal256,
+    pub lottery_deposits: Decimal256,
+    pub total_sponsor_amount: Decimal256,
+    pub deposit_shares: Decimal256,
+    pub lottery_shares: Decimal256,
+    pub sponsor_shares: Decimal256,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LotteryInfoResponse {
     pub lottery_id: u64,
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
-    pub number_winners: [u32; 6], // numeber of winners per hits e.g. [0,0,3,2,0,0]
+    pub number_winners: [u32; 6],
 }
 
 // We define a custom struct for each query response

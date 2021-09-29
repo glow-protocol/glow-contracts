@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
     read_depositor_info, read_lottery_info, store_depositor_info, store_lottery_info, LotteryInfo,
-    PrizeInfo, CONFIG, PRIZES, STATE, TICKETS,
+    PrizeInfo, CONFIG, PRIZES, STATE, TICKETS, POOL
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -27,9 +27,10 @@ pub fn execute_lottery(
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
 
     // Compute global Glow rewards
-    compute_reward(&mut state, env.block.height);
+    compute_reward(&mut state, &pool, env.block.height);
 
     // No sent funds allowed when executing the lottery
     if !info.funds.is_empty() {
@@ -65,8 +66,8 @@ pub fn execute_lottery(
     )?;
 
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
-        (state.lottery_shares + state.sponsor_shares) * Uint256::one(),
-        (state.deposit_shares + state.lottery_shares + state.sponsor_shares) * Uint256::one(),
+        (pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
+        (pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
     );
     let rate =
         query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
@@ -76,13 +77,13 @@ pub fn execute_lottery(
     let mut msgs: Vec<CosmosMsg> = vec![];
     // Redeem funds if lottery related shares are greater than outstanding lottery deposits
     let mut aust_to_redeem = Decimal256::zero();
-    if state.lottery_deposits >= pooled_lottery_deposits {
+    if (pool.lottery_deposits + pool.total_sponsor_amount) >= pooled_lottery_deposits {
         if state.award_available.is_zero() {
             return Err(ContractError::InsufficientLotteryFunds {});
         }
     } else {
         let amount_to_redeem =
-            pooled_lottery_deposits - state.lottery_deposits - state.total_sponsor_amount;
+            pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
         aust_to_redeem = amount_to_redeem / rate;
         state.award_available += amount_to_redeem;
 
@@ -119,7 +120,7 @@ fn calc_limit(request: Option<u32>) -> usize {
 }
 
 const MAX_LIMIT: u32 = 120;
-const DEFAULT_LIMIT: u32 = 100;
+const DEFAULT_LIMIT: u32 = 50;
 
 pub fn execute_prize(
     deps: DepsMut,
@@ -129,9 +130,10 @@ pub fn execute_prize(
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
 
     // Compute global Glow rewards
-    compute_reward(&mut state, env.block.height);
+    compute_reward(&mut state, &pool,env.block.height);
 
     // No sent funds allowed when executing the lottery
     if !info.funds.is_empty() {

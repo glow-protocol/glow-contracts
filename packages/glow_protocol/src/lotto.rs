@@ -43,6 +43,7 @@ pub enum ExecuteMsg {
         prize_distribution: Option<[Decimal256; 6]>,
         reserve_factor: Option<Decimal256>,
         split_factor: Option<Decimal256>,
+        instant_withdrawal_fee: Option<Decimal256>,
         unbonding_period: Option<u64>,
     },
     Deposit {

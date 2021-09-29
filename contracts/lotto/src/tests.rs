@@ -222,6 +222,7 @@ fn update_config() {
         prize_distribution: None,
         reserve_factor: None,
         split_factor: None,
+        instant_withdrawal_fee: None,
         unbonding_period: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -243,6 +244,7 @@ fn update_config() {
         prize_distribution: None,
         reserve_factor: None,
         split_factor: None,
+        instant_withdrawal_fee: None,
         unbonding_period: None,
     };
 
@@ -263,6 +265,7 @@ fn update_config() {
         prize_distribution: None,
         reserve_factor: Some(Decimal256::percent(1)),
         split_factor: None,
+        instant_withdrawal_fee: None,
         unbonding_period: None,
     };
 
@@ -284,6 +287,7 @@ fn update_config() {
         prize_distribution: None,
         reserve_factor: None,
         split_factor: None,
+        instant_withdrawal_fee: None,
         unbonding_period: None,
     };
 

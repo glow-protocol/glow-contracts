@@ -136,6 +136,7 @@ pub fn execute(
             prize_distribution,
             reserve_factor,
             split_factor,
+            instant_withdrawal_fee,
             unbonding_period,
         } => update_config(
             deps,
@@ -147,6 +148,7 @@ pub fn execute(
             prize_distribution,
             reserve_factor,
             split_factor,
+            instant_withdrawal_fee,
             unbonding_period,
         ),
     }
@@ -739,12 +741,13 @@ pub fn withdraw(
 
     // Instant withdrawal. The user incurs a fee and receive the funds with this operation
     let mut withdrawal_fee = Uint256::zero();
+
     if let Some(true) = instant {
         // Apply instant withdrawal fee
         withdrawal_fee = return_amount * config.instant_withdrawal_fee;
         return_amount = return_amount.sub(withdrawal_fee);
         // Discount tx taxes
-        let net_coin_amount = deduct_tax(deps.as_ref(), coin((return_amount).into(), "uusd"))?;
+        let net_coin_amount = deduct_tax(deps.as_ref(), coin(return_amount.into(), "uusd"))?;
 
         msgs.push(CosmosMsg::Bank(BankMsg::Send {
             to_address: info.sender.to_string(),
@@ -752,10 +755,7 @@ pub fn withdraw(
         }));
     } else {
         // Discount tx taxes
-        let net_coin_amount = deduct_tax(
-            deps.as_ref(),
-            coin((return_amount * Uint256::one()).into(), "uusd"),
-        )?;
+        let net_coin_amount = deduct_tax(deps.as_ref(), coin(return_amount.into(), "uusd"))?;
         // Place amount in unbonding state as a claim
         depositor.unbonding_info.push(Claim {
             amount: Decimal256::from_uint256(Uint256::from(net_coin_amount.amount)),
@@ -963,6 +963,7 @@ pub fn update_config(
     prize_distribution: Option<[Decimal256; 6]>,
     reserve_factor: Option<Decimal256>,
     split_factor: Option<Decimal256>,
+    instant_withdrawal_fee: Option<Decimal256>,
     unbonding_period: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
@@ -1020,8 +1021,10 @@ pub fn update_config(
         config.split_factor = split_factor;
     }
 
-    if let Some(unbonding_period) = unbonding_period {
-        config.unbonding_period = Duration::Time(unbonding_period);
+    if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {
+        if instant_withdrawal_fee > Decimal256::one() {
+            return Err(ContractError::InvalidSplitFactor {});
+        }
     }
 
     if let Some(unbonding_period) = unbonding_period {

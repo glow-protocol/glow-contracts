@@ -78,6 +78,9 @@ pub enum ContractError {
     #[error("Invalid reserve factor config")]
     InvalidSplitFactor {},
 
+    #[error("Invalid instant withdrawal fee config")]
+    InvalidWithdrawalFee {},
+
     #[error("Invalid unbonding period config")]
     InvalidUnbondingPeriod {},
 

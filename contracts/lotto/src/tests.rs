@@ -35,6 +35,7 @@ const A_UST: &str = "aterra-ust";
 const DENOM: &str = "uusd";
 const GOV_ADDR: &str = "gov";
 const DISTRIBUTOR_ADDR: &str = "distributor";
+const ORACLE_ADDR: &str = "oracle";
 
 const TICKET_PRICE: u64 = 1_000_000_000; // 10_000_000 as %
 const SPLIT_FACTOR: u64 = 75; // as a %
@@ -44,6 +45,7 @@ const MAX_HOLDERS: u8 = 10;
 const RATE: u64 = 1023; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
+const ROUND_DELTA: u64 = 10;
 
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
     InstantiateMsg {
@@ -51,8 +53,10 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         stable_denom: DENOM.to_string(),
         anchor_contract: ANCHOR.to_string(),
         aterra_contract: A_UST.to_string(),
+        oracle_contract: ORACLE_ADDR.to_string(),
         lottery_interval: WEEK_TIME,
         block_time: HOUR_TIME,
+        round_delta: ROUND_DELTA,
         ticket_price: Decimal256::percent(TICKET_PRICE),
         max_holders: MAX_HOLDERS,
         prize_distribution: [
@@ -216,8 +220,10 @@ fn update_config() {
 
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("owner1".to_string()),
+        oracle_addr: None,
         lottery_interval: None,
         block_time: None,
+        round_delta: None,
         ticket_price: None,
         prize_distribution: None,
         reserve_factor: None,
@@ -238,8 +244,10 @@ fn update_config() {
     let info = mock_info("owner1", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
+        oracle_addr: None,
         lottery_interval: Some(1800),
         block_time: None,
+        round_delta: None,
         ticket_price: None,
         prize_distribution: None,
         reserve_factor: None,
@@ -259,8 +267,10 @@ fn update_config() {
     // update reserve_factor to 1%
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
+        oracle_addr: None,
         lottery_interval: None,
         block_time: None,
+        round_delta: None,
         ticket_price: None,
         prize_distribution: None,
         reserve_factor: Some(Decimal256::percent(1)),
@@ -281,8 +291,10 @@ fn update_config() {
     let info = mock_info("owner2", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
+        oracle_addr: None,
         lottery_interval: Some(1800),
         block_time: None,
+        round_delta: None,
         ticket_price: None,
         prize_distribution: None,
         reserve_factor: None,
@@ -1594,6 +1606,7 @@ fn claim_lottery_single_winner() {
     assert_eq!(
         lottery,
         LotteryInfo {
+            rand_round: 0,
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
@@ -1980,6 +1993,7 @@ fn execute_prize_no_winners() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
+            rand_round: 0,
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
@@ -2108,6 +2122,7 @@ fn execute_prize_one_winner() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
+            rand_round: 0,
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
@@ -2260,6 +2275,7 @@ fn execute_prize_winners_diff_ranks() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
+            rand_round: 0,
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
@@ -2411,6 +2427,7 @@ fn execute_prize_winners_same_rank() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
+            rand_round: 0,
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
@@ -2554,6 +2571,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
+            rand_round: 0,
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,
@@ -2692,6 +2710,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
+            rand_round: 0,
             sequence: "00000".to_string(),
             awarded: true,
             total_prizes: awarded_prize,

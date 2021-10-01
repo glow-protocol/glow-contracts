@@ -11,6 +11,7 @@ use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 use terra_cosmwasm::TerraQuerier;
 
 use crate::state::read_depositor_info;
+use crate::oracle::{OracleResponse, QueryMsg as QueryOracle};
 
 pub fn query_exchange_rate(deps: Deps, money_market_addr: String) -> StdResult<EpochStateResponse> {
     let epoch_state: EpochStateResponse =
@@ -63,6 +64,18 @@ pub fn query_glow_emission_rate(
         }))?;
 
     Ok(glow_emission_rate)
+}
+
+pub fn query_oracle(deps: Deps, oracle_addr: String, round: u64) -> StdResult<OracleResponse> {
+    let oracle_response: OracleResponse =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: oracle_addr,
+            msg: to_binary(&QueryOracle::GetRandomness {
+                round
+            })?,
+        }))?;
+
+    Ok(oracle_response)
 }
 
 #[allow(dead_code)]

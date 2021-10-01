@@ -11,8 +11,10 @@ pub struct InstantiateMsg {
     pub stable_denom: String,
     pub anchor_contract: String,
     pub aterra_contract: String,
+    pub oracle_contract: String,
     pub lottery_interval: u64,
     pub block_time: u64,
+    pub round_delta: u64,
     pub ticket_price: Decimal256,
     pub max_holders: u8,
     pub prize_distribution: [Decimal256; 6],
@@ -37,8 +39,10 @@ pub enum ExecuteMsg {
     /// Update contract configuration
     UpdateConfig {
         owner: Option<String>,
+        oracle_addr: Option<String>,
         lottery_interval: Option<u64>,
         block_time: Option<u64>,
+        round_delta: Option<u64>,
         ticket_price: Option<Decimal256>,
         prize_distribution: Option<[Decimal256; 6]>,
         reserve_factor: Option<Decimal256>,

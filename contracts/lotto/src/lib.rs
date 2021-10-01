@@ -5,7 +5,7 @@ mod error;
 mod helpers;
 mod prize_strategy;
 mod querier;
-mod random;
+mod oracle;
 
 #[cfg(test)]
 mod integration_test;

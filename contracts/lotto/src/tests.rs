@@ -892,9 +892,10 @@ fn sponsor() {
     assert_eq!(pool.sponsor_shares, minted_shares);
 
     // withdraw sponsor
-
-    let app_shares =
-        (Decimal256::from_uint256(net_amount) / Decimal256::permille(RATE)) * Uint256::one();
+    // adding 1 to account for rounding error
+    let app_shares = (Decimal256::from_uint256(net_amount + Uint128::from(1u128))
+        / Decimal256::permille(RATE))
+        * Uint256::one();
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),

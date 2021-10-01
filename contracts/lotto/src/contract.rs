@@ -567,7 +567,9 @@ pub fn sponsor_withdraw(
     let aust_to_redeem = sponsor_info.amount / rate;
 
     // Double-checking Lotto pool is solvent against sponsors
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < pool.sponsor_shares {
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
+        < (pool.total_deposits + pool.total_sponsor_amount)
+    {
         return Err(ContractError::InsufficientSponsorFunds {});
     }
 
@@ -672,7 +674,9 @@ pub fn withdraw(
     let mut return_amount = pooled_deposits * withdraw_ratio;
 
     // Double-checking Lotto pool is solvent against deposits
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < pool.total_deposits {
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
+        < (pool.total_deposits + pool.total_sponsor_amount)
+    {
         return Err(ContractError::InsufficientPoolFunds {});
     }
 

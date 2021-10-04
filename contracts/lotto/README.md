@@ -1,4 +1,4 @@
-# Glow Savings Protocol Contracts
+# Glow Protocol Lotto Contract
 
 This monorepository contains the source code for the smart contract implementing Glow Lotto Protocol on the [Terra](https://terra.money) blockchain.
 
@@ -12,7 +12,7 @@ Glow Protocols depends on [Glow Token Contracts](https://github.com/elevenyellow
 
 ### Environment Setup
 
-- Rust v1.44.1+
+- Rust v1.52.0+
 - `wasm32-unknown-unknown` target
 - Docker
 

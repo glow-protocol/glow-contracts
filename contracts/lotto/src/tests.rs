@@ -46,6 +46,8 @@ const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
 
+const WINNING_SEQUENCE: &str = "97753";
+
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
     InstantiateMsg {
         owner: TEST_CREATOR.to_string(),
@@ -1069,7 +1071,6 @@ fn withdraw() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
             combinations: vec![format!("{:0>5}", index)],
-            // combinations: vec![String::from("00000")],
         };
         let info = mock_info(
             "addr2222",
@@ -1510,7 +1511,7 @@ fn claim_lottery_single_winner() {
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00000")],
+        combinations: vec![String::from(WINNING_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -1535,7 +1536,7 @@ fn claim_lottery_single_winner() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("00000")],
+            tickets: vec![String::from(WINNING_SEQUENCE)],
             unbonding_info: vec![]
         }
     );
@@ -1563,6 +1564,11 @@ fn claim_lottery_single_winner() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -1585,8 +1591,8 @@ fn claim_lottery_single_winner() {
     assert_eq!(
         lottery,
         LotteryInfo {
-            rand_round: 0,
-            sequence: "00000".to_string(),
+            rand_round: 20170,
+            sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 0, 1],
@@ -1750,6 +1756,11 @@ fn execute_lottery() {
         ]
     );
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     // Execute prize
     let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg.clone()).unwrap();
@@ -1816,6 +1827,11 @@ fn execute_lottery() {
         ]
     );
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     // Execute prize
     let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg).unwrap();
 
@@ -1856,6 +1872,11 @@ fn execute_lottery_no_tickets() {
     match res {
         Err(ContractError::InvalidLotteryExecution {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
@@ -1939,6 +1960,11 @@ fn execute_prize_no_winners() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
@@ -1948,8 +1974,8 @@ fn execute_prize_no_winners() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
-            rand_round: 0,
-            sequence: "00000".to_string(),
+            rand_round: 20170,
+            sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0; 6],
@@ -1997,7 +2023,7 @@ fn execute_prize_one_winner() {
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00000")],
+        combinations: vec![String::from(WINNING_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -2022,7 +2048,7 @@ fn execute_prize_one_winner() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("00000")],
+            tickets: vec![String::from(WINNING_SEQUENCE)],
             unbonding_info: vec![]
         }
     );
@@ -2076,8 +2102,8 @@ fn execute_prize_one_winner() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
-            rand_round: 0,
-            sequence: "00000".to_string(),
+            rand_round: 20170,
+            sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 0, 1],
@@ -2129,7 +2155,7 @@ fn execute_prize_winners_diff_ranks() {
 
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00000")],
+        combinations: vec![String::from(WINNING_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -2151,14 +2177,14 @@ fn execute_prize_winners_diff_ranks() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("00000")],
+            tickets: vec![String::from(WINNING_SEQUENCE)],
             unbonding_info: vec![]
         }
     );
 
     // Users buys winning ticket - 2 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00100")],
+        combinations: vec![String::from("97000")],
     };
     let info = mock_info(
         "addr0001",
@@ -2180,7 +2206,7 @@ fn execute_prize_winners_diff_ranks() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("00100")],
+            tickets: vec![String::from("97000")],
             unbonding_info: vec![]
         }
     );
@@ -2207,6 +2233,11 @@ fn execute_prize_winners_diff_ranks() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
@@ -2229,8 +2260,8 @@ fn execute_prize_winners_diff_ranks() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
-            rand_round: 0,
-            sequence: "00000".to_string(),
+            rand_round: 20170,
+            sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 1, 0, 0, 1],
@@ -2282,9 +2313,9 @@ fn execute_prize_winners_same_rank() {
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    // Users buys winning ticket - 5 hits
+    // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00001")],
+        combinations: vec![String::from("97750")],
     };
     let info = mock_info(
         "addr0000",
@@ -2306,14 +2337,14 @@ fn execute_prize_winners_same_rank() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("00001")],
+            tickets: vec![String::from("97750")],
             unbonding_info: vec![]
         }
     );
 
-    // Users buys winning ticket - 5 hits
+    // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00001")],
+        combinations: vec![String::from("97750")],
     };
     let info = mock_info(
         "addr0001",
@@ -2335,12 +2366,12 @@ fn execute_prize_winners_same_rank() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("00001")],
+            tickets: vec![String::from("97750")],
             unbonding_info: vec![]
         }
     );
 
-    // Run lottery, one winner (5 hits), one winner (5 hits) - should run correctly
+    // Run lottery, 2 winners (4 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
 
     let mut env = mock_env();
@@ -2362,6 +2393,11 @@ fn execute_prize_winners_same_rank() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
@@ -2381,8 +2417,8 @@ fn execute_prize_winners_same_rank() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
-            rand_round: 0,
-            sequence: "00000".to_string(),
+            rand_round: 20170,
+            sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 2, 0],
@@ -2430,7 +2466,7 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00000")],
+        combinations: vec![String::from(WINNING_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -2442,24 +2478,23 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
-    // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00001")],
+        combinations: vec![String::from("97754")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00002")],
+        combinations: vec![String::from("97755")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00003")],
+        combinations: vec![String::from("97756")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("01003")],
+        combinations: vec![String::from("90757")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -2474,11 +2509,11 @@ fn execute_prize_one_winner_multiple_ranks() {
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![
-                String::from("00000"),
-                String::from("00001"),
-                String::from("00002"),
-                String::from("00003"),
-                String::from("01003")
+                String::from(WINNING_SEQUENCE),
+                String::from("97754"),
+                String::from("97755"),
+                String::from("97756"),
+                String::from("90757")
             ],
             unbonding_info: vec![]
         }
@@ -2505,6 +2540,11 @@ fn execute_prize_one_winner_multiple_ranks() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
@@ -2522,11 +2562,16 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     let awarded_prize = total_prize * Decimal256::percent(50 + 30);
 
+    println!(
+        "lottery_info: {:x?}",
+        read_lottery_info(deps.as_ref().storage, 0u64)
+    );
+
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
-            rand_round: 0,
-            sequence: "00000".to_string(),
+            rand_round: 20170,
+            sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 3, 1],
@@ -2576,7 +2621,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00000")],
+        combinations: vec![String::from(WINNING_SEQUENCE)],
     };
 
     // User 0 buys winning ticket - 5 hits
@@ -2616,7 +2661,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     let address_1 = deps.api.addr_validate("addr1111").unwrap();
     let address_2 = deps.api.addr_validate("addr2222").unwrap();
 
-    let ticket = query_ticket_info(deps.as_ref(), String::from("00000")).unwrap();
+    let ticket = query_ticket_info(deps.as_ref(), String::from(WINNING_SEQUENCE)).unwrap();
 
     assert_eq!(
         ticket.holders,
@@ -2644,6 +2689,11 @@ fn execute_prize_multiple_winners_one_ticket() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
@@ -2664,8 +2714,8 @@ fn execute_prize_multiple_winners_one_ticket() {
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
-            rand_round: 0,
-            sequence: "00000".to_string(),
+            rand_round: 20170,
+            sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 0, 3],
@@ -2716,6 +2766,7 @@ fn execute_prize_pagination() {
     let addresses = addresses_range
         .map(|c| format!("addr{:0>4}", c))
         .collect::<Vec<String>>();
+    // println!("addresses: {:?}", addresses);
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
@@ -2723,8 +2774,7 @@ fn execute_prize_pagination() {
     for (index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
-            combinations: vec![format!("{:0>5}", index)],
-            // combinations: vec![String::from("00000")],
+            combinations: vec![format!("{:0>5}", 97000 + index)],
         };
         let info = mock_info(
             address.as_str(),
@@ -2759,6 +2809,11 @@ fn execute_prize_pagination() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
     let msg = ExecuteMsg::ExecutePrize {
         limit: Some(100u32),
     };
@@ -2768,7 +2823,7 @@ fn execute_prize_pagination() {
 
     let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
 
-    println!("lottery_info: {:x?}", lottery_info);
+    // println!("lottery_info: {:x?}", lottery_info);
     assert!(!lottery_info.awarded);
 
     // Second pagination round
@@ -2776,23 +2831,23 @@ fn execute_prize_pagination() {
 
     // Check lottery info was updated correctly
 
-    let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
+    // let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
 
-    println!("lottery_info: {:x?}", lottery_info);
+    // println!("lottery_info: {:x?}", lottery_info);
     // Third pagination round
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
-    let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
-    println!("lottery_info: {:x?}", lottery_info);
+    // let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
+    // println!("lottery_info: {:x?}", lottery_info);
 
     // Fourth pagination round
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
     // Check lottery info was updated correctly
 
-    let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
-    println!("lottery_info: {:x?}", lottery_info);
+    // let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
+    // println!("lottery_info: {:x?}", lottery_info);
 
     // Fifth pagination round
     let _res = execute(deps.as_mut(), env, info, msg).unwrap();
@@ -2801,7 +2856,7 @@ fn execute_prize_pagination() {
 
     let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
 
-    println!("lottery_info: {:x?}", lottery_info);
+    // println!("lottery_info: {:x?}", lottery_info);
 
     assert!(lottery_info.awarded);
 }
@@ -2926,7 +2981,7 @@ fn claim_rewards_multiple_depositors() {
 
     // USER 1 Deposits another 20_000_000 uusd
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("00000"), String::from("11111")],
+        combinations: vec![String::from(WINNING_SEQUENCE), String::from("11111")],
     };
     let info = mock_info(
         "addr1111",

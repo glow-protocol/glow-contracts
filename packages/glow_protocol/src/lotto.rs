@@ -37,14 +37,17 @@ pub enum ExecuteMsg {
     /// Update contract configuration
     UpdateConfig {
         owner: Option<String>,
-        lottery_interval: Option<u64>,
-        block_time: Option<u64>,
-        ticket_price: Option<Decimal256>,
-        prize_distribution: Option<[Decimal256; 6]>,
         reserve_factor: Option<Decimal256>,
         split_factor: Option<Decimal256>,
         instant_withdrawal_fee: Option<Decimal256>,
         unbonding_period: Option<u64>,
+    },
+    /// Update lottery configuration
+    UpdateLotteryConfig {
+        lottery_interval: Option<u64>,
+        block_time: Option<u64>,
+        ticket_price: Option<Decimal256>,
+        prize_distribution: Option<[Decimal256; 6]>,
     },
     Deposit {
         combinations: Vec<String>,

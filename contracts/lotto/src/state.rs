@@ -2,8 +2,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage, Uint128};
-use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket, ReadonlySingleton, Singleton};
+use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage};
+use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Item, Map, U64Key};
 use glow_protocol::lotto::{Claim, DepositorInfoResponse};
@@ -204,6 +204,7 @@ fn calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
     })
 }
 
+#[allow(dead_code)]
 // this will set the first key after the provided key, by appending a 1 byte
 fn calc_sequence_range_start(start_after: Option<&str>) -> Option<Vec<u8>> {
     start_after.map(|sequence| {

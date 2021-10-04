@@ -5,7 +5,7 @@ use crate::error::ContractError;
 use crate::helpers::{
     calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
 };
-use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_valid_sequence};
+use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
@@ -130,10 +130,6 @@ pub fn execute(
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,
-            lottery_interval,
-            block_time,
-            ticket_price,
-            prize_distribution,
             reserve_factor,
             split_factor,
             instant_withdrawal_fee,
@@ -142,14 +138,23 @@ pub fn execute(
             deps,
             info,
             owner,
-            lottery_interval,
-            block_time,
-            ticket_price,
-            prize_distribution,
             reserve_factor,
             split_factor,
             instant_withdrawal_fee,
             unbonding_period,
+        ),
+        ExecuteMsg::UpdateLotteryConfig {
+            lottery_interval,
+            block_time,
+            ticket_price,
+            prize_distribution,
+        } => update_lottery_config(
+            deps,
+            info,
+            lottery_interval,
+            block_time,
+            ticket_price,
+            prize_distribution,
         ),
     }
 }
@@ -174,8 +179,8 @@ pub fn register_contracts(
         return Err(ContractError::AlreadyRegistered {});
     }
 
-    config.gov_contract = deps.api.addr_validate(&gov_contract.to_string())?;
-    config.distributor_contract = deps.api.addr_validate(&distributor_contract.to_string())?;
+    config.gov_contract = deps.api.addr_validate(&gov_contract)?;
+    config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
 
     CONFIG.save(deps.storage, &config)?;
 
@@ -560,7 +565,7 @@ pub fn sponsor_withdraw(
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
-        env.clone().contract.address,
+        env.contract.address,
     )?;
     let rate =
         query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
@@ -696,19 +701,15 @@ pub fn withdraw(
     }
 
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
-        TICKETS.update(
-            deps.storage,
-            seq.as_bytes(),
-            |mut tickets| -> StdResult<_> {
-                let mut new_tickets = tickets.unwrap();
-                let index = new_tickets
-                    .iter()
-                    .position(|x| *x == info.sender.clone())
-                    .unwrap();
-                let _elem = new_tickets.remove(index);
-                Ok(new_tickets)
-            },
-        );
+        TICKETS.update(deps.storage, seq.as_bytes(), |tickets| -> StdResult<_> {
+            let mut new_tickets = tickets.unwrap();
+            let index = new_tickets
+                .iter()
+                .position(|x| *x == info.sender.clone())
+                .unwrap();
+            let _elem = new_tickets.remove(index);
+            Ok(new_tickets)
+        })?;
     }
 
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
@@ -828,7 +829,7 @@ pub fn claim(
                     claimed: true,
                     matches: prize.matches,
                 },
-            );
+            )?;
         }
     }
 
@@ -961,10 +962,6 @@ pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
-    lottery_interval: Option<u64>,
-    block_time: Option<u64>,
-    ticket_price: Option<Decimal256>,
-    prize_distribution: Option<[Decimal256; 6]>,
     reserve_factor: Option<Decimal256>,
     split_factor: Option<Decimal256>,
     instant_withdrawal_fee: Option<Decimal256>,
@@ -979,6 +976,51 @@ pub fn update_config(
     // change owner of Glow lotto contract
     if let Some(owner) = owner {
         config.owner = deps.api.addr_validate(owner.as_str())?;
+    }
+
+    if let Some(reserve_factor) = reserve_factor {
+        if reserve_factor > Decimal256::one() {
+            return Err(ContractError::InvalidReserveFactor {});
+        }
+
+        config.reserve_factor = reserve_factor;
+    }
+
+    if let Some(split_factor) = split_factor {
+        if split_factor > Decimal256::one() {
+            return Err(ContractError::InvalidSplitFactor {});
+        }
+        config.split_factor = split_factor;
+    }
+
+    if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {
+        if instant_withdrawal_fee > Decimal256::one() {
+            return Err(ContractError::InvalidSplitFactor {});
+        }
+    }
+
+    if let Some(unbonding_period) = unbonding_period {
+        config.block_time = Duration::Time(unbonding_period);
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    Ok(Response::new().add_attributes(vec![("action", "update_config")]))
+}
+
+pub fn update_lottery_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    lottery_interval: Option<u64>,
+    block_time: Option<u64>,
+    ticket_price: Option<Decimal256>,
+    prize_distribution: Option<[Decimal256; 6]>,
+) -> Result<Response, ContractError> {
+    let mut config: Config = CONFIG.load(deps.storage)?;
+
+    // check permission
+    if info.sender != config.owner {
+        return Err(ContractError::Unauthorized {});
     }
 
     if let Some(lottery_interval) = lottery_interval {
@@ -1008,31 +1050,6 @@ pub fn update_config(
         }
 
         config.prize_distribution = prize_distribution;
-    }
-
-    if let Some(reserve_factor) = reserve_factor {
-        if reserve_factor > Decimal256::one() {
-            return Err(ContractError::InvalidReserveFactor {});
-        }
-
-        config.reserve_factor = reserve_factor;
-    }
-
-    if let Some(split_factor) = split_factor {
-        if split_factor > Decimal256::one() {
-            return Err(ContractError::InvalidSplitFactor {});
-        }
-        config.split_factor = split_factor;
-    }
-
-    if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {
-        if instant_withdrawal_fee > Decimal256::one() {
-            return Err(ContractError::InvalidSplitFactor {});
-        }
-    }
-
-    if let Some(unbonding_period) = unbonding_period {
-        config.block_time = Duration::Time(unbonding_period);
     }
 
     CONFIG.save(deps.storage, &config)?;

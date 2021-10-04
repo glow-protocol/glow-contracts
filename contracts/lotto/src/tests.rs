@@ -5,8 +5,8 @@ use crate::contract::{
 use crate::helpers::calculate_winner_prize;
 use crate::mock_querier::mock_dependencies;
 use crate::state::{
-    query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, Config, DepositorInfo,
-    LotteryInfo, PrizeInfo, State, STATE,
+    query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, DepositorInfo,
+    LotteryInfo, PrizeInfo, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -216,10 +216,6 @@ fn update_config() {
 
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("owner1".to_string()),
-        lottery_interval: None,
-        block_time: None,
-        ticket_price: None,
-        prize_distribution: None,
         reserve_factor: None,
         split_factor: None,
         instant_withdrawal_fee: None,
@@ -236,16 +232,11 @@ fn update_config() {
 
     // update lottery interval to 30 minutes
     let info = mock_info("owner1", &[]);
-    let msg = ExecuteMsg::UpdateConfig {
-        owner: None,
+    let msg = ExecuteMsg::UpdateLotteryConfig {
         lottery_interval: Some(1800),
         block_time: None,
         ticket_price: None,
         prize_distribution: None,
-        reserve_factor: None,
-        split_factor: None,
-        instant_withdrawal_fee: None,
-        unbonding_period: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -259,10 +250,6 @@ fn update_config() {
     // update reserve_factor to 1%
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
-        lottery_interval: None,
-        block_time: None,
-        ticket_price: None,
-        prize_distribution: None,
         reserve_factor: Some(Decimal256::percent(1)),
         split_factor: None,
         instant_withdrawal_fee: None,
@@ -280,11 +267,7 @@ fn update_config() {
     // check only owner can update config
     let info = mock_info("owner2", &[]);
     let msg = ExecuteMsg::UpdateConfig {
-        owner: None,
-        lottery_interval: Some(1800),
-        block_time: None,
-        ticket_price: None,
-        prize_distribution: None,
+        owner: Some(String::from("new_owner")),
         reserve_factor: None,
         split_factor: None,
         instant_withdrawal_fee: None,
@@ -550,7 +533,7 @@ fn deposit() {
     };
 
     // We let users have a repeated ticket
-    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Ticket is already owner by 10 holders
     let addresses_count = 10u64;
@@ -562,7 +545,7 @@ fn deposit() {
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    for (index, address) in addresses.iter().enumerate() {
+    for (_index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
             combinations: vec![String::from("66666")],
@@ -860,7 +843,7 @@ fn sponsor() {
 
     let msg = ExecuteMsg::Sponsor { award: None };
 
-    let _res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    let _res = execute(deps.as_mut(), mock_env(), info, msg);
     println!("{:?}", _res);
 
     let sponsor_info = read_sponsor_info(
@@ -1171,7 +1154,7 @@ fn withdraw() {
     };
 
     // Correct withdraw, one ticket gets withdrawn
-    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1713,10 +1696,6 @@ fn execute_lottery() {
         }],
     );
 
-    let to_redeem = Uint256::from(10_000_000u128);
-
-    // TODO: add test case with deposit_shares != 0
-
     let res = execute(deps.as_mut(), env.clone(), info, msg);
 
     // Lottery cannot be run with 0 tickets participating
@@ -1751,15 +1730,7 @@ fn execute_lottery() {
     // Execute lottery, now with tickets
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
-    let res = execute(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        lottery_msg.clone(),
-    )
-    .unwrap();
-
-    let current_balance = Uint256::from(100_000_000u128);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
     assert_eq!(res.messages, vec![]);
 
@@ -1773,13 +1744,7 @@ fn execute_lottery() {
 
     // Execute prize
     let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        execute_prize_msg.clone(),
-    )
-    .unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg.clone()).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
     let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
@@ -1819,13 +1784,7 @@ fn execute_lottery() {
     // Execute 2nd lottery
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
-    let res = execute(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        lottery_msg.clone(),
-    )
-    .unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
     assert_eq!(
         res.messages,
@@ -1850,7 +1809,7 @@ fn execute_lottery() {
     );
 
     // Execute prize
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), execute_prize_msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
     let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
@@ -1893,7 +1852,7 @@ fn execute_lottery_no_tickets() {
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     // Run lottery, no winners - should run correctly
-    let res = execute(deps.as_mut(), env.clone(), info, msg);
+    let res = execute(deps.as_mut(), env, info, msg);
     match res {
         Err(ContractError::InvalidLotteryPrizeExecution {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -1973,7 +1932,7 @@ fn execute_prize_no_winners() {
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check lottery info was updated correctly
     let awarded_prize = Decimal256::zero();
@@ -1993,17 +1952,11 @@ fn execute_prize_no_winners() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
-    // total prize = balance - old_balance - lottery_deposits
-    let total_prize = Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT));
-
     // TODO: Calculate and avoid hard-coding
     assert_eq!(
         state.award_available,
         Decimal256::from_str("107844998.977").unwrap()
     );
-
-    // reinvest lottery deposits
-    let lottery_deposits = Decimal256::percent(TICKET_PRICE) * Decimal256::percent(SPLIT_FACTOR);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2089,7 +2042,7 @@ fn execute_prize_one_winner() {
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check lottery info was updated correctly
 
@@ -2240,7 +2193,7 @@ fn execute_prize_winners_diff_ranks() {
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check lottery info was updated correctly
     let pool = query_pool(deps.as_ref()).unwrap();
@@ -2394,7 +2347,7 @@ fn execute_prize_winners_same_rank() {
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let pool = query_pool(deps.as_ref()).unwrap();
     // total prize
@@ -2491,7 +2444,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("01003")],
     };
-    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let address_raw = deps.api.addr_validate("addr0000").unwrap();
 
@@ -2536,7 +2489,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let pool = query_pool(deps.as_ref()).unwrap();
 
@@ -2639,7 +2592,7 @@ fn execute_prize_multiple_winners_one_ticket() {
         }],
     );
 
-    let _res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let address_0 = deps.api.addr_validate("addr0000").unwrap();
     let address_1 = deps.api.addr_validate("addr1111").unwrap();
@@ -2649,7 +2602,7 @@ fn execute_prize_multiple_winners_one_ticket() {
 
     assert_eq!(
         ticket.holders,
-        vec![address_0.clone(), address_1.clone(), address_2.clone()]
+        vec![address_0.clone(), address_1, address_2]
     );
 
     let mut env = mock_env();
@@ -2674,7 +2627,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let pool = query_pool(deps.as_ref()).unwrap();
 
@@ -2823,7 +2776,7 @@ fn execute_prize_pagination() {
     println!("lottery_info: {:x?}", lottery_info);
 
     // Fifth pagination round
-    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    let _res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check lottery info was updated correctly
 
@@ -2852,7 +2805,7 @@ fn claim_rewards_one_depositor() {
      */
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
     state.glow_emission_rate = Decimal256::one();
-    STATE.save(deps.as_mut().storage, &state);
+    STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has no deposits, so no claimable rewards and empty msg returned
     let msg = ExecuteMsg::ClaimRewards {};
@@ -2926,7 +2879,7 @@ fn claim_rewards_multiple_depositors() {
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
     state.glow_emission_rate = Decimal256::one();
-    STATE.save(deps.as_mut().storage, &state);
+    STATE.save(deps.as_mut().storage, &state).unwrap();
 
     //TODO: should query glow emission rate instead of hard-code
     /*
@@ -3047,15 +3000,7 @@ fn execute_epoch_operations() {
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
     state.total_reserve = Decimal256::percent(50000);
-    STATE.save(deps.as_mut().storage, &state);
-
-    /*
-    STATE.update(deps.as_mut().storage,  |mut state| {
-        state.total_reserve = Decimal256::percent(50000);
-        Ok(state)
-    }).unwrap();
-     */
-
+    STATE.save(deps.as_mut().storage, &state).unwrap();
     env.block.height += 100;
 
     let msg = ExecuteMsg::ExecuteEpochOps {};
@@ -3097,7 +3042,7 @@ fn calculate_total_prize(
     aust_balance: Uint256,
     total_tickets: u64,
 ) -> Decimal256 {
-    let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
+    let aust_lottery_balance = aust_balance.multiply_ratio(
         (lottery_shares + sponsor_shares) * Uint256::one(),
         (deposit_shares + lottery_shares + sponsor_shares) * Uint256::one(),
     );

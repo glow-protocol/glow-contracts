@@ -1,13 +1,13 @@
 use crate::error::ContractError;
 use crate::querier::query_exchange_rate;
 use crate::state::{
-    read_depositor_info, read_lottery_info, store_depositor_info, store_lottery_info, LotteryInfo,
-    PrizeInfo, CONFIG, POOL, PRIZES, STATE, TICKETS,
+    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
+    TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    Storage, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
+    Storage, WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
@@ -45,7 +45,6 @@ pub fn execute_lottery(
         return Err(ContractError::InvalidLotteryExecution {});
     }
 
-    // TODO: Get random sequence here
     let winning_sequence = String::from("00000");
 
     let lottery_info = LotteryInfo {
@@ -62,7 +61,7 @@ pub fn execute_lottery(
     let aust_balance = query_token_balance(
         &deps.querier,
         deps.api.addr_validate(config.a_terra_contract.as_str())?,
-        env.clone().contract.address,
+        env.contract.address,
     )?;
 
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
@@ -99,8 +98,6 @@ pub fn execute_lottery(
         });
         msgs.push(redeem_msg);
     }
-
-    // TODO: add msg to drand worker fee
 
     // Store state
     STATE.save(deps.storage, &state)?;
@@ -150,23 +147,21 @@ pub fn execute_prize(
     // Calculate pagination bounds
     let limit = calc_limit(limit);
 
-    let mut min_bound = "";
-    if lottery_info.page.is_empty() {
-        min_bound = &lottery_info.sequence[..2];
+    let min_bound: &str = if lottery_info.page.is_empty() {
+        &lottery_info.sequence[..2]
     } else {
-        min_bound = &lottery_info.page;
-    }
+        &lottery_info.page
+    };
 
     // Get max bounds
     let max_bound_number = min_bound[..2].parse::<i32>().unwrap() + 1;
-    let mut max_bound = String::new();
-    if max_bound_number < 10 {
-        max_bound = format!("{}{}", 0, max_bound_number);
+    let max_bound: String = if max_bound_number < 10 {
+        format!("{}{}", 0, max_bound_number)
     } else if max_bound_number == 100 {
-        format!("{}", max_bound_number - 1);
+        format!("{}", max_bound_number - 1)
     } else {
-        max_bound = format!("{}", max_bound_number);
-    }
+        format!("{}", max_bound_number)
+    };
 
     // Get winning tickets
     let winning_tickets: Vec<_> = TICKETS
@@ -197,7 +192,7 @@ pub fn execute_prize(
         }
 
         // Update holders prizes and lottery info number of winners
-        winning_tickets.iter().for_each(|sequence| -> () {
+        winning_tickets.iter().for_each(|sequence| {
             let matches = count_seq_matches(
                 &lottery_info.sequence.clone(),
                 str::from_utf8(&*sequence.0).unwrap(),
@@ -206,23 +201,25 @@ pub fn execute_prize(
             sequence.1.iter().for_each(|winner| {
                 let lottery_id: U64Key = state.current_lottery.into();
                 // TODO: revisit to avoid multiple state r-w
-                PRIZES.update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
-                    let result = match hits {
-                        Some(mut prize) => {
-                            prize.matches[matches as usize] += 1;
-                            prize
-                        }
-                        None => {
-                            let mut winnings = [0; 6];
-                            winnings[matches as usize] = 1;
-                            PrizeInfo {
-                                claimed: false,
-                                matches: winnings,
+                PRIZES
+                    .update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
+                        let result = match hits {
+                            Some(mut prize) => {
+                                prize.matches[matches as usize] += 1;
+                                prize
                             }
-                        }
-                    };
-                    Ok(result)
-                });
+                            None => {
+                                let mut winnings = [0; 6];
+                                winnings[matches as usize] = 1;
+                                PrizeInfo {
+                                    claimed: false,
+                                    matches: winnings,
+                                }
+                            }
+                        };
+                        Ok(result)
+                    })
+                    .unwrap();
             });
         });
     } else {
@@ -253,11 +250,8 @@ pub fn execute_prize(
     ]))
 }
 
-fn apply_reserve_factor(awarded_amount: Decimal256, reserve_factor: Decimal256) -> Decimal256 {
-    awarded_amount * reserve_factor
-}
-
 // distribution is a vector e.g. [0, 0, 0.025, 0.15, 0.3, 0.5]
+#[allow(dead_code)]
 fn assign_prize(
     awardable_prize: Decimal256,
     matches: u8,
@@ -285,9 +279,10 @@ pub fn count_seq_matches(a: &str, b: &str) -> u8 {
     count
 }
 
+#[allow(dead_code)]
 pub fn assert_holder(
     storage: &dyn Storage,
-    combination: &String,
+    combination: &str,
     holder: Addr,
     max_holders: u8,
 ) -> Result<(), ContractError> {

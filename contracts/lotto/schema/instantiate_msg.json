@@ -10,9 +10,11 @@
     "instant_withdrawal_fee",
     "lottery_interval",
     "max_holders",
+    "oracle_contract",
     "owner",
     "prize_distribution",
     "reserve_factor",
+    "round_delta",
     "split_factor",
     "stable_denom",
     "target_award",
@@ -47,6 +49,9 @@
       "format": "uint8",
       "minimum": 0.0
     },
+    "oracle_contract": {
+      "type": "string"
+    },
     "owner": {
       "type": "string"
     },
@@ -60,6 +65,11 @@
     },
     "reserve_factor": {
       "$ref": "#/definitions/Decimal256"
+    },
+    "round_delta": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "split_factor": {
       "$ref": "#/definitions/Decimal256"

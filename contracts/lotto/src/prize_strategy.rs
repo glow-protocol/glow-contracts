@@ -6,15 +6,14 @@ use crate::state::{
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    Storage, WasmMsg,
+    attr, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult, WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
 
-use crate::helpers::compute_reward;
+use crate::helpers::{compute_reward, count_seq_matches};
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use moneymarket::market::Cw20HookMsg;
 use std::ops::{Add, Sub};
@@ -215,7 +214,6 @@ pub fn execute_prize(
             lottery_info.number_winners[matches as usize] += sequence.1.len() as u32;
             sequence.1.iter().for_each(|winner| {
                 let lottery_id: U64Key = state.current_lottery.into();
-                // TODO: revisit to avoid multiple state r-w
                 PRIZES
                     .update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
                         let result = match hits {
@@ -263,53 +261,4 @@ pub fn execute_prize(
         attr("action", "execute_prize"),
         attr("total_awarded_prize", total_awarded_prize.to_string()),
     ]))
-}
-
-// distribution is a vector e.g. [0, 0, 0.025, 0.15, 0.3, 0.5]
-#[allow(dead_code)]
-fn assign_prize(
-    awardable_prize: Decimal256,
-    matches: u8,
-    winners: u64,
-    distribution: &[Decimal256],
-) -> Decimal256 {
-    let number_winners = Uint256::from(winners as u64);
-
-    awardable_prize * distribution[matches as usize] / Decimal256::from_uint256(number_winners)
-}
-
-pub fn is_valid_sequence(sequence: &str, len: u8) -> bool {
-    sequence.len() == (len as usize) && sequence.chars().all(|c| ('0'..='9').contains(&c))
-}
-
-pub fn count_seq_matches(a: &str, b: &str) -> u8 {
-    let mut count = 0;
-    for (i, c) in a.chars().enumerate() {
-        if c == b.chars().nth(i).unwrap() {
-            count += 1;
-        } else {
-            break;
-        }
-    }
-    count
-}
-
-#[allow(dead_code)]
-pub fn assert_holder(
-    storage: &dyn Storage,
-    combination: &str,
-    holder: Addr,
-    max_holders: u8,
-) -> Result<(), ContractError> {
-    if let Some(holders) = TICKETS.may_load(storage, combination.as_bytes()).unwrap() {
-        if holders.contains(&holder) {
-            return Err(ContractError::InvalidHolderSequence {});
-        }
-
-        if holders.len() > max_holders as usize {
-            return Err(ContractError::InvalidHolderSequence {});
-        }
-    }
-
-    Ok(())
 }

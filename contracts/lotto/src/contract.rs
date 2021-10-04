@@ -4,8 +4,9 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
+    is_valid_sequence,
 };
-use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
+use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
@@ -189,7 +190,6 @@ pub fn register_contracts(
 
     config.gov_contract = deps.api.addr_validate(&gov_contract)?;
     config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
-
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
@@ -219,7 +219,6 @@ pub fn deposit(
     }
 
     let amount_tickets = combinations.len() as u64;
-
     let required_amount = config.ticket_price * Uint256::from(amount_tickets);
     if deposit_amount < required_amount {
         return Err(ContractError::InsufficientDepositAmount(amount_tickets));
@@ -271,7 +270,6 @@ pub fn deposit(
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
         .add(Decimal256::from_uint256(deposit_amount));
-
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in new_combinations {
@@ -360,7 +358,6 @@ pub fn gift_tickets(
 
     let amount_tickets = combinations.len() as u64;
     let required_amount = config.ticket_price * Uint256::from(amount_tickets);
-
     if deposit_amount != required_amount {
         return Err(ContractError::InsufficientGiftDepositAmount(amount_tickets));
     }
@@ -519,7 +516,6 @@ pub fn sponsor(
 
         // fetch sponsor_info
         let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
-
         // add sponsor_amount to depositor
         sponsor_info.amount = sponsor_info
             .amount
@@ -698,7 +694,6 @@ pub fn withdraw(
     }
 
     let tickets_amount = depositor.tickets.len() as u128;
-
     // Check for rounding error
     let rounded_tickets = Uint256::from(tickets_amount) * withdraw_ratio;
     let decimal_tickets = Decimal256::from_uint256(Uint256::from(tickets_amount)) * withdraw_ratio;

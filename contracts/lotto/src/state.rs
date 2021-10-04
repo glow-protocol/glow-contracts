@@ -15,10 +15,12 @@ const PREFIX_SPONSOR: &[u8] = b"sponsor";
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
 pub const POOL: Item<Pool> = Item::new("pool");
-//pub const DEPOSITORS: Map<&Addr, DepositorInfo> = Map::new("depositors");
-//pub const LOTTERY: Map<u8, LotteryInfo> = Map::new("lottery");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
 pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
+
+// settings for pagination
+const MAX_LIMIT: u32 = 100;
+const DEFAULT_LIMIT: u32 = 10;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -29,16 +31,16 @@ pub struct Config {
     pub anchor_contract: Addr,
     pub oracle_contract: Addr,
     pub stable_denom: String,
-    pub lottery_interval: Duration, // number of blocks (or time) between lotteries
-    pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
-    pub round_delta: u64,     // number of rounds of security to get oracle rand
-    pub ticket_price: Decimal256, // prize of a ticket in stable_denom
-    pub max_holders: u8,      // Max number of holders per ticket
-    pub prize_distribution: [Decimal256; 6], // [0, 0, 0.05, 0.15, 0.3, 0.5]
+    pub lottery_interval: Duration,
+    pub block_time: Duration,
+    pub round_delta: u64,
+    pub ticket_price: Decimal256,
+    pub max_holders: u8,
+    pub prize_distribution: [Decimal256; 6],
     pub target_award: Decimal256,
-    pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
-    pub split_factor: Decimal256,   // what % of interest goes to saving and which one lotto pool
-    pub instant_withdrawal_fee: Decimal256, // % to be deducted as a fee for instant withdrawals
+    pub reserve_factor: Decimal256,
+    pub split_factor: Decimal256,
+    pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
 }
 
@@ -127,10 +129,6 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
     }
 }
 
-// settings for pagination
-const MAX_LIMIT: u32 = 100;
-const DEFAULT_LIMIT: u32 = 10;
-
 pub fn store_depositor_info(
     storage: &mut dyn Storage,
     depositor: &Addr,
@@ -200,20 +198,9 @@ pub fn read_depositors(
         .collect()
 }
 
-// this will set the first key after the provided key, by appending a 1 byte
 fn calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
     start_after.map(|addr| {
         let mut v = addr.as_bytes().to_vec();
-        v.push(1);
-        v
-    })
-}
-
-#[allow(dead_code)]
-// this will set the first key after the provided key, by appending a 1 byte
-fn calc_sequence_range_start(start_after: Option<&str>) -> Option<Vec<u8>> {
-    start_after.map(|sequence| {
-        let mut v = sequence.as_bytes().to_vec();
         v.push(1);
         v
     })

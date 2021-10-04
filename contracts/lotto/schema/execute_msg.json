@@ -1,9 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
-  "anyOf": [
+  "oneOf": [
     {
-      "description": "Register Contracts contract address",
+      "description": "Register Contracts contract address - restricted to owner",
       "type": "object",
       "required": [
         "register_contracts"
@@ -30,7 +30,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Update contract configuration",
+      "description": "Update contract configuration - restricted to owner",
       "type": "object",
       "required": [
         "update_config"
@@ -47,6 +47,12 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "oracle_addr": {
+              "type": [
+                "string",
+                "null"
               ]
             },
             "owner": {
@@ -89,7 +95,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Update lottery configuration",
+      "description": "Update lottery configuration - restricted to owner",
       "type": "object",
       "required": [
         "update_lottery_config"
@@ -125,6 +131,14 @@
               "maxItems": 6,
               "minItems": 6
             },
+            "round_delta": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
             "ticket_price": {
               "anyOf": [
                 {
@@ -141,6 +155,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Deposit amount of stable into the pool",
       "type": "object",
       "required": [
         "deposit"
@@ -164,6 +179,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Deposit amount of stable into the pool in the name of the recipient",
       "type": "object",
       "required": [
         "gift"
@@ -191,6 +207,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Sponsor the pool. If award is true, sponsor the award available directly",
       "type": "object",
       "required": [
         "sponsor"
@@ -211,6 +228,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Withdraws the sponsorship of the sender",
       "type": "object",
       "required": [
         "sponsor_withdraw"
@@ -223,6 +241,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Withdraws amount from the pool. If amount is None, it tries to withdraw all the pooled funds of the sender. If instant true, incurs on withdrawal fee.",
       "type": "object",
       "required": [
         "withdraw"
@@ -253,6 +272,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Claims pending lottery prizes and unbonded withdrawals",
       "type": "object",
       "required": [
         "claim"
@@ -275,6 +295,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Claims pending depositor rewards",
       "type": "object",
       "required": [
         "claim_rewards"
@@ -287,6 +308,7 @@
       "additionalProperties": false
     },
     {
+      "description": "First step on the lottery execution. Sets oracle round number",
       "type": "object",
       "required": [
         "execute_lottery"
@@ -299,6 +321,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Second step (paginated) on the lottery execution. Sets winner sequence and stores winning sequences",
       "type": "object",
       "required": [
         "execute_prize"
@@ -321,6 +344,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Updates rewards emission rate and transfer outstanding reserve to gov",
       "type": "object",
       "required": [
         "execute_epoch_ops"

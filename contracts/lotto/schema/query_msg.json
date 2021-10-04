@@ -1,8 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "QueryMsg",
-  "anyOf": [
+  "oneOf": [
     {
+      "description": "Lotto contract configuration",
       "type": "object",
       "required": [
         "config"
@@ -15,6 +16,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Current state. If block_height is provided, return current depositor rewards",
       "type": "object",
       "required": [
         "state"
@@ -37,6 +39,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Lotto pool current state. Shares and deposits.",
       "type": "object",
       "required": [
         "pool"
@@ -49,6 +52,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Lottery information by lottery id",
       "type": "object",
       "required": [
         "lottery_info"
@@ -71,6 +75,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Ticket information by sequence. Returns a list of holders (addresses)",
       "type": "object",
       "required": [
         "ticket_info"
@@ -91,6 +96,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Prizes for a given address on a given lottery id",
       "type": "object",
       "required": [
         "prize_info"
@@ -117,6 +123,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Depositor information by address",
       "type": "object",
       "required": [
         "depositor"
@@ -137,6 +144,7 @@
       "additionalProperties": false
     },
     {
+      "description": "List (paginated) of depositors information",
       "type": "object",
       "required": [
         "depositors"

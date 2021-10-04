@@ -266,7 +266,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(resp)
 }
 
-// todo: change to match pattern
 #[allow(clippy::comparison_chain)]
 fn query_glow_emission_rate(
     deps: Deps,

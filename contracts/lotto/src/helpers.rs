@@ -83,3 +83,19 @@ pub fn calculate_winner_prize(
     }
     to_send
 }
+
+pub fn is_valid_sequence(sequence: &str, len: u8) -> bool {
+    sequence.len() == (len as usize) && sequence.chars().all(|c| ('0'..='9').contains(&c))
+}
+
+pub fn count_seq_matches(a: &str, b: &str) -> u8 {
+    let mut count = 0;
+    for (i, c) in a.chars().enumerate() {
+        if c == b.chars().nth(i).unwrap() {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    count
+}

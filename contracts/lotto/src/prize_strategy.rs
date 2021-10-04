@@ -5,7 +5,10 @@ use crate::state::{
     PrizeInfo, CONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage, Uint128, WasmMsg, Binary};
+use cosmwasm_std::{
+    attr, to_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response,
+    StdResult, Storage, Uint128, WasmMsg,
+};
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
@@ -45,7 +48,7 @@ pub fn execute_lottery(
 
     state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
 
-    let lottery_rand_round = calculate_lottery_rand_round(env.clone(),config.round_delta);
+    let lottery_rand_round = calculate_lottery_rand_round(env.clone(), config.round_delta);
     let lottery_info = LotteryInfo {
         rand_round: lottery_rand_round,
         sequence: "".to_string(),
@@ -147,7 +150,11 @@ pub fn execute_prize(
 
     // If first time called in current lottery, get winning sequence
     if lottery_info.sequence.is_empty() {
-        let oracle_response  = query_oracle(deps.as_ref(), config.oracle_contract.into_string(), lottery_info.rand_round)?;
+        let oracle_response = query_oracle(
+            deps.as_ref(),
+            config.oracle_contract.into_string(),
+            lottery_info.rand_round,
+        )?;
         let random_hash = hex::encode(oracle_response.random.as_slice());
         lottery_info.sequence = sequence_from_hash(random_hash);
     }

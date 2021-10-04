@@ -3,14 +3,13 @@ use crate::contract::{
     INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::helpers::calculate_winner_prize;
-use crate::mock_querier::mock_dependencies;
+use crate::mock_querier::{mock_dependencies, mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, Config, DepositorInfo,
     LotteryInfo, PrizeInfo, State, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     attr, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env,
     Response, SubMsg, Timestamp, Uint128, WasmMsg,
@@ -2083,6 +2082,7 @@ fn execute_prize_one_winner() {
 
     //Advance time one week
     let mut env = mock_env();
+
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
         env.block.time = env.block.time.plus_seconds(time);
@@ -2101,6 +2101,10 @@ fn execute_prize_one_winner() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 

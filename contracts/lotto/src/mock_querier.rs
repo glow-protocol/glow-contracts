@@ -1,10 +1,11 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
-    QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
+    from_binary, from_slice, to_binary, Addr, Binary, BlockInfo, Coin, ContractInfo,
+    ContractResult, Decimal, Env, MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest,
+    SystemError, SystemResult, Timestamp, Uint128, WasmQuery,
 };
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
@@ -13,6 +14,10 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use glow_protocol::distributor::GlowEmissionRateResponse;
 use moneymarket::market::EpochStateResponse;
 use std::collections::HashMap;
+
+use crate::oracle::OracleResponse;
+
+pub const MOCK_CONTRACT_ADDR: &str = "cosmos2contract";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -33,6 +38,10 @@ pub enum QueryMsg {
     Balance {
         address: String,
     },
+
+    GetRandomness {
+        round: u64,
+    },
 }
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
@@ -47,6 +56,28 @@ pub fn mock_dependencies(
         storage: MockStorage::default(),
         api: MockApi::default(),
         querier: custom_querier,
+    }
+}
+
+/// mock_env is a drop-in replacement for cosmwasm_std::testing::mock_env
+pub fn mock_env() -> Env {
+    Env {
+        block: BlockInfo {
+            height: 12_345,
+            time: Timestamp::from_seconds(1_595_431_050),
+            chain_id: "cosmos-testnet-14002".to_string(),
+        },
+        contract: ContractInfo {
+            address: Addr::unchecked(MOCK_CONTRACT_ADDR),
+        },
+    }
+}
+
+/// mock_info is a drop-in replacement for cosmwasm_std::testing::mock_info
+pub fn mock_info(sender: &str, funds: &[Coin]) -> MessageInfo {
+    MessageInfo {
+        sender: Addr::unchecked(sender),
+        funds: funds.to_vec(),
     }
 }
 
@@ -199,6 +230,16 @@ impl WasmMockQuerier {
                 } => SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse {
                     emission_rate: Decimal256::one(),
                 }))),
+
+                QueryMsg::GetRandomness { round: _ } => {
+                    SystemResult::Ok(ContractResult::from(to_binary(&OracleResponse {
+                        random: Binary::from_base64(
+                            "e74c6cfd99371c817e8c3e0099df9074032eec15189c49e5b4740b084ba5ce2b",
+                        )
+                        .unwrap(),
+                        worker: Addr::unchecked(MOCK_CONTRACT_ADDR),
+                    })))
+                }
 
                 _ => match from_binary(msg).unwrap() {
                     Cw20QueryMsg::Balance { address } => {

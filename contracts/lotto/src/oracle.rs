@@ -1,14 +1,14 @@
+use cosmwasm_std::{Addr, Binary, Env};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::{attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage, Uint128, WasmMsg, Binary};
 
 const RAND_GENESIS: u64 = 1595431050;
 const RAND_PERIOD: u64 = 30;
 
-pub fn calculate_lottery_rand_round (env: Env, round_delta: u64) -> u64 {
-       let from_genesis = env.block.time.seconds().checked_sub(RAND_GENESIS).unwrap();
-       let current_round = from_genesis.checked_div(RAND_PERIOD).unwrap();
-       current_round + round_delta //make round delta as config param
+pub fn calculate_lottery_rand_round(env: Env, round_delta: u64) -> u64 {
+    let from_genesis = env.block.time.seconds().checked_sub(RAND_GENESIS).unwrap();
+    let current_round = from_genesis.checked_div(RAND_PERIOD).unwrap();
+    current_round + round_delta //make round delta as config param
 }
 
 pub fn sequence_from_hash(hash: String) -> String {

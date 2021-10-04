@@ -31,7 +31,7 @@ pub struct Config {
     pub stable_denom: String,
     pub lottery_interval: Duration, // number of blocks (or time) between lotteries
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
-    pub round_delta: u64, // number of rounds of security to get oracle rand
+    pub round_delta: u64,     // number of rounds of security to get oracle rand
     pub ticket_price: Decimal256, // prize of a ticket in stable_denom
     pub max_holders: u8,      // Max number of holders per ticket
     pub prize_distribution: [Decimal256; 6], // [0, 0, 0.05, 0.15, 0.3, 0.5]

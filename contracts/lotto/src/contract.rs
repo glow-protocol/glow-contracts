@@ -59,10 +59,12 @@ pub fn instantiate(
             a_terra_contract: deps.api.addr_validate(msg.aterra_contract.as_str())?,
             gov_contract: Addr::unchecked(""),
             distributor_contract: Addr::unchecked(""),
+            oracle_contract: deps.api.addr_validate(msg.oracle_contract.as_str())?,
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.addr_validate(msg.anchor_contract.as_str())?,
             lottery_interval: Duration::Time(msg.lottery_interval),
             block_time: Duration::Time(msg.block_time),
+            round_delta: msg.round_delta,
             ticket_price: msg.ticket_price,
             max_holders: msg.max_holders,
             prize_distribution: msg.prize_distribution,
@@ -82,6 +84,8 @@ pub fn instantiate(
             award_available: Decimal256::from_uint256(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
+            next_lottery_exec_time: Duration::Time(msg.lottery_interval + msg.block_time)
+                .after(&env.block),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,
@@ -130,6 +134,7 @@ pub fn execute(
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,
+            oracle_addr,
             reserve_factor,
             split_factor,
             instant_withdrawal_fee,
@@ -138,6 +143,7 @@ pub fn execute(
             deps,
             info,
             owner,
+            oracle_addr,
             reserve_factor,
             split_factor,
             instant_withdrawal_fee,
@@ -148,6 +154,7 @@ pub fn execute(
             block_time,
             ticket_price,
             prize_distribution,
+            round_delta,
         } => update_lottery_config(
             deps,
             info,
@@ -155,6 +162,7 @@ pub fn execute(
             block_time,
             ticket_price,
             prize_distribution,
+            round_delta,
         ),
     }
 }
@@ -218,7 +226,7 @@ pub fn deposit(
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.sequence.is_empty() {
+    if !current_lottery.rand_round == 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
@@ -358,7 +366,7 @@ pub fn gift_tickets(
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.sequence.is_empty() {
+    if !current_lottery.rand_round == 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
@@ -559,6 +567,11 @@ pub fn sponsor_withdraw(
         return Err(ContractError::InvalidSponsorWithdraw {});
     }
 
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if !current_lottery.rand_round == 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
     compute_reward(&mut state, &pool, env.block.height);
 
     // Calculate aust amount to redeem based on depositor amount
@@ -646,10 +659,9 @@ pub fn withdraw(
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.sequence.is_empty() {
+    if !current_lottery.rand_round == 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
-
     // Compute GLOW reward
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
@@ -795,6 +807,11 @@ pub fn claim(
 
     let mut to_send = claim_deposits(deps.storage, &info.sender, &env.block, None)?;
     let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &info.sender);
+
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if !current_lottery.rand_round == 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
@@ -962,6 +979,7 @@ pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
+    oracle_addr: Option<String>,
     reserve_factor: Option<Decimal256>,
     split_factor: Option<Decimal256>,
     instant_withdrawal_fee: Option<Decimal256>,
@@ -978,6 +996,10 @@ pub fn update_config(
         config.owner = deps.api.addr_validate(owner.as_str())?;
     }
 
+    // change oracle contract addr
+    if let Some(oracle_addr) = oracle_addr {
+        config.owner = deps.api.addr_validate(oracle_addr.as_str())?;
+    }
     if let Some(reserve_factor) = reserve_factor {
         if reserve_factor > Decimal256::one() {
             return Err(ContractError::InvalidReserveFactor {});
@@ -1015,6 +1037,7 @@ pub fn update_lottery_config(
     block_time: Option<u64>,
     ticket_price: Option<Decimal256>,
     prize_distribution: Option<[Decimal256; 6]>,
+    round_delta: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1029,6 +1052,10 @@ pub fn update_lottery_config(
 
     if let Some(block_time) = block_time {
         config.block_time = Duration::Time(block_time);
+    }
+
+    if let Some(round_delta) = round_delta {
+        config.round_delta = round_delta;
     }
 
     if let Some(ticket_price) = ticket_price {
@@ -1054,7 +1081,7 @@ pub fn update_lottery_config(
 
     CONFIG.save(deps.storage, &config)?;
 
-    Ok(Response::new().add_attributes(vec![("action", "update_config")]))
+    Ok(Response::new().add_attributes(vec![("action", "update_lottery_config")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

@@ -3,9 +3,9 @@ pub mod state;
 
 mod error;
 mod helpers;
+mod oracle;
 mod prize_strategy;
 mod querier;
-mod random;
 
 #[cfg(test)]
 mod integration_test;

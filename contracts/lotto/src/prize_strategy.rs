@@ -1,5 +1,5 @@
 use crate::error::ContractError;
-use crate::querier::query_exchange_rate;
+use crate::querier::{query_exchange_rate, query_oracle};
 use crate::state::{
     read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
     TICKETS,
@@ -15,6 +15,7 @@ use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::compute_reward;
+use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use moneymarket::market::Cw20HookMsg;
 use std::ops::{Add, Sub};
 use std::str;
@@ -45,10 +46,12 @@ pub fn execute_lottery(
         return Err(ContractError::InvalidLotteryExecution {});
     }
 
-    let winning_sequence = String::from("00000");
+    state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
 
+    let lottery_rand_round = calculate_lottery_rand_round(env.clone(), config.round_delta);
     let lottery_info = LotteryInfo {
-        sequence: winning_sequence,
+        rand_round: lottery_rand_round,
+        sequence: "".to_string(),
         awarded: false,
         total_prizes: Decimal256::zero(),
         number_winners: [0; 6],
@@ -140,8 +143,20 @@ pub fn execute_prize(
     // Execute lottery must be called before execute_prize
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
     let current_lottery = state.current_lottery;
-    if lottery_info.sequence.is_empty() {
+
+    if lottery_info.rand_round == 0 || !state.next_lottery_exec_time.is_expired(&env.block) {
         return Err(ContractError::InvalidLotteryPrizeExecution {});
+    }
+
+    // If first time called in current lottery, get winning sequence
+    if lottery_info.sequence.is_empty() {
+        let oracle_response = query_oracle(
+            deps.as_ref(),
+            config.oracle_contract.into_string(),
+            lottery_info.rand_round,
+        )?;
+        let random_hash = hex::encode(oracle_response.random.as_slice());
+        lottery_info.sequence = sequence_from_hash(random_hash);
     }
 
     // Calculate pagination bounds

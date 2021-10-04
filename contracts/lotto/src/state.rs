@@ -27,9 +27,11 @@ pub struct Config {
     pub gov_contract: Addr,
     pub distributor_contract: Addr,
     pub anchor_contract: Addr,
+    pub oracle_contract: Addr,
     pub stable_denom: String,
     pub lottery_interval: Duration, // number of blocks (or time) between lotteries
     pub block_time: Duration, // number of blocks (or time) lottery is blocked while is executed
+    pub round_delta: u64,     // number of rounds of security to get oracle rand
     pub ticket_price: Decimal256, // prize of a ticket in stable_denom
     pub max_holders: u8,      // Max number of holders per ticket
     pub prize_distribution: [Decimal256; 6], // [0, 0, 0.05, 0.15, 0.3, 0.5]
@@ -47,6 +49,7 @@ pub struct State {
     pub award_available: Decimal256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
+    pub next_lottery_exec_time: Expiration,
     pub last_reward_updated: u64,
     pub global_reward_index: Decimal256,
     pub glow_emission_rate: Decimal256,
@@ -80,6 +83,7 @@ pub struct SponsorInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LotteryInfo {
+    pub rand_round: u64,
     pub sequence: String,
     pub awarded: bool,
     pub total_prizes: Decimal256,
@@ -113,6 +117,7 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
     match bucket_read(storage, PREFIX_LOTTERY).load(&lottery_id.to_be_bytes()) {
         Ok(v) => v,
         _ => LotteryInfo {
+            rand_round: 0,
             sequence: "".to_string(),
             awarded: false,
             total_prizes: Decimal256::zero(),

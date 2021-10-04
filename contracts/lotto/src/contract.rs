@@ -5,7 +5,7 @@ use crate::error::ContractError;
 use crate::helpers::{
     calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
 };
-use crate::prize_strategy::{assert_holder, execute_lottery, execute_prize, is_valid_sequence};
+use crate::prize_strategy::{execute_lottery, execute_prize, is_valid_sequence};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
@@ -17,7 +17,7 @@ use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
     Response, StdError, StdResult, Uint128, WasmMsg,
 };
-use cw0::{Duration, Expiration};
+use cw0::Duration;
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -84,7 +84,8 @@ pub fn instantiate(
             award_available: Decimal256::from_uint256(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
-            next_lottery_exec_time: Duration::Time(msg.lottery_interval + msg.block_time).after(&env.block),
+            next_lottery_exec_time: Duration::Time(msg.lottery_interval + msg.block_time)
+                .after(&env.block),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,
@@ -134,11 +135,6 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             owner,
             oracle_addr,
-            lottery_interval,
-            block_time,
-            round_delta,
-            ticket_price,
-            prize_distribution,
             reserve_factor,
             split_factor,
             instant_withdrawal_fee,
@@ -148,15 +144,25 @@ pub fn execute(
             info,
             owner,
             oracle_addr,
-            lottery_interval,
-            block_time,
-            round_delta,
-            ticket_price,
-            prize_distribution,
             reserve_factor,
             split_factor,
             instant_withdrawal_fee,
             unbonding_period,
+        ),
+        ExecuteMsg::UpdateLotteryConfig {
+            lottery_interval,
+            block_time,
+            ticket_price,
+            prize_distribution,
+            round_delta,
+        } => update_lottery_config(
+            deps,
+            info,
+            lottery_interval,
+            block_time,
+            ticket_price,
+            prize_distribution,
+            round_delta,
         ),
     }
 }
@@ -181,8 +187,8 @@ pub fn register_contracts(
         return Err(ContractError::AlreadyRegistered {});
     }
 
-    config.gov_contract = deps.api.addr_validate(&gov_contract.to_string())?;
-    config.distributor_contract = deps.api.addr_validate(&distributor_contract.to_string())?;
+    config.gov_contract = deps.api.addr_validate(&gov_contract)?;
+    config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
 
     CONFIG.save(deps.storage, &config)?;
 
@@ -572,14 +578,16 @@ pub fn sponsor_withdraw(
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
-        env.clone().contract.address,
+        env.contract.address,
     )?;
     let rate =
         query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
     let aust_to_redeem = sponsor_info.amount / rate;
 
     // Double-checking Lotto pool is solvent against sponsors
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < pool.sponsor_shares {
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
+        < (pool.total_deposits + pool.total_sponsor_amount)
+    {
         return Err(ContractError::InsufficientSponsorFunds {});
     }
 
@@ -683,7 +691,9 @@ pub fn withdraw(
     let mut return_amount = pooled_deposits * withdraw_ratio;
 
     // Double-checking Lotto pool is solvent against deposits
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate < pool.total_deposits {
+    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
+        < (pool.total_deposits + pool.total_sponsor_amount)
+    {
         return Err(ContractError::InsufficientPoolFunds {});
     }
 
@@ -703,19 +713,15 @@ pub fn withdraw(
     }
 
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
-        TICKETS.update(
-            deps.storage,
-            seq.as_bytes(),
-            |mut tickets| -> StdResult<_> {
-                let mut new_tickets = tickets.unwrap();
-                let index = new_tickets
-                    .iter()
-                    .position(|x| *x == info.sender.clone())
-                    .unwrap();
-                let _elem = new_tickets.remove(index);
-                Ok(new_tickets)
-            },
-        );
+        TICKETS.update(deps.storage, seq.as_bytes(), |tickets| -> StdResult<_> {
+            let mut new_tickets = tickets.unwrap();
+            let index = new_tickets
+                .iter()
+                .position(|x| *x == info.sender.clone())
+                .unwrap();
+            let _elem = new_tickets.remove(index);
+            Ok(new_tickets)
+        })?;
     }
 
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
@@ -840,7 +846,7 @@ pub fn claim(
                     claimed: true,
                     matches: prize.matches,
                 },
-            );
+            )?;
         }
     }
 
@@ -974,11 +980,6 @@ pub fn update_config(
     info: MessageInfo,
     owner: Option<String>,
     oracle_addr: Option<String>,
-    lottery_interval: Option<u64>,
-    block_time: Option<u64>,
-    round_delta: Option<u64>,
-    ticket_price: Option<Decimal256>,
-    prize_distribution: Option<[Decimal256; 6]>,
     reserve_factor: Option<Decimal256>,
     split_factor: Option<Decimal256>,
     instant_withdrawal_fee: Option<Decimal256>,
@@ -998,6 +999,51 @@ pub fn update_config(
     // change oracle contract addr
     if let Some(oracle_addr) = oracle_addr {
         config.owner = deps.api.addr_validate(oracle_addr.as_str())?;
+    }
+    if let Some(reserve_factor) = reserve_factor {
+        if reserve_factor > Decimal256::one() {
+            return Err(ContractError::InvalidReserveFactor {});
+        }
+
+        config.reserve_factor = reserve_factor;
+    }
+
+    if let Some(split_factor) = split_factor {
+        if split_factor > Decimal256::one() {
+            return Err(ContractError::InvalidSplitFactor {});
+        }
+        config.split_factor = split_factor;
+    }
+
+    if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {
+        if instant_withdrawal_fee > Decimal256::one() {
+            return Err(ContractError::InvalidSplitFactor {});
+        }
+    }
+
+    if let Some(unbonding_period) = unbonding_period {
+        config.block_time = Duration::Time(unbonding_period);
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    Ok(Response::new().add_attributes(vec![("action", "update_config")]))
+}
+
+pub fn update_lottery_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    lottery_interval: Option<u64>,
+    block_time: Option<u64>,
+    ticket_price: Option<Decimal256>,
+    prize_distribution: Option<[Decimal256; 6]>,
+    round_delta: Option<u64>,
+) -> Result<Response, ContractError> {
+    let mut config: Config = CONFIG.load(deps.storage)?;
+
+    // check permission
+    if info.sender != config.owner {
+        return Err(ContractError::Unauthorized {});
     }
 
     if let Some(lottery_interval) = lottery_interval {
@@ -1033,34 +1079,9 @@ pub fn update_config(
         config.prize_distribution = prize_distribution;
     }
 
-    if let Some(reserve_factor) = reserve_factor {
-        if reserve_factor > Decimal256::one() {
-            return Err(ContractError::InvalidReserveFactor {});
-        }
-
-        config.reserve_factor = reserve_factor;
-    }
-
-    if let Some(split_factor) = split_factor {
-        if split_factor > Decimal256::one() {
-            return Err(ContractError::InvalidSplitFactor {});
-        }
-        config.split_factor = split_factor;
-    }
-
-    if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {
-        if instant_withdrawal_fee > Decimal256::one() {
-            return Err(ContractError::InvalidSplitFactor {});
-        }
-    }
-
-    if let Some(unbonding_period) = unbonding_period {
-        config.block_time = Duration::Time(unbonding_period);
-    }
-
     CONFIG.save(deps.storage, &config)?;
 
-    Ok(Response::new().add_attributes(vec![("action", "update_config")]))
+    Ok(Response::new().add_attributes(vec![("action", "update_lottery_config")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

@@ -182,7 +182,7 @@ pub fn execute_prize(
         .range(
             deps.storage,
             Some(Bound::Inclusive(Vec::from(min_bound))),
-            Some(Bound::Exclusive(Vec::from(max_bound.as_str()))),
+            Some(Bound::Inclusive(Vec::from(max_bound.as_str()))),
             Order::Ascending,
         )
         .take(limit)

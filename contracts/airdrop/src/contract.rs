@@ -112,6 +112,7 @@ pub fn register_merkle_root(
         attr("action", "register_merkle_root"),
         attr("stage", stage.to_string()),
         attr("merkle_root", merkle_root),
+        attr("expiry_at_seconds", expiry_at_seconds.to_string()),
     ]))
 }
 

@@ -9,6 +9,9 @@ pub enum ContractError {
     #[error("Already claimed")]
     AlreadyClaimed {},
 
+    #[error("Airdrop expired")]
+    AirdropExpired {},
+
     #[error("Invalid hex encoded proof")]
     InvalidHexProof {},
 

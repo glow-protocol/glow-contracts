@@ -86,6 +86,7 @@ fn register_merkle_root() {
     let info = mock_info("owner0000", &[]);
     let msg = ExecuteMsg::RegisterMerkleRoot {
         merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
+        expiry_at_seconds: 1635256050,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -124,6 +125,8 @@ fn register_merkle_root() {
 fn claim() {
     let mut deps = mock_dependencies(&[]);
 
+    print!("{}", mock_env().block.time.seconds());
+
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         glow_token: "glow0000".to_string(),
@@ -136,12 +139,14 @@ fn claim() {
     let info = mock_info("owner0000", &[]);
     let msg = ExecuteMsg::RegisterMerkleRoot {
         merkle_root: "85e33930e7a8f015316cb4a53a4c45d26a69f299fc4c83f17357e1fd62e8fd95".to_string(),
+        expiry_at_seconds: 1635256050,
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let info = mock_info("owner0000", &[]);
     let msg = ExecuteMsg::RegisterMerkleRoot {
         merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
+        expiry_at_seconds: 1635256050,
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 

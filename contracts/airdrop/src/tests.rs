@@ -286,7 +286,13 @@ fn claim() {
 
 #[test]
 fn withdraw() {
+    let seconds1 = 1635256000;
+    let seconds2 = 1635256100;
+    let seconds3 = 1635256200;
+
     let mut deps = mock_dependencies(&[]);
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(seconds2);
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
@@ -294,28 +300,69 @@ fn withdraw() {
     };
 
     let info = mock_info("addr0000", &[]);
-    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    // withdraw glow tokens
+    // airdrop not expired because no airdrop created yet error
     let info = mock_info("owner0000", &[]);
-    let msg = ExecuteMsg::Withdraw {
+    let withdraw_msg = ExecuteMsg::Withdraw {
         recipient: "owner0000".to_string(),
         amount: Uint128::new(2000000u128),
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(1, res.messages.len());
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        withdraw_msg.clone(),
+    );
+    match res {
+        Err(ContractError::AirdropNotExpired {}) => {}
+        _ => panic!("Must return airdrop not expired error"),
+    }
 
-    // Unauthorzied err
-    let info = mock_info("owner0001", &[]);
-    let msg = ExecuteMsg::Withdraw {
-        recipient: "owner0001".to_string(),
-        amount: Uint128::new(2000000u128),
+    // register expired merkle root
+    let register_expired_msg = ExecuteMsg::RegisterMerkleRoot {
+        merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
+        expiry_at_seconds: seconds1,
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        register_expired_msg,
+    )
+    .unwrap();
+    // withdraw success
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        withdraw_msg.clone(),
+    )
+    .unwrap();
+    assert_eq!(res.messages.len(), 1);
+
+    // register unexpired msg
+
+    // register expired merkle root
+    let register_unexpired_msg = ExecuteMsg::RegisterMerkleRoot {
+        merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
+        expiry_at_seconds: seconds3,
+    };
+
+    execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        register_unexpired_msg,
+    )
+    .unwrap();
+
+    // airdrop not expired return err
+    let res = execute(deps.as_mut(), env.clone(), info, withdraw_msg);
     match res {
-        Err(ContractError::Unauthorized {}) => {}
-        _ => panic!("Must return unauthorized error"),
+        Err(ContractError::AirdropNotExpired {}) => {}
+        _ => panic!("Must return airdrop not expired error"),
     }
 }

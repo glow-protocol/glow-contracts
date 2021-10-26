@@ -137,7 +137,6 @@ pub fn execute(
             owner,
             oracle_addr,
             reserve_factor,
-            split_factor,
             instant_withdrawal_fee,
             unbonding_period,
         } => update_config(
@@ -146,7 +145,6 @@ pub fn execute(
             owner,
             oracle_addr,
             reserve_factor,
-            split_factor,
             instant_withdrawal_fee,
             unbonding_period,
         ),
@@ -976,7 +974,6 @@ pub fn update_config(
     owner: Option<String>,
     oracle_addr: Option<String>,
     reserve_factor: Option<Decimal256>,
-    split_factor: Option<Decimal256>,
     instant_withdrawal_fee: Option<Decimal256>,
     unbonding_period: Option<u64>,
 ) -> Result<Response, ContractError> {
@@ -995,19 +992,13 @@ pub fn update_config(
     if let Some(oracle_addr) = oracle_addr {
         config.owner = deps.api.addr_validate(oracle_addr.as_str())?;
     }
+
     if let Some(reserve_factor) = reserve_factor {
         if reserve_factor > Decimal256::one() {
             return Err(ContractError::InvalidReserveFactor {});
         }
 
         config.reserve_factor = reserve_factor;
-    }
-
-    if let Some(split_factor) = split_factor {
-        if split_factor > Decimal256::one() {
-            return Err(ContractError::InvalidSplitFactor {});
-        }
-        config.split_factor = split_factor;
     }
 
     if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {

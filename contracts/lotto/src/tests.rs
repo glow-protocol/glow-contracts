@@ -222,7 +222,6 @@ fn update_config() {
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("owner1".to_string()),
         oracle_addr: None,
-        split_factor: None,
         instant_withdrawal_fee: None,
         unbonding_period: None,
         reserve_factor: None,
@@ -259,7 +258,6 @@ fn update_config() {
         owner: None,
         oracle_addr: None,
         reserve_factor: Some(Decimal256::percent(1)),
-        split_factor: None,
         instant_withdrawal_fee: None,
         unbonding_period: None,
     };
@@ -278,7 +276,6 @@ fn update_config() {
         oracle_addr: None,
         owner: Some(String::from("new_owner")),
         reserve_factor: None,
-        split_factor: None,
         instant_withdrawal_fee: None,
         unbonding_period: None,
     };

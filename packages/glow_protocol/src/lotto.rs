@@ -41,7 +41,6 @@ pub enum ExecuteMsg {
         owner: Option<String>,
         oracle_addr: Option<String>,
         reserve_factor: Option<Decimal256>,
-        split_factor: Option<Decimal256>,
         instant_withdrawal_fee: Option<Decimal256>,
         unbonding_period: Option<u64>,
     },

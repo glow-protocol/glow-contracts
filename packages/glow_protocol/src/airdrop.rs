@@ -15,6 +15,10 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
     },
+    Withdraw {
+        recipient: String,
+        amount: Uint128,
+    },
     RegisterMerkleRoot {
         merkle_root: String,
         expiry_at_seconds: u64,

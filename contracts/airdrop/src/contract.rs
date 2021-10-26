@@ -53,6 +53,9 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::UpdateConfig { owner } => update_config(deps, info, owner),
+        ExecuteMsg::Withdraw { recipient, amount } => {
+            execute_withdraw(deps, info, recipient, amount)
+        }
         ExecuteMsg::RegisterMerkleRoot {
             merkle_root,
             expiry_at_seconds,
@@ -82,6 +85,33 @@ pub fn update_config(
     store_config(deps.storage, &config)?;
 
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
+}
+
+pub fn execute_withdraw(
+    deps: DepsMut,
+    info: MessageInfo,
+    recipient: String,
+    amount: Uint128,
+) -> Result<Response, ContractError> {
+    let config: Config = read_config(deps.as_ref().storage)?;
+    if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    Ok(Response::new()
+        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: info.sender.to_string(),
+                amount,
+            })?,
+        })])
+        .add_attributes(vec![
+            ("action", "withdraw"),
+            ("to", &recipient),
+            ("amount", &amount.to_string()),
+        ]))
 }
 
 pub fn register_merkle_root(

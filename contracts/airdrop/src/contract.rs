@@ -14,6 +14,8 @@ use glow_protocol::airdrop::{
     LatestStageResponse, MerkleRootResponse, MigrateMsg, QueryMsg,
 };
 
+use glow_protocol::querier::query_token_balance;
+
 use cosmwasm_std::{
     attr, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
     Uint128, WasmMsg,
@@ -53,8 +55,8 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::UpdateConfig { owner } => update_config(deps, info, owner),
-        ExecuteMsg::Withdraw { recipient, amount } => {
-            execute_withdraw(deps, env, info, recipient, amount)
+        ExecuteMsg::WithdrawExpiredTokens { recipient } => {
+            execute_withdraw_expired_tokens(deps, env, info, recipient)
         }
         ExecuteMsg::RegisterMerkleRoot {
             merkle_root,
@@ -87,12 +89,11 @@ pub fn update_config(
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
 
-pub fn execute_withdraw(
+pub fn execute_withdraw_expired_tokens(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     recipient: String,
-    amount: Uint128,
 ) -> Result<Response, ContractError> {
     // only the admin is authorized to withdraw
     let config: Config = read_config(deps.as_ref().storage)?;
@@ -115,20 +116,29 @@ pub fn execute_withdraw(
             return Err(ContractError::AirdropNotExpired {});
         }
     }
+    // get the glow cw20 contract address
+    let glow_cw20_address = deps.api.addr_humanize(&config.glow_token)?;
+
+    // get the glow balance of this airdrop contract
+    let token_balance = query_token_balance(
+        deps.as_ref(),
+        glow_cw20_address.clone(),
+        env.contract.address,
+    )?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+            contract_addr: glow_cw20_address.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
-                amount,
+                amount: token_balance.into(),
             })?,
         })])
         .add_attributes(vec![
             ("action", "withdraw"),
             ("to", &recipient),
-            ("amount", &amount.to_string()),
+            ("amount", &token_balance.to_string()),
         ]))
 }
 

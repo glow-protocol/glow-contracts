@@ -1,7 +1,7 @@
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
 use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-use cosmwasm_std::{attr, from_binary, to_binary, CosmosMsg, SubMsg, Uint128, WasmMsg};
+use cosmwasm_std::{attr, from_binary, to_binary, CosmosMsg, SubMsg, Timestamp, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::airdrop::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, IsClaimedResponse, LatestStageResponse,
@@ -73,6 +73,8 @@ fn update_config() {
 #[test]
 fn register_merkle_root() {
     let mut deps = mock_dependencies(&[]);
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(1635256050);
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
@@ -80,7 +82,7 @@ fn register_merkle_root() {
     };
 
     let info = mock_info("addr0000", &[]);
-    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // register new merkle root
     let info = mock_info("owner0000", &[]);
@@ -89,7 +91,7 @@ fn register_merkle_root() {
         expiry_at_seconds: 1635256050,
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
     assert_eq!(
         res.attributes,
         vec![
@@ -98,17 +100,18 @@ fn register_merkle_root() {
             attr(
                 "merkle_root",
                 "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37"
-            )
+            ),
+            attr("expiry_at_seconds", "1635256050")
         ]
     );
 
-    let res = query(deps.as_ref(), mock_env(), QueryMsg::LatestStage {}).unwrap();
+    let res = query(deps.as_ref(), env.clone(), QueryMsg::LatestStage {}).unwrap();
     let latest_stage: LatestStageResponse = from_binary(&res).unwrap();
     assert_eq!(1u8, latest_stage.latest_stage);
 
     let res = query(
         deps.as_ref(),
-        mock_env(),
+        env.clone(),
         QueryMsg::MerkleRoot {
             stage: latest_stage.latest_stage,
         },
@@ -123,9 +126,13 @@ fn register_merkle_root() {
 
 #[test]
 fn claim() {
-    let mut deps = mock_dependencies(&[]);
+    let seconds1 = 1635256000;
+    let seconds2 = 1635256100;
+    let seconds3 = 1635256200;
 
-    print!("{}", mock_env().block.time.seconds());
+    let mut deps = mock_dependencies(&[]);
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(seconds1);
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
@@ -133,22 +140,29 @@ fn claim() {
     };
 
     let info = mock_info("addr0000", &[]);
-    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let _res = instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Register merkle roots
     let info = mock_info("owner0000", &[]);
     let msg = ExecuteMsg::RegisterMerkleRoot {
         merkle_root: "85e33930e7a8f015316cb4a53a4c45d26a69f299fc4c83f17357e1fd62e8fd95".to_string(),
-        expiry_at_seconds: 1635256050,
+        expiry_at_seconds: seconds2,
     };
-    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let info = mock_info("owner0000", &[]);
     let msg = ExecuteMsg::RegisterMerkleRoot {
         merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
-        expiry_at_seconds: 1635256050,
+        expiry_at_seconds: seconds3,
     };
-    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    let info = mock_info("owner0000", &[]);
+    let msg = ExecuteMsg::RegisterMerkleRoot {
+        merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
+        expiry_at_seconds: seconds1,
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let msg = ExecuteMsg::Claim {
         amount: Uint128::new(1000001u128),
@@ -162,7 +176,7 @@ fn claim() {
     };
 
     let info = mock_info("terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -190,7 +204,7 @@ fn claim() {
         from_binary::<IsClaimedResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env.clone(),
                 QueryMsg::IsClaimed {
                     stage: 1,
                     address: "terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8".to_string(),
@@ -202,7 +216,7 @@ fn claim() {
         .is_claimed
     );
 
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
     match res {
         Err(ContractError::AlreadyClaimed {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -221,7 +235,7 @@ fn claim() {
     };
 
     let info = mock_info("terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     assert_eq!(
         res.messages,
@@ -245,4 +259,24 @@ fn claim() {
             attr("amount", "2000001")
         ]
     );
+
+    // Attempt to claim the last airdrop for which the expiry_at_seconds has passed
+    let msg = ExecuteMsg::Claim {
+        amount: Uint128::new(2000001u128),
+        stage: 3u8,
+        proof: vec![
+            "ca2784085f944e5594bb751c3237d6162f7c2b24480b3a37e9803815b7a5ce42".to_string(),
+            "5b07b5898fc9aa101f27344dab0737aede6c3aa7c9f10b4b1fda6d26eb669b0f".to_string(),
+            "4847b2b9a6432a7bdf2bdafacbbeea3aab18c524024fc6e1bc655e04cbc171f3".to_string(),
+            "cad1958c1a5c815f23450f1a2761a5a75ab2b894a258601bf93cd026469d42f2".to_string(),
+        ],
+    };
+
+    let info = mock_info("terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8", &[]);
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
+
+    match res {
+        Err(ContractError::AirdropExpired {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }

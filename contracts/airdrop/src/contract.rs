@@ -54,7 +54,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::UpdateConfig { owner } => update_config(deps, info, owner),
         ExecuteMsg::Withdraw { recipient, amount } => {
-            execute_withdraw(deps, info, recipient, amount)
+            execute_withdraw(deps, env, info, recipient, amount)
         }
         ExecuteMsg::RegisterMerkleRoot {
             merkle_root,
@@ -89,13 +89,26 @@ pub fn update_config(
 
 pub fn execute_withdraw(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     recipient: String,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
+    // only the admin is authorized to withdraw
     let config: Config = read_config(deps.as_ref().storage)?;
     if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
         return Err(ContractError::Unauthorized {});
+    }
+
+    // the admin can only withdraw if all airdrop stage expiries have passed
+    let latest_stage: u8 = read_latest_stage(deps.storage)?;
+
+    // check for each stage
+    for stage in 1..=latest_stage {
+        // If the expiry at seconds time has yet to pass for any stage, return err
+        if read_expiry_at_seconds(deps.as_ref().storage, stage)? > env.block.time.seconds() {
+            return Err(ContractError::AirdropNotExpired {});
+        }
     }
 
     Ok(Response::new()

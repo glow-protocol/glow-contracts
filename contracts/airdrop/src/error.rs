@@ -12,6 +12,9 @@ pub enum ContractError {
     #[error("Airdrop expired")]
     AirdropExpired {},
 
+    #[error("Airdrop not expired")]
+    AirdropNotExpired {},
+
     #[error("Invalid hex encoded proof")]
     InvalidHexProof {},
 

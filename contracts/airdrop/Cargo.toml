@@ -47,3 +47,4 @@ thiserror = { version = "1.0.20"}
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
+terra-cosmwasm = "2.2.0"

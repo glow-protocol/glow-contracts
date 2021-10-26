@@ -111,7 +111,7 @@ fn register_merkle_root() {
 
     let res = query(
         deps.as_ref(),
-        env.clone(),
+        env,
         QueryMsg::MerkleRoot {
             stage: latest_stage.latest_stage,
         },
@@ -273,7 +273,7 @@ fn claim() {
     };
 
     let info = mock_info("terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8", &[]);
-    let res = execute(deps.as_mut(), env.clone(), info, msg);
+    let res = execute(deps.as_mut(), env, info, msg);
 
     match res {
         Err(ContractError::AirdropExpired {}) => {}

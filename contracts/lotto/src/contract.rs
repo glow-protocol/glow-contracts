@@ -225,7 +225,7 @@ pub fn deposit(
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.rand_round == 0 {
+    if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
@@ -363,7 +363,7 @@ pub fn gift_tickets(
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.rand_round == 0 {
+    if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
@@ -564,7 +564,7 @@ pub fn sponsor_withdraw(
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.rand_round == 0 {
+    if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
@@ -655,7 +655,7 @@ pub fn withdraw(
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.rand_round == 0 {
+    if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
     // Compute GLOW reward
@@ -804,7 +804,7 @@ pub fn claim(
     let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &info.sender);
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if !current_lottery.rand_round == 0 {
+    if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 

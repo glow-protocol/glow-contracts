@@ -103,7 +103,12 @@ pub fn execute_withdraw(
     // the admin can only withdraw if all airdrop stage expiries have passed
     let latest_stage: u8 = read_latest_stage(deps.storage)?;
 
-    // check for each stage
+    // check that at least one stage has been created
+    if latest_stage == 0 {
+        return Err(ContractError::AirdropNotExpired {});
+    }
+
+    // check that every stage has expired
     for stage in 1..=latest_stage {
         // If the expiry at seconds time has yet to pass for any stage, return err
         if read_expiry_at_seconds(deps.as_ref().storage, stage)? > env.block.time.seconds() {

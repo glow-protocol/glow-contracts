@@ -283,3 +283,39 @@ fn claim() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 }
+
+#[test]
+fn withdraw() {
+    let mut deps = mock_dependencies(&[]);
+
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        glow_token: "glow0000".to_string(),
+    };
+
+    let info = mock_info("addr0000", &[]);
+    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // withdraw glow tokens
+    let info = mock_info("owner0000", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        recipient: "owner0000".to_string(),
+        amount: Uint128::new(2000000u128),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(1, res.messages.len());
+
+    // Unauthorzied err
+    let info = mock_info("owner0001", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        recipient: "owner0001".to_string(),
+        amount: Uint128::new(2000000u128),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::Unauthorized {}) => {}
+        _ => panic!("Must return unauthorized error"),
+    }
+}

@@ -1,7 +1,10 @@
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
-use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-use cosmwasm_std::{attr, from_binary, to_binary, CosmosMsg, SubMsg, Timestamp, Uint128, WasmMsg};
+use crate::mock_querier::mock_dependencies;
+use cosmwasm_std::testing::{mock_env, mock_info};
+use cosmwasm_std::{
+    attr, from_binary, to_binary, Addr, CosmosMsg, SubMsg, Timestamp, Uint128, WasmMsg,
+};
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::airdrop::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, IsClaimedResponse, LatestStageResponse,
@@ -291,8 +294,15 @@ fn withdraw() {
     let seconds3 = 1635256200;
 
     let mut deps = mock_dependencies(&[]);
+
+    deps.querier.with_token_balances(&[(
+        &"glow0000".to_string(),
+        &[(&"airdrop0000".to_string(), &Uint128::from(123u128))],
+    )]);
+
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(seconds2);
+    env.contract.address = Addr::unchecked("airdrop0000".to_string());
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
@@ -304,9 +314,8 @@ fn withdraw() {
 
     // airdrop not expired because no airdrop created yet error
     let info = mock_info("owner0000", &[]);
-    let withdraw_msg = ExecuteMsg::Withdraw {
+    let withdraw_msg = ExecuteMsg::WithdrawExpiredTokens {
         recipient: "owner0000".to_string(),
-        amount: Uint128::new(2000000u128),
     };
 
     let res = execute(
@@ -333,6 +342,7 @@ fn withdraw() {
         register_expired_msg,
     )
     .unwrap();
+
     // withdraw success
     let res = execute(
         deps.as_mut(),
@@ -341,7 +351,16 @@ fn withdraw() {
         withdraw_msg.clone(),
     )
     .unwrap();
+
     assert_eq!(res.messages.len(), 1);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "withdraw"),
+            attr("to", "owner0000"),
+            attr("amount", Uint128::from(123u128).to_string())
+        ]
+    );
 
     // register unexpired msg
 

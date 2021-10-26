@@ -72,9 +72,12 @@ fn update_config() {
 
 #[test]
 fn register_merkle_root() {
+    let seconds1 = 1635256000;
+    let seconds2 = 1635256100;
+
     let mut deps = mock_dependencies(&[]);
     let mut env = mock_env();
-    env.block.time = Timestamp::from_seconds(1635256050);
+    env.block.time = Timestamp::from_seconds(seconds1);
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
@@ -88,7 +91,7 @@ fn register_merkle_root() {
     let info = mock_info("owner0000", &[]);
     let msg = ExecuteMsg::RegisterMerkleRoot {
         merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
-        expiry_at_seconds: 1635256050,
+        expiry_at_seconds: seconds2,
     };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
@@ -101,7 +104,7 @@ fn register_merkle_root() {
                 "merkle_root",
                 "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37"
             ),
-            attr("expiry_at_seconds", "1635256050")
+            attr("expiry_at_seconds", seconds2.to_string())
         ]
     );
 

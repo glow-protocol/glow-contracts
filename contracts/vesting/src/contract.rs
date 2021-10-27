@@ -88,11 +88,19 @@ pub fn update_config(
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
 }
 
-fn assert_vesting_schedules(vesting_schedules: &[(u64, u64, Uint128)]) -> StdResult<()> {
+fn assert_vesting_schedules(
+    vesting_schedules: &[(u64, u64, Uint128)],
+    genesis_time: u64,
+) -> StdResult<()> {
     for vesting_schedule in vesting_schedules.iter() {
         if vesting_schedule.0 >= vesting_schedule.1 {
             return Err(StdError::generic_err(
                 "end_time must bigger than start_time",
+            ));
+        }
+        if genesis_time > vesting_schedule.0 {
+            return Err(StdError::generic_err(
+                "start_time must be equal or larger than genesis_time",
             ));
         }
     }
@@ -106,7 +114,7 @@ pub fn register_vesting_accounts(
 ) -> StdResult<Response> {
     let config: Config = read_config(deps.storage)?;
     for vesting_account in vesting_accounts.iter() {
-        assert_vesting_schedules(&vesting_account.schedules)?;
+        assert_vesting_schedules(&vesting_account.schedules, config.genesis_time)?;
 
         let vesting_address = deps.api.addr_canonicalize(&vesting_account.address)?;
         store_vesting_info(
@@ -249,22 +257,44 @@ pub fn query_vesting_accounts(
 #[test]
 fn test_assert_vesting_schedules() {
     // valid
-    assert_vesting_schedules(&[
-        (100u64, 101u64, Uint128::from(100u128)),
-        (100u64, 110u64, Uint128::from(100u128)),
-        (100u64, 200u64, Uint128::from(100u128)),
-    ])
+    assert_vesting_schedules(
+        &[
+            (100u64, 101u64, Uint128::from(100u128)),
+            (100u64, 110u64, Uint128::from(100u128)),
+            (100u64, 200u64, Uint128::from(100u128)),
+        ],
+        99u64,
+    )
     .unwrap();
 
     // invalid
-    let res = assert_vesting_schedules(&[
-        (100u64, 100u64, Uint128::from(100u128)),
-        (100u64, 110u64, Uint128::from(100u128)),
-        (100u64, 200u64, Uint128::from(100u128)),
-    ]);
+    let res = assert_vesting_schedules(
+        &[
+            (100u64, 100u64, Uint128::from(100u128)),
+            (100u64, 110u64, Uint128::from(100u128)),
+            (100u64, 200u64, Uint128::from(100u128)),
+        ],
+        99u64,
+    );
     match res {
         Err(StdError::GenericErr { msg, .. }) => {
             assert_eq!(msg, "end_time must bigger than start_time")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // invalid
+    let res = assert_vesting_schedules(
+        &[
+            (100u64, 103u64, Uint128::from(100u128)),
+            (100u64, 110u64, Uint128::from(100u128)),
+            (100u64, 200u64, Uint128::from(100u128)),
+        ],
+        101u64,
+    );
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "start_time must be equal or larger than genesis_time")
         }
         _ => panic!("DO NOT ENTER HERE"),
     }

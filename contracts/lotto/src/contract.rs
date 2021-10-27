@@ -34,6 +34,7 @@ use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 100_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
+pub const PRIZE_DISTR_LEN: usize = 6;
 pub const MAX_CLAIMS: u8 = 15;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -52,6 +53,31 @@ pub fn instantiate(
 
     if initial_deposit != Uint128::from(INITIAL_DEPOSIT_AMOUNT) {
         return Err(ContractError::InvalidDepositInstantiation {});
+    }
+
+    // Validate prize distribution
+    if msg.prize_distribution.len() != PRIZE_DISTR_LEN {
+        return Err(ContractError::InvalidPrizeDistribution {});
+    }
+
+    let mut sum = Decimal256::zero();
+    for item in msg.prize_distribution.iter() {
+        sum += *item;
+    }
+
+    if sum != Decimal256::one() {
+        return Err(ContractError::InvalidPrizeDistribution {});
+    }
+
+    // Validate factors
+    if msg.reserve_factor > Decimal256::one() {
+        return Err(ContractError::InvalidReserveFactor {});
+    }
+    if msg.split_factor > Decimal256::one() {
+        return Err(ContractError::InvalidSplitFactor {});
+    }
+    if msg.instant_withdrawal_fee > Decimal256::one() {
+        return Err(ContractError::InvalidWithdrawalFee {});
     }
 
     CONFIG.save(
@@ -1014,12 +1040,13 @@ pub fn update_config(
 
     if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {
         if instant_withdrawal_fee > Decimal256::one() {
-            return Err(ContractError::InvalidSplitFactor {});
+            return Err(ContractError::InvalidWithdrawalFee {});
         }
+        config.instant_withdrawal_fee = instant_withdrawal_fee;
     }
 
     if let Some(unbonding_period) = unbonding_period {
-        config.block_time = Duration::Time(unbonding_period);
+        config.unbonding_period = Duration::Time(unbonding_period);
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -1060,7 +1087,7 @@ pub fn update_lottery_config(
     }
 
     if let Some(prize_distribution) = prize_distribution {
-        if prize_distribution.len() != 5 {
+        if prize_distribution.len() != PRIZE_DISTR_LEN {
             return Err(ContractError::InvalidPrizeDistribution {});
         }
 

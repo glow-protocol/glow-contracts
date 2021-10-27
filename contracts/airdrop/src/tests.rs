@@ -379,7 +379,7 @@ fn withdraw() {
     .unwrap();
 
     // airdrop not expired return err
-    let res = execute(deps.as_mut(), env.clone(), info, withdraw_msg);
+    let res = execute(deps.as_mut(), env, info, withdraw_msg);
     match res {
         Err(ContractError::AirdropNotExpired {}) => {}
         _ => panic!("Must return airdrop not expired error"),

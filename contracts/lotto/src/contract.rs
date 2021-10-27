@@ -34,6 +34,7 @@ use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 100_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
+pub const MAX_CLAIMS: u8 = 15;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -767,6 +768,10 @@ pub fn withdraw(
     } else {
         // Discount tx taxes
         let net_coin_amount = deduct_tax(deps.as_ref(), coin(return_amount.into(), "uusd"))?;
+        // Check max unbonding_info concurrent claims is not bypassed
+        if depositor.unbonding_info.len() as u8 >= MAX_CLAIMS {
+            return Err(ContractError::MaxUnbondingClaims {});
+        }
         // Place amount in unbonding state as a claim
         depositor.unbonding_info.push(Claim {
             amount: Decimal256::from_uint256(Uint256::from(net_coin_amount.amount)),

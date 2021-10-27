@@ -63,6 +63,9 @@ pub enum ContractError {
     #[error("Invalid claim amount")]
     InvalidClaimAmount {},
 
+    #[error("Max number of concurrent unbonding claims for this users has been reached")]
+    MaxUnbondingClaims {},
+
     #[error("Lottery claim is invalid, as lottery has not still being awarded")]
     InvalidLotteryClaim {},
 

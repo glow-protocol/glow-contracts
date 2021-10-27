@@ -18,7 +18,7 @@ use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
     Response, StdError, StdResult, Uint128, WasmMsg,
 };
-use cw0::Duration;
+use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -87,6 +87,7 @@ pub fn instantiate(
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
             next_lottery_exec_time: Duration::Time(msg.lottery_interval + msg.block_time)
                 .after(&env.block),
+            next_epoch: Duration::Time(msg.lottery_interval + msg.block_time).after(&env.block),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,
@@ -885,6 +886,10 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
+    if !state.next_epoch.is_expired(&env.block) {
+        return Err(ContractError::InvalidEpochExecution {});
+    }
+
     // Compute global Glow rewards
     compute_reward(&mut state, &pool, env.block.height);
 
@@ -916,6 +921,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     };
 
     // Empty total reserve and store state
+    state.next_epoch = Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
     state.total_reserve = Decimal256::zero();
     STATE.save(deps.storage, &state)?;
 
@@ -1161,6 +1167,8 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
         award_available: state.award_available,
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,
+        next_lottery_exec_time: state.next_lottery_exec_time,
+        next_epoch: state.next_epoch,
         last_reward_updated: state.last_reward_updated,
         global_reward_index: state.global_reward_index,
         glow_emission_rate: state.glow_emission_rate,

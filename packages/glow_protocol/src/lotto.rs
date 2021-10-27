@@ -135,6 +135,8 @@ pub struct StateResponse {
     pub award_available: Decimal256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
+    pub next_lottery_exec_time: Expiration,
+    pub next_epoch: Expiration,
     pub last_reward_updated: u64,
     pub global_reward_index: Decimal256,
     pub glow_emission_rate: Decimal256,

@@ -8,6 +8,8 @@
     "global_reward_index",
     "glow_emission_rate",
     "last_reward_updated",
+    "next_epoch",
+    "next_lottery_exec_time",
     "next_lottery_time",
     "total_reserve",
     "total_tickets"
@@ -31,6 +33,12 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
+    },
+    "next_epoch": {
+      "$ref": "#/definitions/Expiration"
+    },
+    "next_lottery_exec_time": {
+      "$ref": "#/definitions/Expiration"
     },
     "next_lottery_time": {
       "$ref": "#/definitions/Expiration"

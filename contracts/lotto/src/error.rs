@@ -90,6 +90,9 @@ pub enum ContractError {
     #[error("Invalid execution of the lottery prize. The lottery must be executed first.")]
     InvalidLotteryPrizeExecution {},
 
+    #[error("Invalid execute epochs execution")]
+    InvalidEpochExecution {},
+
     #[error("Unauthorized")]
     Unauthorized {},
 }

@@ -71,16 +71,6 @@
                 }
               ]
             },
-            "split_factor": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Decimal256"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
             "unbonding_period": {
               "type": [
                 "integer",

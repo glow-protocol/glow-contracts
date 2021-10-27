@@ -181,6 +181,8 @@ fn proper_initialization() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -416,6 +418,8 @@ fn deposit() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -770,6 +774,8 @@ fn gift_tickets() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1016,6 +1022,8 @@ fn withdraw() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1290,6 +1298,8 @@ fn instant_withdraw() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -3074,7 +3084,18 @@ fn execute_epoch_operations() {
     STATE.save(deps.as_mut().storage, &state).unwrap();
     env.block.height += 100;
 
+    // fails, next epoch time not expired
     let msg = ExecuteMsg::ExecuteEpochOps {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    match res {
+        Err(ContractError::InvalidEpochExecution {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    //Advance to next epoch
+    if let Duration::Time(time) = (WEEK + HOUR).unwrap() {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     assert_eq!(
@@ -3099,8 +3120,10 @@ fn execute_epoch_operations() {
             current_lottery: 0,
             last_reward_updated: 12445,
             global_reward_index: Decimal256::zero(),
-            next_lottery_time: WEEK.after(&env.block),
-            glow_emission_rate: Decimal256::one()
+            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            glow_emission_rate: Decimal256::one(),
+            next_epoch: WEEK.after(&env.block)
         }
     );
 }

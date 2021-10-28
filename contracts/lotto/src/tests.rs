@@ -1634,7 +1634,7 @@ fn claim_lottery_single_winner() {
     // Claim lottery should work, even if there are no unbonded claims
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let prize = calculate_winner_prize(
+    let mut prize = calculate_winner_prize(
         awarded_prize,
         prizes.matches,
         lottery.number_winners,
@@ -1649,6 +1649,15 @@ fn claim_lottery_single_winner() {
             matches: [0, 0, 0, 0, 0, 1]
         }
     );
+
+    //deduct reserve fee
+    let config = query_config(deps.as_ref()).unwrap();
+    let reserve_fee = Uint256::from(prize) * config.reserve_factor;
+    prize -= Uint128::from(reserve_fee);
+
+    //check total_reserve
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.total_reserve, Decimal256::from_uint256(reserve_fee));
 
     assert_eq!(
         res.messages,

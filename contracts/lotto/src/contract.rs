@@ -745,9 +745,8 @@ pub fn execute_claim(
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let mut to_send = claim_deposits(deps.storage, &info.sender, &env.block, None)?;
-    let mut depositor: DepositorInfo = read_depositor_info(deps.as_ref().storage, &info.sender);
-
+    let (mut to_send, mut depositor) =
+        claim_deposits(deps.storage, &info.sender, &env.block, None)?;
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});

@@ -302,7 +302,10 @@ pub fn deposit(
         query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
 
     // Discount tx taxes
-    let net_coin_amount = deduct_tax(deps.as_ref(), coin(deposit_amount.into(), "uusd"))?;
+    let net_coin_amount = deduct_tax(
+        deps.as_ref(),
+        coin(deposit_amount.into(), config.stable_denom.clone()),
+    )?;
     let amount = net_coin_amount.amount;
 
     // add amount of aUST entitled from the deposit
@@ -433,7 +436,10 @@ pub fn execute_sponsor(
             query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
 
         // Discount tx taxes
-        let net_coin_amount = deduct_tax(deps.as_ref(), coin(sponsor_amount.into(), "uusd"))?;
+        let net_coin_amount = deduct_tax(
+            deps.as_ref(),
+            coin(sponsor_amount.into(), config.stable_denom.clone()),
+        )?;
         let net_sponsor_amount = net_coin_amount.amount;
 
         // add amount of aUST entitled from the deposit
@@ -538,7 +544,10 @@ pub fn execute_sponsor_withdraw(
     // Discount tx taxes
     let net_coin_amount = deduct_tax(
         deps.as_ref(),
-        coin((sponsor_info.amount * Uint256::one()).into(), "uusd"),
+        coin(
+            (sponsor_info.amount * Uint256::one()).into(),
+            config.stable_denom,
+        ),
     )?;
 
     msgs.push(CosmosMsg::Bank(BankMsg::Send {
@@ -685,7 +694,10 @@ pub fn execute_withdraw(
         withdrawal_fee = return_amount * config.instant_withdrawal_fee;
         return_amount = return_amount.sub(withdrawal_fee);
         // Discount tx taxes
-        let net_coin_amount = deduct_tax(deps.as_ref(), coin(return_amount.into(), "uusd"))?;
+        let net_coin_amount = deduct_tax(
+            deps.as_ref(),
+            coin(return_amount.into(), config.stable_denom),
+        )?;
 
         msgs.push(CosmosMsg::Bank(BankMsg::Send {
             to_address: info.sender.to_string(),
@@ -693,7 +705,10 @@ pub fn execute_withdraw(
         }));
     } else {
         // Discount tx taxes
-        let net_coin_amount = deduct_tax(deps.as_ref(), coin(return_amount.into(), "uusd"))?;
+        let net_coin_amount = deduct_tax(
+            deps.as_ref(),
+            coin(return_amount.into(), config.stable_denom),
+        )?;
         // Check max unbonding_info concurrent claims is not bypassed
         if depositor.unbonding_info.len() as u8 >= MAX_CLAIMS {
             return Err(ContractError::MaxUnbondingClaims {});
@@ -785,14 +800,17 @@ pub fn execute_claim(
     }
 
     // Deduct taxes on the claim
-    let net_coin_amount = deduct_tax(deps.as_ref(), coin(to_send.into(), "uusd"))?;
+    let net_coin_amount = deduct_tax(
+        deps.as_ref(),
+        coin(to_send.into(), config.stable_denom.clone()),
+    )?;
     let net_send = net_coin_amount.amount;
 
     // Double-check if there is enough balance to send in the contract
     let balance = query_balance(
         deps.as_ref(),
         env.contract.address.to_string(),
-        String::from("uusd"),
+        config.stable_denom.clone(),
     )?;
 
     if net_send > balance.into() {

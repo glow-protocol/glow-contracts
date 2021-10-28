@@ -454,12 +454,14 @@ fn deposit() {
     assert_eq!(
         res.attributes,
         vec![
-            attr("action", "batch_deposit"),
+            attr("action", "deposit"),
             attr("depositor", "addr0000"),
+            attr("recipient", "addr0000"),
             attr(
                 "deposit_amount",
                 Decimal256::percent(TICKET_PRICE * 2u64).to_string()
             ),
+            attr("tickets", 2u64.to_string()),
             attr(
                 "shares_minted",
                 (Decimal256::percent(TICKET_PRICE * 2u64) / Decimal256::permille(RATE)).to_string()
@@ -638,7 +640,7 @@ fn gift_tickets() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let wrong_amount = Decimal256::percent(TICKET_PRICE * 4);
+    let wrong_amount = Decimal256::percent(TICKET_PRICE);
 
     // correct base denom, deposit different to TICKET_PRICE
     let info = mock_info(
@@ -810,8 +812,8 @@ fn gift_tickets() {
     assert_eq!(
         res.attributes,
         vec![
-            attr("action", "gift_tickets"),
-            attr("gifter", "addr0000"),
+            attr("action", "deposit"),
+            attr("depositor", "addr0000"),
             attr("recipient", "addr1111"),
             attr(
                 "deposit_amount",

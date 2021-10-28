@@ -33,12 +33,12 @@ pub fn claim_deposits(
     addr: &Addr,
     block: &BlockInfo,
     cap: Option<Uint128>,
-) -> StdResult<Uint128> {
+) -> StdResult<(Uint128, DepositorInfo)> {
     let mut to_send = Uint128::zero();
     let mut depositor = read_depositor_info(storage, addr);
 
     if depositor.unbonding_info.is_empty() {
-        return Ok(to_send);
+        return Ok((to_send, depositor));
     }
 
     let (_send, waiting): (Vec<_>, _) = depositor.unbonding_info.iter().cloned().partition(|c| {
@@ -59,7 +59,7 @@ pub fn claim_deposits(
     });
     depositor.unbonding_info = waiting;
     store_depositor_info(storage, addr, &depositor)?;
-    Ok(to_send)
+    Ok((to_send, depositor))
 }
 
 pub fn calculate_winner_prize(

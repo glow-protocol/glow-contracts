@@ -1,5 +1,6 @@
 use crate::contract::{execute, instantiate, query};
 
+use cosmwasm_bignumber::Decimal256;
 use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
 use cosmwasm_std::{from_binary, to_binary, CosmosMsg, StdError, SubMsg, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
@@ -18,10 +19,10 @@ fn proper_initialization() {
             "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
-        emission_cap: Default::default(), //TODO: assign default values
-        emission_floor: Default::default(),
-        increment_multiplier: Default::default(),
-        decrement_multiplier: Default::default(),
+        emission_cap: Decimal256::percent(3000u64),
+        emission_floor: Decimal256::percent(1000u64),
+        increment_multiplier: Decimal256::percent(150u64),
+        decrement_multiplier: Decimal256::percent(120u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -58,10 +59,10 @@ fn update_config() {
             "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
-        emission_cap: Default::default(),
-        emission_floor: Default::default(),
-        increment_multiplier: Default::default(),
-        decrement_multiplier: Default::default(),
+        emission_cap: Decimal256::percent(3000u64),
+        emission_floor: Decimal256::percent(1000u64),
+        increment_multiplier: Decimal256::percent(150u64),
+        decrement_multiplier: Decimal256::percent(120u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -93,7 +94,7 @@ fn update_config() {
         decrement_multiplier: None,
     };
     let info = mock_info("addr0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
 
     match res {
         Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
@@ -101,6 +102,52 @@ fn update_config() {
     }
 
     let info = mock_info("owner", &[]);
+
+    // invalid params
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        spend_limit: None,
+        emission_cap: Some(Decimal256::percent(145u64)),
+        emission_floor: None,
+        increment_multiplier: None,
+        decrement_multiplier: None,
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => assert_eq!(
+            msg,
+            "Emission cap must be greater or equal than emission floor"
+        ),
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        spend_limit: None,
+        emission_cap: None,
+        emission_floor: None,
+        increment_multiplier: Some(Decimal256::percent(99u64)),
+        decrement_multiplier: None,
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+
+    match res {
+        Err(StdError::GenericErr { msg, .. }) => {
+            assert_eq!(msg, "Increment multiplier must be equal or greater than 1")
+        }
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // correct update config
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        spend_limit: Some(Uint128::from(500000u128)),
+        emission_cap: None,
+        emission_floor: None,
+        increment_multiplier: None,
+        decrement_multiplier: None,
+    };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     let config: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
@@ -115,10 +162,10 @@ fn update_config() {
                 "addr3".to_string(),
             ],
             spend_limit: Uint128::from(500000u128),
-            emission_cap: Default::default(),
-            emission_floor: Default::default(),
-            increment_multiplier: Default::default(),
-            decrement_multiplier: Default::default()
+            emission_cap: Decimal256::percent(3000u64),
+            emission_floor: Decimal256::percent(1000u64),
+            increment_multiplier: Decimal256::percent(150u64),
+            decrement_multiplier: Decimal256::percent(120u64),
         }
     );
 }
@@ -136,10 +183,10 @@ fn transfer_to_gov() {
             "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
-        emission_cap: Default::default(),
-        emission_floor: Default::default(),
-        increment_multiplier: Default::default(),
-        decrement_multiplier: Default::default(),
+        emission_cap: Decimal256::percent(3000u64),
+        emission_floor: Decimal256::percent(1000u64),
+        increment_multiplier: Decimal256::percent(150u64),
+        decrement_multiplier: Decimal256::percent(120u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -193,10 +240,10 @@ fn transfer_to_gov() {
                 "addr3".to_string(),
             ],
             spend_limit: Uint128::from(1000000u128),
-            emission_cap: Default::default(),
-            emission_floor: Default::default(),
-            increment_multiplier: Default::default(),
-            decrement_multiplier: Default::default()
+            emission_cap: Decimal256::percent(3000u64),
+            emission_floor: Decimal256::percent(1000u64),
+            increment_multiplier: Decimal256::percent(150u64),
+            decrement_multiplier: Decimal256::percent(120u64),
         }
     );
 }
@@ -214,10 +261,10 @@ fn test_add_remove_distributor() {
             "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
-        emission_cap: Default::default(),
-        emission_floor: Default::default(),
-        increment_multiplier: Default::default(),
-        decrement_multiplier: Default::default(),
+        emission_cap: Decimal256::percent(3000u64),
+        emission_floor: Decimal256::percent(1000u64),
+        increment_multiplier: Decimal256::percent(150u64),
+        decrement_multiplier: Decimal256::percent(120u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -270,10 +317,10 @@ fn test_add_remove_distributor() {
                 "addr4".to_string(),
             ],
             spend_limit: Uint128::from(1000000u128),
-            emission_cap: Default::default(),
-            emission_floor: Default::default(),
-            increment_multiplier: Default::default(),
-            decrement_multiplier: Default::default()
+            emission_cap: Decimal256::percent(3000u64),
+            emission_floor: Decimal256::percent(1000u64),
+            increment_multiplier: Decimal256::percent(150u64),
+            decrement_multiplier: Decimal256::percent(120u64),
         }
     );
 
@@ -297,10 +344,10 @@ fn test_add_remove_distributor() {
                 "addr4".to_string(),
             ],
             spend_limit: Uint128::from(1000000u128),
-            emission_cap: Default::default(),
-            emission_floor: Default::default(),
-            increment_multiplier: Default::default(),
-            decrement_multiplier: Default::default()
+            emission_cap: Decimal256::percent(3000u64),
+            emission_floor: Decimal256::percent(1000u64),
+            increment_multiplier: Decimal256::percent(150u64),
+            decrement_multiplier: Decimal256::percent(120u64),
         }
     );
 }
@@ -318,10 +365,10 @@ fn test_spend() {
             "addr3".to_string(),
         ],
         spend_limit: Uint128::from(1000000u128),
-        emission_cap: Default::default(),
-        emission_floor: Default::default(),
-        increment_multiplier: Default::default(),
-        decrement_multiplier: Default::default(),
+        emission_cap: Decimal256::percent(3000u64),
+        emission_floor: Decimal256::percent(1000u64),
+        increment_multiplier: Decimal256::percent(150u64),
+        decrement_multiplier: Decimal256::percent(120u64),
     };
 
     let info = mock_info("addr0000", &[]);

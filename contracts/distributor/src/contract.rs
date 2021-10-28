@@ -28,6 +28,24 @@ pub fn instantiate(
         .map(|w| deps.api.addr_canonicalize(&w))
         .collect::<StdResult<Vec<CanonicalAddr>>>()?;
 
+    if msg.increment_multiplier < Decimal256::one() {
+        return Err(StdError::generic_err(
+            "Increment multiplier must be equal or greater than 1",
+        ));
+    }
+
+    if msg.decrement_multiplier < Decimal256::one() {
+        return Err(StdError::generic_err(
+            "Decrement multiplier must be equal or greater than 1",
+        ));
+    }
+
+    if msg.emission_cap < msg.emission_floor {
+        return Err(StdError::generic_err(
+            "Emission cap must be greater or equal than emission floor",
+        ));
+    }
+
     store_config(
         deps.storage,
         &Config {
@@ -111,16 +129,26 @@ pub fn update_config(
     }
 
     if let Some(increment_multiplier) = increment_multiplier {
+        if increment_multiplier < Decimal256::one() {
+            return Err(StdError::generic_err(
+                "Increment multiplier must be equal or greater than 1",
+            ));
+        }
         config.increment_multiplier = increment_multiplier;
     }
 
     if let Some(decrement_multiplier) = decrement_multiplier {
+        if decrement_multiplier < Decimal256::one() {
+            return Err(StdError::generic_err(
+                "Decrement multiplier must be equal or greater than 1",
+            ));
+        }
         config.decrement_multiplier = decrement_multiplier;
     }
 
     if config.emission_cap < config.emission_floor {
         return Err(StdError::generic_err(
-            "Emission cap must be greater than floor",
+            "Emission cap must be greater or equal than emission floor",
         ));
     }
 

@@ -250,7 +250,7 @@ pub fn deposit(
         };
     }
 
-    let amount_tickets = combinations.len() as u64;
+    let mut amount_tickets = combinations.len() as u64;
     let required_amount = config.ticket_price * Uint256::from(amount_tickets);
     if deposit_amount < required_amount {
         return if let Some(_recipient) = recipient {
@@ -291,6 +291,7 @@ pub fn deposit(
         let sequence = &current_time.to_string()[current_time.to_string().len() - 5..];
 
         new_combinations.push(sequence.to_string());
+        amount_tickets += 1;
     }
 
     compute_reward(&mut state, &pool, env.block.height);

@@ -147,17 +147,19 @@ pub fn execute(
         ExecuteMsg::RegisterContracts {
             gov_contract,
             distributor_contract,
-        } => register_contracts(deps, info, gov_contract, distributor_contract),
-        ExecuteMsg::Deposit { combinations } => deposit(deps, env, info, combinations),
+        } => execute_register_contracts(deps, info, gov_contract, distributor_contract),
+        ExecuteMsg::Deposit { combinations } => execute_deposit(deps, env, info, combinations),
         ExecuteMsg::Gift {
             combinations,
             recipient,
-        } => gift_tickets(deps, env, info, combinations, recipient),
-        ExecuteMsg::Sponsor { award } => sponsor(deps, env, info, award),
-        ExecuteMsg::SponsorWithdraw {} => sponsor_withdraw(deps, env, info),
-        ExecuteMsg::Withdraw { amount, instant } => withdraw(deps, env, info, amount, instant),
-        ExecuteMsg::Claim { lottery } => claim(deps, env, info, lottery),
-        ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
+        } => execute_gift(deps, env, info, combinations, recipient),
+        ExecuteMsg::Sponsor { award } => execute_sponsor(deps, env, info, award),
+        ExecuteMsg::SponsorWithdraw {} => execute_sponsor_withdraw(deps, env, info),
+        ExecuteMsg::Withdraw { amount, instant } => {
+            execute_withdraw(deps, env, info, amount, instant)
+        }
+        ExecuteMsg::Claim { lottery } => execute_claim(deps, env, info, lottery),
+        ExecuteMsg::ClaimRewards {} => execute_claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
@@ -167,7 +169,7 @@ pub fn execute(
             reserve_factor,
             instant_withdrawal_fee,
             unbonding_period,
-        } => update_config(
+        } => execute_update_config(
             deps,
             info,
             owner,
@@ -182,7 +184,7 @@ pub fn execute(
             ticket_price,
             prize_distribution,
             round_delta,
-        } => update_lottery_config(
+        } => execute_update_lottery_config(
             deps,
             info,
             lottery_interval,
@@ -194,7 +196,7 @@ pub fn execute(
     }
 }
 
-pub fn register_contracts(
+pub fn execute_register_contracts(
     deps: DepsMut,
     info: MessageInfo,
     gov_contract: String,
@@ -221,11 +223,11 @@ pub fn register_contracts(
     Ok(Response::default())
 }
 
-// Deposit UST and get pool shares and tickets in return
 pub fn deposit(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    recipient: Option<String>,
     combinations: Vec<String>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
@@ -241,13 +243,21 @@ pub fn deposit(
         .unwrap_or_else(Uint256::zero);
 
     if deposit_amount.is_zero() {
-        return Err(ContractError::InvalidDepositAmount {});
+        return if let Some(_recipient) = recipient {
+            Err(ContractError::InvalidGiftAmount {})
+        } else {
+            Err(ContractError::InvalidDepositAmount {})
+        };
     }
 
     let amount_tickets = combinations.len() as u64;
     let required_amount = config.ticket_price * Uint256::from(amount_tickets);
     if deposit_amount < required_amount {
-        return Err(ContractError::InsufficientDepositAmount(amount_tickets));
+        return if let Some(_recipient) = recipient {
+            Err(ContractError::InsufficientGiftDepositAmount(amount_tickets))
+        } else {
+            Err(ContractError::InsufficientDepositAmount(amount_tickets))
+        };
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
@@ -255,7 +265,12 @@ pub fn deposit(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    let depositor = info.sender.clone();
+    let depositor = if let Some(recipient) = recipient {
+        deps.api.addr_validate(recipient.as_str())?
+    } else {
+        info.sender.clone()
+    };
+
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
     for combination in combinations.clone() {
@@ -347,16 +362,28 @@ pub fn deposit(
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })])
         .add_attributes(vec![
-            attr("action", "batch_deposit"),
+            attr("action", "deposit"),
             attr("depositor", info.sender.to_string()),
+            attr("recipient", depositor.to_string()),
             attr("deposit_amount", deposit_amount.to_string()),
+            attr("tickets", amount_tickets.to_string()),
             attr("shares_minted", minted_amount.to_string()),
         ]))
 }
 
+// Deposit UST and get pool shares and tickets in return
+pub fn execute_deposit(
+    mut deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    combinations: Vec<String>,
+) -> Result<Response, ContractError> {
+    deposit(deps.branch(), env, info, None, combinations)
+}
+
 // Gift several tickets at once to a given address
-pub fn gift_tickets(
-    deps: DepsMut,
+pub fn execute_gift(
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
     combinations: Vec<String>,
@@ -365,139 +392,11 @@ pub fn gift_tickets(
     if to == info.sender {
         return Err(ContractError::InvalidGift {});
     }
-
-    let config = CONFIG.load(deps.storage)?;
-    let mut state = STATE.load(deps.storage)?;
-    let mut pool = POOL.load(deps.storage)?;
-
-    // Check deposit is in base stable denom
-    let deposit_amount = info
-        .funds
-        .iter()
-        .find(|c| c.denom == config.stable_denom)
-        .map(|c| Uint256::from(c.amount))
-        .unwrap_or_else(Uint256::zero);
-
-    if deposit_amount.is_zero() {
-        return Err(ContractError::InvalidGiftAmount {});
-    }
-
-    let amount_tickets = combinations.len() as u64;
-    let required_amount = config.ticket_price * Uint256::from(amount_tickets);
-    if deposit_amount != required_amount {
-        return Err(ContractError::InsufficientGiftDepositAmount(amount_tickets));
-    }
-
-    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if current_lottery.rand_round != 0 {
-        return Err(ContractError::LotteryAlreadyStarted {});
-    }
-
-    for combination in combinations.clone() {
-        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
-            return Err(ContractError::InvalidSequence {});
-        }
-    }
-
-    let recipient = deps.api.addr_validate(to.as_str())?;
-    let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &recipient);
-
-    let mut new_combinations = combinations.clone();
-    // check if we need to round up number of combinations based on depositor total deposits
-    if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
-        / config.ticket_price)
-        >= (Decimal256::from_uint256(Uint256::from(
-            (depositor_info.tickets.len() + combinations.len()) as u128,
-        )) + Decimal256::one())
-    {
-        let current_time = env.block.time.nanos();
-        let sequence = &current_time.to_string()[current_time.to_string().len() - 5..];
-
-        new_combinations.push(sequence.to_string());
-    }
-
-    // Compute Glow rewards of recipient
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor_info);
-
-    // query exchange_rate from anchor money market
-    let epoch_state: EpochStateResponse =
-        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
-
-    // Discount tx taxes
-    let net_coin_amount = deduct_tax(deps.as_ref(), coin(deposit_amount.into(), "uusd"))?;
-    let amount = net_coin_amount.amount;
-
-    // add amount of aUST entitled from the deposit
-    let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
-    depositor_info.deposit_amount = depositor_info
-        .deposit_amount
-        .add(Decimal256::from_uint256(deposit_amount));
-    depositor_info.shares = depositor_info.shares.add(minted_amount);
-
-    for combination in combinations.clone() {
-        if let Some(holders) = TICKETS
-            .may_load(deps.storage, combination.as_bytes())
-            .unwrap()
-        {
-            if holders.len() >= config.max_holders as usize {
-                return Err(ContractError::InvalidHolderSequence {});
-            }
-        }
-
-        let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
-            let mut b = a.unwrap_or_default();
-            b.push(recipient.clone());
-            Ok(b)
-        };
-
-        TICKETS
-            .update(deps.storage, combination.as_bytes(), add_ticket)
-            .unwrap();
-
-        depositor_info.tickets.push(combination);
-    }
-
-    // Update global state and pool
-    state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
-    pool.deposit_shares = pool
-        .deposit_shares
-        .add(minted_amount - minted_amount * config.split_factor);
-    pool.lottery_deposits = pool
-        .lottery_deposits
-        .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
-
-    pool.total_deposits = pool
-        .total_deposits
-        .add(Decimal256::from_uint256(deposit_amount));
-
-    // Update depositor and state information
-    store_depositor_info(deps.storage, &recipient, &depositor_info)?;
-    STATE.save(deps.storage, &state)?;
-    POOL.save(deps.storage, &pool)?;
-
-    Ok(Response::new()
-        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.anchor_contract.to_string(),
-            funds: vec![Coin {
-                denom: config.stable_denom,
-                amount,
-            }],
-            msg: to_binary(&AnchorMsg::DepositStable {})?,
-        }))
-        .add_attributes(vec![
-            attr("action", "gift_tickets"),
-            attr("gifter", info.sender.to_string()),
-            attr("recipient", to),
-            attr("deposit_amount", deposit_amount.to_string()),
-            attr("tickets", amount_tickets.to_string()),
-            attr("shares_minted", minted_amount.to_string()),
-        ]))
+    deposit(deps.branch(), env, info, Some(to), combinations)
 }
 
 // Make a donation deposit to the lottery pool
-pub fn sponsor(
+pub fn execute_sponsor(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -574,7 +473,7 @@ pub fn sponsor(
     ]))
 }
 
-pub fn sponsor_withdraw(
+pub fn execute_sponsor_withdraw(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -658,7 +557,7 @@ pub fn sponsor_withdraw(
     ]))
 }
 
-pub fn withdraw(
+pub fn execute_withdraw(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -820,7 +719,7 @@ pub fn withdraw(
 }
 
 // Send available UST to user from current redeemable balance and unbonded deposits
-pub fn claim(
+pub fn execute_claim(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -963,7 +862,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     ]))
 }
 
-pub fn claim_rewards(
+pub fn execute_claim_rewards(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -1005,7 +904,7 @@ pub fn claim_rewards(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn update_config(
+pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
@@ -1054,7 +953,7 @@ pub fn update_config(
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
 }
 
-pub fn update_lottery_config(
+pub fn execute_update_lottery_config(
     deps: DepsMut,
     info: MessageInfo,
     lottery_interval: Option<u64>,

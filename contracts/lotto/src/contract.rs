@@ -764,6 +764,11 @@ pub fn execute_claim(
                 config.prize_distribution,
             );
 
+            // Deduct reserve fee
+            let reserve_fee = Uint256::from(to_send) * config.reserve_factor;
+            to_send -= Uint128::from(reserve_fee);
+            state.total_reserve += Decimal256::from_uint256(reserve_fee);
+
             PRIZES.save(
                 deps.storage,
                 (&info.sender, lottery_key),

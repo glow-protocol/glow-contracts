@@ -99,6 +99,8 @@ pub enum QueryMsg {
     PrizeInfo { address: String, lottery_id: u64 },
     /// Depositor information by address
     Depositor { address: String },
+    /// Sponsor information by address
+    Sponsor { address: String },
     /// List (paginated) of depositors information
     Depositors {
         start_after: Option<String>,
@@ -173,6 +175,16 @@ pub struct DepositorInfoResponse {
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SponsorInfoResponse {
+    pub sponsor: String,
+    pub amount: Decimal256,
+    pub shares: Decimal256,
+    pub reward_index: Decimal256,
+    pub pending_rewards: Decimal256,
 }
 
 // We define a custom struct for each query response

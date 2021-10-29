@@ -144,6 +144,27 @@
       "additionalProperties": false
     },
     {
+      "description": "Sponsor information by address",
+      "type": "object",
+      "required": [
+        "sponsor"
+      ],
+      "properties": {
+        "sponsor": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "List (paginated) of depositors information",
       "type": "object",
       "required": [

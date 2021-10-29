@@ -22,7 +22,7 @@ fn proper_initialization() {
         emission_cap: Decimal256::percent(3000u64),
         emission_floor: Decimal256::percent(1000u64),
         increment_multiplier: Decimal256::percent(150u64),
-        decrement_multiplier: Decimal256::percent(120u64),
+        decrement_multiplier: Decimal256::percent(99u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -62,7 +62,7 @@ fn update_config() {
         emission_cap: Decimal256::percent(3000u64),
         emission_floor: Decimal256::percent(1000u64),
         increment_multiplier: Decimal256::percent(150u64),
-        decrement_multiplier: Decimal256::percent(120u64),
+        decrement_multiplier: Decimal256::percent(99u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -165,7 +165,7 @@ fn update_config() {
             emission_cap: Decimal256::percent(3000u64),
             emission_floor: Decimal256::percent(1000u64),
             increment_multiplier: Decimal256::percent(150u64),
-            decrement_multiplier: Decimal256::percent(120u64),
+            decrement_multiplier: Decimal256::percent(99u64),
         }
     );
 }
@@ -186,7 +186,7 @@ fn transfer_to_gov() {
         emission_cap: Decimal256::percent(3000u64),
         emission_floor: Decimal256::percent(1000u64),
         increment_multiplier: Decimal256::percent(150u64),
-        decrement_multiplier: Decimal256::percent(120u64),
+        decrement_multiplier: Decimal256::percent(99u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -243,7 +243,7 @@ fn transfer_to_gov() {
             emission_cap: Decimal256::percent(3000u64),
             emission_floor: Decimal256::percent(1000u64),
             increment_multiplier: Decimal256::percent(150u64),
-            decrement_multiplier: Decimal256::percent(120u64),
+            decrement_multiplier: Decimal256::percent(99u64),
         }
     );
 }
@@ -264,7 +264,7 @@ fn test_add_remove_distributor() {
         emission_cap: Decimal256::percent(3000u64),
         emission_floor: Decimal256::percent(1000u64),
         increment_multiplier: Decimal256::percent(150u64),
-        decrement_multiplier: Decimal256::percent(120u64),
+        decrement_multiplier: Decimal256::percent(99u64),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -320,7 +320,7 @@ fn test_add_remove_distributor() {
             emission_cap: Decimal256::percent(3000u64),
             emission_floor: Decimal256::percent(1000u64),
             increment_multiplier: Decimal256::percent(150u64),
-            decrement_multiplier: Decimal256::percent(120u64),
+            decrement_multiplier: Decimal256::percent(99u64),
         }
     );
 
@@ -347,7 +347,7 @@ fn test_add_remove_distributor() {
             emission_cap: Decimal256::percent(3000u64),
             emission_floor: Decimal256::percent(1000u64),
             increment_multiplier: Decimal256::percent(150u64),
-            decrement_multiplier: Decimal256::percent(120u64),
+            decrement_multiplier: Decimal256::percent(99u64),
         }
     );
 }
@@ -368,7 +368,7 @@ fn test_spend() {
         emission_cap: Decimal256::percent(3000u64),
         emission_floor: Decimal256::percent(1000u64),
         increment_multiplier: Decimal256::percent(150u64),
-        decrement_multiplier: Decimal256::percent(120u64),
+        decrement_multiplier: Decimal256::percent(99u64),
     };
 
     let info = mock_info("addr0000", &[]);

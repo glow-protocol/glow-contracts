@@ -34,9 +34,9 @@ pub fn instantiate(
         ));
     }
 
-    if msg.decrement_multiplier < Decimal256::one() {
+    if msg.decrement_multiplier > Decimal256::one() {
         return Err(StdError::generic_err(
-            "Decrement multiplier must be equal or greater than 1",
+            "Decrement multiplier must be equal or smaller than 1",
         ));
     }
 
@@ -138,9 +138,9 @@ pub fn update_config(
     }
 
     if let Some(decrement_multiplier) = decrement_multiplier {
-        if decrement_multiplier < Decimal256::one() {
+        if decrement_multiplier > Decimal256::one() {
             return Err(StdError::generic_err(
-                "Decrement multiplier must be equal or greater than 1",
+                "Decrement multiplier must be equal or smaller than 1",
             ));
         }
         config.decrement_multiplier = decrement_multiplier;

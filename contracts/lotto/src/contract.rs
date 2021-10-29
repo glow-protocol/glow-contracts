@@ -22,7 +22,11 @@ use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::{Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg, InstantiateMsg, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg, StateResponse, TicketInfoResponse, SponsorInfoResponse};
+use glow_protocol::lotto::{
+    Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
+    InstantiateMsg, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg,
+    SponsorInfoResponse, StateResponse, TicketInfoResponse,
+};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};

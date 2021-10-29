@@ -82,6 +82,8 @@ pub struct DepositorInfo {
 pub struct SponsorInfo {
     pub amount: Decimal256,
     pub shares: Decimal256,
+    pub pending_rewards: Decimal256,
+    pub reward_index: Decimal256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -166,6 +168,8 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
         _ => SponsorInfo {
             amount: Decimal256::zero(),
             shares: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+            reward_index: Decimal256::zero(),
         },
     }
 }

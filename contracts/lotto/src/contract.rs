@@ -4,7 +4,7 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
-    is_valid_sequence,
+    compute_sponsor_reward, is_valid_sequence,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -22,11 +22,7 @@ use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::{
-    Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
-    InstantiateMsg, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg, StateResponse,
-    TicketInfoResponse,
-};
+use glow_protocol::lotto::{Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg, InstantiateMsg, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg, StateResponse, TicketInfoResponse, SponsorInfoResponse};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
@@ -448,6 +444,11 @@ pub fn execute_sponsor(
 
         // fetch sponsor_info
         let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
+
+        // update sponsor sponsor rewards
+        compute_reward(&mut state, &pool, env.block.height);
+        compute_sponsor_reward(&state, &mut sponsor_info);
+
         // add sponsor_amount to depositor
         sponsor_info.amount = sponsor_info
             .amount
@@ -500,7 +501,9 @@ pub fn execute_sponsor_withdraw(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
+    // Compute Glow depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
+    compute_sponsor_reward(&state, &mut sponsor_info);
 
     // Calculate aust amount to redeem based on depositor amount
     let contract_a_balance = query_token_balance(
@@ -896,16 +899,20 @@ pub fn execute_claim_rewards(
 
     let depositor_address = info.sender.as_str();
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
+    let mut sponsor: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
+    compute_sponsor_reward(&state, &mut sponsor);
 
-    let claim_amount = depositor.pending_rewards * Uint256::one();
+    let claim_amount = (depositor.pending_rewards + sponsor.pending_rewards) * Uint256::one();
     depositor.pending_rewards = Decimal256::zero();
+    sponsor.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
     store_depositor_info(deps.storage, &info.sender, &depositor)?;
+    store_sponsor_info(deps.storage, &info.sender, &sponsor)?;
 
     let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -1045,6 +1052,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             lottery_id,
         } => to_binary(&query_prizes(deps, address, lottery_id)?),
         QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, address)?),
+        QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, address)?),
         QueryMsg::Depositors { start_after, limit } => {
             to_binary(&query_depositors(deps, start_after, limit)?)
         }
@@ -1180,6 +1188,18 @@ pub fn query_depositor(deps: Deps, addr: String) -> StdResult<DepositorInfoRespo
         pending_rewards: depositor.pending_rewards,
         tickets: depositor.tickets,
         unbonding_info: depositor.unbonding_info,
+    })
+}
+
+pub fn query_sponsor(deps: Deps, addr: String) -> StdResult<SponsorInfoResponse> {
+    let address = deps.api.addr_validate(&addr)?;
+    let sponsor = read_sponsor_info(deps.storage, &address);
+    Ok(SponsorInfoResponse {
+        sponsor: addr,
+        amount: sponsor.amount,
+        shares: sponsor.shares,
+        reward_index: sponsor.reward_index,
+        pending_rewards: sponsor.pending_rewards,
     })
 }
 

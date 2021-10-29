@@ -1,7 +1,9 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, StdResult, Storage, Uint128};
 
-use crate::state::{read_depositor_info, store_depositor_info, DepositorInfo, Pool, State};
+use crate::state::{
+    read_depositor_info, store_depositor_info, DepositorInfo, Pool, SponsorInfo, State,
+};
 
 /// Compute distributed reward and update global reward index
 pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
@@ -12,18 +14,25 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    if !reward_accrued.is_zero() && !pool.total_deposits.is_zero() {
-        state.global_reward_index += reward_accrued / pool.total_deposits;
+    let total_deposited = pool.total_deposits + pool.total_sponsor_amount;
+    if !reward_accrued.is_zero() && !total_deposited.is_zero() {
+        state.global_reward_index += reward_accrued / total_deposited;
     }
 
     state.last_reward_updated = block_height;
 }
 
-/// Compute reward amount a borrower received
+/// Compute reward amount a depositor received
 pub fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
     depositor.pending_rewards +=
         depositor.deposit_amount * (state.global_reward_index - depositor.reward_index);
     depositor.reward_index = state.global_reward_index;
+}
+
+/// Compute reward amount a sponsor received
+pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
+    sponsor.pending_rewards += sponsor.amount * (state.global_reward_index - sponsor.reward_index);
+    sponsor.reward_index = state.global_reward_index;
 }
 
 /// This iterates over all mature claims for the address, and removes them, up to an optional cap.

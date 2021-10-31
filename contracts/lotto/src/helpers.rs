@@ -93,8 +93,28 @@ pub fn calculate_winner_prize(
     to_send
 }
 
+pub fn calculate_max_bound(min_bound: &str) -> String {
+    // Get max bounds
+    let max_bound: Vec<char> = min_bound[..2].chars().collect();
+    let first_char = max_bound[0].to_digit(16).unwrap();
+    let second_char = max_bound[1].to_digit(16).unwrap();
+
+    if second_char == 15 {
+        if first_char == 15 {
+            "fffff".to_string()
+        } else {
+            format!("{:x}0000", first_char + 1)
+        }
+    } else {
+        format!("{}{:x}000", max_bound[0], second_char + 1)
+    }
+}
+
 pub fn is_valid_sequence(sequence: &str, len: u8) -> bool {
-    sequence.len() == (len as usize) && sequence.chars().all(|c| ('0'..='9').contains(&c))
+    sequence.len() == (len as usize)
+        && sequence
+            .chars()
+            .all(|c| c.is_digit(10) || ('a'..='f').contains(&c))
 }
 
 pub fn count_seq_matches(a: &str, b: &str) -> u8 {

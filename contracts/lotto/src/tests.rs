@@ -46,7 +46,7 @@ const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
 
-const WINNING_SEQUENCE: &str = "97753";
+const WINNING_SEQUENCE: &str = "be1ce";
 
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
     InstantiateMsg {
@@ -2202,7 +2202,7 @@ fn execute_prize_winners_diff_ranks() {
 
     // Users buys winning ticket - 2 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("97000")],
+        combinations: vec![String::from("be000")],
     };
     let info = mock_info(
         "addr0001",
@@ -2224,7 +2224,7 @@ fn execute_prize_winners_diff_ranks() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("97000")],
+            tickets: vec![String::from("be000")],
             unbonding_info: vec![]
         }
     );
@@ -2333,7 +2333,7 @@ fn execute_prize_winners_same_rank() {
 
     // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("97750")],
+        combinations: vec![String::from("be1c0")],
     };
     let info = mock_info(
         "addr0000",
@@ -2355,14 +2355,14 @@ fn execute_prize_winners_same_rank() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("97750")],
+            tickets: vec![String::from("be1c0")],
             unbonding_info: vec![]
         }
     );
 
     // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("97750")],
+        combinations: vec![String::from("be1c0")],
     };
     let info = mock_info(
         "addr0001",
@@ -2384,7 +2384,7 @@ fn execute_prize_winners_same_rank() {
             shares: Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from("97750")],
+            tickets: vec![String::from("be1c0")],
             unbonding_info: vec![]
         }
     );
@@ -2497,22 +2497,22 @@ fn execute_prize_one_winner_multiple_ranks() {
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("97754")],
+        combinations: vec![String::from("be1c4")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("97755")],
+        combinations: vec![String::from("be1c5")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("97756")],
+        combinations: vec![String::from("be1c6")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("90757")],
+        combinations: vec![String::from("b01ce")],
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -2528,10 +2528,10 @@ fn execute_prize_one_winner_multiple_ranks() {
             pending_rewards: Decimal256::zero(),
             tickets: vec![
                 String::from(WINNING_SEQUENCE),
-                String::from("97754"),
-                String::from("97755"),
-                String::from("97756"),
-                String::from("90757")
+                String::from("be1c4"),
+                String::from("be1c5"),
+                String::from("be1c6"),
+                String::from("b01ce")
             ],
             unbonding_info: vec![]
         }
@@ -2792,7 +2792,7 @@ fn execute_prize_pagination() {
     for (index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
-            combinations: vec![format!("{:0>5}", 97000 + index)],
+            combinations: vec![format!("be{:0>3}", 100 + index)],
         };
         let info = mock_info(
             address.as_str(),

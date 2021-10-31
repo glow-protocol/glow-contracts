@@ -4,7 +4,7 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
-    compute_sponsor_reward, is_valid_sequence,
+    compute_sponsor_reward, is_valid_sequence, pseudo_random_seq,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -288,9 +288,9 @@ pub fn deposit(
         )) + Decimal256::one())
     {
         let current_time = env.block.time.nanos();
-        let sequence = &current_time.to_string()[current_time.to_string().len() - 5..];
+        let sequence = pseudo_random_seq(info.sender.clone().into_string(), current_time);
 
-        new_combinations.push(sequence.to_string());
+        new_combinations.push(sequence);
         amount_tickets += 1;
     }
 

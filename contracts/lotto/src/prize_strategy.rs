@@ -13,7 +13,7 @@ use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
 
-use crate::helpers::{compute_reward, count_seq_matches};
+use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use moneymarket::market::Cw20HookMsg;
 use std::ops::{Add, Sub};
@@ -168,21 +168,14 @@ pub fn execute_prize(
     };
 
     // Get max bounds
-    let max_bound_number = min_bound[..2].parse::<i32>().unwrap() + 1;
-    let max_bound: String = if max_bound_number < 10 {
-        format!("{}{}", 0, max_bound_number)
-    } else if max_bound_number == 100 {
-        format!("{}", max_bound_number - 1)
-    } else {
-        format!("{}", max_bound_number)
-    };
+    let max_bound = calculate_max_bound(min_bound);
 
     // Get winning tickets
     let winning_tickets: Vec<_> = TICKETS
         .range(
             deps.storage,
             Some(Bound::Inclusive(Vec::from(min_bound))),
-            Some(Bound::Inclusive(Vec::from(max_bound.as_str()))),
+            Some(Bound::Inclusive(Vec::from(max_bound.clone()))),
             Order::Ascending,
         )
         .take(limit)
@@ -195,7 +188,7 @@ pub fn execute_prize(
             .range(
                 deps.storage,
                 Some(Bound::Exclusive(winning_tickets.last().unwrap().clone().0)),
-                Some(Bound::Exclusive(Vec::from(max_bound))),
+                Some(Bound::Inclusive(Vec::from(max_bound))),
                 Order::Ascending,
             )
             .next()

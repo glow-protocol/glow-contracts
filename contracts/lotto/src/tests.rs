@@ -1571,6 +1571,8 @@ fn claim_lottery_single_winner() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+    let exec_height = env.block.height;
+
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -1603,6 +1605,7 @@ fn claim_lottery_single_winner() {
             rand_round: 20170,
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
+            timestamp: exec_height,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 0, 1],
             page: "".to_string()
@@ -1975,6 +1978,7 @@ fn execute_prize_no_winners() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+    let exec_height = env.block.height;
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -1994,6 +1998,7 @@ fn execute_prize_no_winners() {
             rand_round: 20170,
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
+            timestamp: exec_height,
             total_prizes: awarded_prize,
             number_winners: [0; 6],
             page: "".to_string()
@@ -2092,6 +2097,8 @@ fn execute_prize_one_winner() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+    let exec_height = env.block.height;
+
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -2122,6 +2129,7 @@ fn execute_prize_one_winner() {
             rand_round: 20170,
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
+            timestamp: exec_height,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 0, 1],
             page: "".to_string()
@@ -2248,6 +2256,8 @@ fn execute_prize_winners_diff_ranks() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+    let exec_height = env.block.height;
+
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -2280,6 +2290,7 @@ fn execute_prize_winners_diff_ranks() {
             rand_round: 20170,
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
+            timestamp: exec_height,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 1, 0, 0, 1],
             page: "".to_string()
@@ -2408,6 +2419,8 @@ fn execute_prize_winners_same_rank() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+    let exec_height = env.block.height;
+
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -2437,6 +2450,7 @@ fn execute_prize_winners_same_rank() {
             rand_round: 20170,
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
+            timestamp: exec_height,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 2, 0],
             page: "".to_string()
@@ -2555,6 +2569,8 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+    let exec_height = env.block.height;
+
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -2590,6 +2606,7 @@ fn execute_prize_one_winner_multiple_ranks() {
             rand_round: 20170,
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
+            timestamp: exec_height,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 3, 1],
             page: "".to_string()
@@ -2704,6 +2721,8 @@ fn execute_prize_multiple_winners_one_ticket() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+    let exec_height = env.block.height;
+
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -2734,6 +2753,7 @@ fn execute_prize_multiple_winners_one_ticket() {
             rand_round: 20170,
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
+            timestamp: exec_height,
             total_prizes: awarded_prize,
             number_winners: [0, 0, 0, 0, 0, 3],
             page: "".to_string()

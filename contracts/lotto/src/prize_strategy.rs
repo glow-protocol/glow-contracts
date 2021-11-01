@@ -52,6 +52,7 @@ pub fn execute_lottery(
         rand_round: lottery_rand_round,
         sequence: "".to_string(),
         awarded: false,
+        timestamp: env.block.height,
         total_prizes: Decimal256::zero(),
         number_winners: [0; 6],
         page: "".to_string(),

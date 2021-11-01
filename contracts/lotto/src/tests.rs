@@ -1419,7 +1419,7 @@ fn claim() {
 
     // Claim amount that you don't have, should fail
     let info = mock_info("addr0002", &[]);
-    let msg = ExecuteMsg::Claim { lottery: None };
+    let msg = ExecuteMsg::Claim {};
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
@@ -1431,7 +1431,7 @@ fn claim() {
 
     // Claim amount that you have, but still in unbonding state, should fail
     let info = mock_info("addr0001", &[]);
-    let msg = ExecuteMsg::Claim { lottery: None };
+    let msg = ExecuteMsg::Claim {};
 
     let mut env = mock_env();
 
@@ -1441,7 +1441,7 @@ fn claim() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    let msg = ExecuteMsg::Claim { lottery: None };
+    let msg = ExecuteMsg::Claim {};
 
     println!("Block time 1: {}", env.block.time);
 
@@ -1494,7 +1494,7 @@ fn claim() {
     assert_eq!(
         res.attributes,
         vec![
-            attr("action", "claim"),
+            attr("action", "claim_unbonded"),
             attr("depositor", "addr0001"),
             attr("redeemed_amount", 10_000_000u64.to_string()),
         ]
@@ -1627,9 +1627,7 @@ fn claim_lottery_single_winner() {
     assert_eq!(state.award_available, total_prize - awarded_prize);
 
     let info = mock_info("addr0000", &[]);
-    let msg = ExecuteMsg::Claim {
-        lottery: Some(0u64),
-    };
+    let msg = ExecuteMsg::ClaimLottery { lottery_id: 0u64 };
 
     // Claim lottery should work, even if there are no unbonded claims
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
@@ -1673,7 +1671,8 @@ fn claim_lottery_single_winner() {
     assert_eq!(
         res.attributes,
         vec![
-            attr("action", "claim"),
+            attr("action", "claim_lottery"),
+            attr("lottery_id", 0.to_string()),
             attr("depositor", "addr0000"),
             attr("redeemed_amount", prize.to_string()),
         ]

@@ -158,7 +158,10 @@ pub fn execute(
         ExecuteMsg::Withdraw { amount, instant } => {
             execute_withdraw(deps, env, info, amount, instant)
         }
-        ExecuteMsg::Claim { lottery } => execute_claim(deps, env, info, lottery),
+        ExecuteMsg::Claim {} => execute_claim_unbonded(deps, env, info),
+        ExecuteMsg::ClaimLottery { lottery_id } => {
+            execute_claim_lottery(deps, env, info, lottery_id)
+        }
         ExecuteMsg::ClaimRewards {} => execute_claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
@@ -741,19 +744,17 @@ pub fn execute_withdraw(
     ]))
 }
 
-// Send available UST to user from current redeemable balance and unbonded deposits
-pub fn execute_claim(
+// Send available UST to user from unbonded withdrawals
+pub fn execute_claim_unbonded(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    lottery: Option<u64>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let (mut to_send, mut depositor) =
-        claim_deposits(deps.storage, &info.sender, &env.block, None)?;
+    let (to_send, mut depositor) = claim_deposits(deps.storage, &info.sender, &env.block, None)?;
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
@@ -763,54 +764,16 @@ pub fn execute_claim(
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
-    if let Some(lottery_id) = lottery {
-        let lottery = read_lottery_info(deps.storage, lottery_id);
-        if !lottery.awarded {
-            return Err(ContractError::InsufficientClaimableFunds {});
-        }
-        //Calculate and add to to_send
-        let lottery_key: U64Key = U64Key::from(lottery_id);
-        let prizes = PRIZES
-            .may_load(deps.storage, (&info.sender, lottery_key.clone()))
-            .unwrap();
-        if let Some(prize) = prizes {
-            if prize.claimed {
-                return Err(ContractError::InvalidLotteryClaim {});
-            }
-
-            to_send += calculate_winner_prize(
-                lottery.total_prizes,
-                prize.matches,
-                lottery.number_winners,
-                config.prize_distribution,
-            );
-
-            // Deduct reserve fee
-            let reserve_fee = Uint256::from(to_send) * config.reserve_factor;
-            to_send -= Uint128::from(reserve_fee);
-            state.total_reserve += Decimal256::from_uint256(reserve_fee);
-
-            PRIZES.save(
-                deps.storage,
-                (&info.sender, lottery_key),
-                &PrizeInfo {
-                    claimed: true,
-                    matches: prize.matches,
-                },
-            )?;
-        }
-    }
-
     if to_send == Uint128::zero() {
         return Err(ContractError::InsufficientClaimableFunds {});
     }
 
     // Deduct taxes on the claim
-    let net_coin_amount = deduct_tax(
+    let net_send = deduct_tax(
         deps.as_ref(),
         coin(to_send.into(), config.stable_denom.clone()),
-    )?;
-    let net_send = net_coin_amount.amount;
+    )?
+    .amount;
 
     // Double-check if there is enough balance to send in the contract
     let balance = query_balance(
@@ -835,7 +798,107 @@ pub fn execute_claim(
             }],
         }))
         .add_attributes(vec![
-            attr("action", "claim"),
+            attr("action", "claim_unbonded"),
+            attr("depositor", info.sender.to_string()),
+            attr("redeemed_amount", net_send),
+        ]))
+}
+
+// Send available UST to user from prizes won in the given lottery_id
+pub fn execute_claim_lottery(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    lottery_id: u64,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
+
+    let mut to_send = Uint128::zero();
+    let mut depositor = read_depositor_info(deps.storage, &info.sender);
+
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, &pool, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
+    let lottery = read_lottery_info(deps.storage, lottery_id);
+    if !lottery.awarded {
+        return Err(ContractError::InvalidLotteryClaim {});
+    }
+    //Calculate and add to to_send
+    let lottery_key: U64Key = U64Key::from(lottery_id);
+    let prizes = PRIZES
+        .may_load(deps.storage, (&info.sender, lottery_key.clone()))
+        .unwrap();
+    if let Some(prize) = prizes {
+        if prize.claimed {
+            return Err(ContractError::InvalidLotteryClaim {});
+        }
+
+        to_send += calculate_winner_prize(
+            lottery.total_prizes,
+            prize.matches,
+            lottery.number_winners,
+            config.prize_distribution,
+        );
+
+        PRIZES.save(
+            deps.storage,
+            (&info.sender, lottery_key),
+            &PrizeInfo {
+                claimed: true,
+                matches: prize.matches,
+            },
+        )?;
+    }
+
+    if to_send == Uint128::zero() {
+        return Err(ContractError::InsufficientClaimableFunds {});
+    }
+
+    // Deduct reserve fee
+    let reserve_fee = Uint256::from(to_send) * config.reserve_factor;
+    to_send -= Uint128::from(reserve_fee);
+    state.total_reserve += Decimal256::from_uint256(reserve_fee);
+
+    // Deduct taxes on the claim
+    let net_send = deduct_tax(
+        deps.as_ref(),
+        coin(to_send.into(), config.stable_denom.clone()),
+    )?
+    .amount;
+
+    // Double-check if there is enough balance to send in the contract
+    let balance = query_balance(
+        deps.as_ref(),
+        env.contract.address.to_string(),
+        config.stable_denom.clone(),
+    )?;
+
+    if net_send > balance.into() {
+        return Err(ContractError::InsufficientFunds {});
+    }
+
+    store_depositor_info(deps.storage, &info.sender, &depositor)?;
+    STATE.save(deps.storage, &state)?;
+
+    Ok(Response::new()
+        .add_message(CosmosMsg::Bank(BankMsg::Send {
+            to_address: info.sender.to_string(),
+            amount: vec![Coin {
+                denom: config.stable_denom,
+                amount: net_send,
+            }],
+        }))
+        .add_attributes(vec![
+            attr("action", "claim_lottery"),
+            attr("lottery_id", lottery_id.to_string()),
             attr("depositor", info.sender.to_string()),
             attr("redeemed_amount", net_send),
         ]))

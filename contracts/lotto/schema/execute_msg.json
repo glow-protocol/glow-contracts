@@ -262,20 +262,33 @@
       "additionalProperties": false
     },
     {
-      "description": "Claims pending lottery prizes and unbonded withdrawals",
+      "description": "Claim unbonded withdrawals",
       "type": "object",
       "required": [
         "claim"
       ],
       "properties": {
         "claim": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Claims pending lottery prizes for a given lottery id",
+      "type": "object",
+      "required": [
+        "claim_lottery"
+      ],
+      "properties": {
+        "claim_lottery": {
           "type": "object",
+          "required": [
+            "lottery_id"
+          ],
           "properties": {
-            "lottery": {
-              "type": [
-                "integer",
-                "null"
-              ],
+            "lottery_id": {
+              "type": "integer",
               "format": "uint64",
               "minimum": 0.0
             }

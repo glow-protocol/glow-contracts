@@ -88,6 +88,12 @@ pub enum ContractError {
     InvalidUnbondingPeriod {},
 
     #[error("Invalid execution of the lottery. Funds cannot be sent.")]
+    InvalidLotteryFundsExecution {},
+
+    #[error("Invalid execution of the lottery. There are no playing tickets.")]
+    InvalidLotteryTicketsExecution {},
+
+    #[error("Invalid execution of the lottery. Execute lottery already been called.")]
     InvalidLotteryExecution {},
 
     #[error("Invalid execution of the lottery prize. The lottery must be executed first.")]

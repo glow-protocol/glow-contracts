@@ -47,8 +47,14 @@ pub fn execute_lottery(
 
     state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
 
+    // check execute_lottery has not been called already
+    let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
+    if lottery_info.rand_round != 0 {
+        return Err(ContractError::InvalidLotteryExecution {});
+    }
+
     let lottery_rand_round = calculate_lottery_rand_round(env.clone(), config.round_delta);
-    let lottery_info = LotteryInfo {
+    lottery_info = LotteryInfo {
         rand_round: lottery_rand_round,
         sequence: "".to_string(),
         awarded: false,

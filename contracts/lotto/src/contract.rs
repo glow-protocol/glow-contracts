@@ -1228,6 +1228,7 @@ pub fn query_lottery_info(
             lottery_id: id,
             sequence: lottery.sequence,
             awarded: lottery.awarded,
+            timestamp: lottery.timestamp,
             total_prizes: lottery.total_prizes,
             number_winners: lottery.number_winners,
         })
@@ -1238,6 +1239,7 @@ pub fn query_lottery_info(
             lottery_id: current_lottery,
             sequence: lottery.sequence,
             awarded: lottery.awarded,
+            timestamp: lottery.timestamp,
             total_prizes: lottery.total_prizes,
             number_winners: lottery.number_winners,
         })

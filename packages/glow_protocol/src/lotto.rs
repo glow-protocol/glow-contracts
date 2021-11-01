@@ -69,8 +69,10 @@ pub enum ExecuteMsg {
         amount: Option<Uint128>,
         instant: Option<bool>,
     },
-    /// Claims pending lottery prizes and unbonded withdrawals
-    Claim { lottery: Option<u64> },
+    /// Claim unbonded withdrawals
+    Claim {},
+    /// Claims pending lottery prizes for a given lottery id
+    ClaimLottery { lottery_id: u64 },
     /// Claims pending depositor rewards
     ClaimRewards {},
     /// First step on the lottery execution. Sets oracle round number

@@ -161,11 +161,13 @@ pub struct PoolResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LotteryInfoResponse {
     pub lottery_id: u64,
+    pub rand_round: u64,
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
     pub total_prizes: Decimal256,
     pub number_winners: [u32; 6],
+    pub page: String,
 }
 
 // We define a custom struct for each query response

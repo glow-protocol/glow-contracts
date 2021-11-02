@@ -1226,22 +1226,26 @@ pub fn query_lottery_info(
         let lottery = read_lottery_info(deps.storage, id);
         Ok(LotteryInfoResponse {
             lottery_id: id,
+            rand_round: lottery.rand_round,
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             timestamp: lottery.timestamp,
             total_prizes: lottery.total_prizes,
             number_winners: lottery.number_winners,
+            page: lottery.page,
         })
     } else {
         let current_lottery = query_state(deps, env, None)?.current_lottery;
         let lottery = read_lottery_info(deps.storage, current_lottery);
         Ok(LotteryInfoResponse {
             lottery_id: current_lottery,
+            rand_round: lottery.rand_round,
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             timestamp: lottery.timestamp,
             total_prizes: lottery.total_prizes,
             number_winners: lottery.number_winners,
+            page: lottery.page,
         })
     }
 }

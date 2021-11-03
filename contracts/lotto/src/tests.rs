@@ -1631,7 +1631,9 @@ fn claim_lottery_single_winner() {
     assert_eq!(state.award_available, total_prize - awarded_prize);
 
     let info = mock_info("addr0000", &[]);
-    let msg = ExecuteMsg::ClaimLottery { lottery_id: 0u64 };
+    let msg = ExecuteMsg::ClaimLottery {
+        lottery_ids: Vec::from([0u64]),
+    };
 
     // Claim lottery should work, even if there are no unbonded claims
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
@@ -1676,7 +1678,7 @@ fn claim_lottery_single_winner() {
         res.attributes,
         vec![
             attr("action", "claim_lottery"),
-            attr("lottery_id", 0.to_string()),
+            attr("lottery_ids", "[0]"),
             attr("depositor", "addr0000"),
             attr("redeemed_amount", prize.to_string()),
         ]

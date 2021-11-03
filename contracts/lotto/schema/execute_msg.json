@@ -275,7 +275,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Claims pending lottery prizes for a given lottery id",
+      "description": "Claims pending lottery prizes for a given list of lottery ids",
       "type": "object",
       "required": [
         "claim_lottery"
@@ -284,13 +284,16 @@
         "claim_lottery": {
           "type": "object",
           "required": [
-            "lottery_id"
+            "lottery_ids"
           ],
           "properties": {
-            "lottery_id": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
+            "lottery_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
             }
           }
         }

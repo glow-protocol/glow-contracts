@@ -1144,8 +1144,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             address,
             lottery_id,
         } => to_binary(&query_prizes(deps, address, lottery_id)?),
-        QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, address)?),
-        QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, address)?),
+        QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, env, address)?),
+        QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, env, address)?),
         QueryMsg::Depositors { start_after, limit } => {
             to_binary(&query_depositors(deps, start_after, limit)?)
         }
@@ -1276,9 +1276,17 @@ pub fn query_lottery_info(
     }
 }
 
-pub fn query_depositor(deps: Deps, addr: String) -> StdResult<DepositorInfoResponse> {
+pub fn query_depositor(deps: Deps, env: Env, addr: String) -> StdResult<DepositorInfoResponse> {
     let address = deps.api.addr_validate(&addr)?;
-    let depositor = read_depositor_info(deps.storage, &address);
+    let mut depositor = read_depositor_info(deps.storage, &address);
+
+    let mut state = STATE.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+
+    // compute rewards
+    compute_reward(&mut state, &pool, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
     Ok(DepositorInfoResponse {
         depositor: addr,
         deposit_amount: depositor.deposit_amount,
@@ -1290,9 +1298,17 @@ pub fn query_depositor(deps: Deps, addr: String) -> StdResult<DepositorInfoRespo
     })
 }
 
-pub fn query_sponsor(deps: Deps, addr: String) -> StdResult<SponsorInfoResponse> {
+pub fn query_sponsor(deps: Deps, env: Env, addr: String) -> StdResult<SponsorInfoResponse> {
     let address = deps.api.addr_validate(&addr)?;
-    let sponsor = read_sponsor_info(deps.storage, &address);
+    let mut sponsor = read_sponsor_info(deps.storage, &address);
+
+    let mut state = STATE.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+
+    // compute rewards
+    compute_reward(&mut state, &pool, env.block.height);
+    compute_sponsor_reward(&state, &mut sponsor);
+
     Ok(SponsorInfoResponse {
         sponsor: addr,
         amount: sponsor.amount,

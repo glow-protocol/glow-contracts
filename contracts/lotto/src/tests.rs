@@ -3093,8 +3093,8 @@ fn claim_rewards_multiple_depositors() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(res.pending_rewards, Decimal256::zero());
-    assert_eq!(res.reward_index, Decimal256::zero());
+    assert_eq!(res.pending_rewards, Decimal256::percent(5000u64));
+    assert_eq!(res.reward_index, state.global_reward_index);
 
     //TODO: Add a subsequent deposit at a later env.block.height and test again
 }

@@ -24,6 +24,13 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    for s in msg.distribution_schedule.iter() {
+        // Validate distribution schedules
+        if s.0 >= s.1 {
+            return Err(StdError::generic_err("Invalid distribution schedule"));
+        }
+    }
+
     store_config(
         deps.storage,
         &Config {

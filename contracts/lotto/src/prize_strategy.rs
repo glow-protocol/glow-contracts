@@ -6,7 +6,8 @@ use crate::state::{
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    attr, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult, WasmMsg,
+    attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
+    WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
@@ -15,6 +16,7 @@ use terraswap::querier::query_token_balance;
 
 use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
+use glow_protocol::querier::deduct_tax;
 use moneymarket::market::Cw20HookMsg;
 use std::ops::{Add, Sub};
 use std::str;
@@ -70,15 +72,19 @@ pub fn execute_lottery(
     let aust_balance = query_token_balance(
         &deps.querier,
         deps.api.addr_validate(config.a_terra_contract.as_str())?,
-        env.contract.address,
+        env.clone().contract.address,
     )?;
 
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
         (pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
         (pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
     );
-    let rate =
-        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
+    let rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
 
     let pooled_lottery_deposits = Decimal256::from_uint256(aust_lottery_balance) * rate;
 
@@ -93,7 +99,18 @@ pub fn execute_lottery(
         let amount_to_redeem =
             pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
         aust_to_redeem = amount_to_redeem / rate;
-        state.award_available += amount_to_redeem;
+
+        //Discount tx taxes Anchor -> Glow
+        let net_amount = deduct_tax(
+            deps.as_ref(),
+            coin(
+                (amount_to_redeem * Uint256::one()).into(),
+                config.clone().stable_denom,
+            ),
+        )?
+        .amount;
+
+        state.award_available += Decimal256::from_uint256(Uint256::from(net_amount));
 
         // Message for redeem amount operation of aUST
         let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {

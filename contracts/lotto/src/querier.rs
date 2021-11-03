@@ -7,12 +7,16 @@ use cosmwasm_std::{
 use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 
-pub fn query_exchange_rate(deps: Deps, money_market_addr: String) -> StdResult<EpochStateResponse> {
+pub fn query_exchange_rate(
+    deps: Deps,
+    money_market_addr: String,
+    height: u64,
+) -> StdResult<EpochStateResponse> {
     let epoch_state: EpochStateResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: money_market_addr,
             msg: to_binary(&AnchorMsg::EpochState {
-                block_height: None,
+                block_height: Some(height),
                 distributed_interest: None,
             })?,
         }))?;

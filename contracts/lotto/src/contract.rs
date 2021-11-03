@@ -301,8 +301,11 @@ pub fn deposit(
     compute_depositor_reward(&state, &mut depositor_info);
 
     // query exchange_rate from anchor money market
-    let epoch_state: EpochStateResponse =
-        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
+    let epoch_state: EpochStateResponse = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?;
 
     // Discount tx taxes
     let net_coin_amount = deduct_tax(
@@ -435,8 +438,11 @@ pub fn execute_sponsor(
             .add(Decimal256::from_uint256(sponsor_amount));
     } else {
         // query exchange_rate from anchor money market
-        let epoch_state: EpochStateResponse =
-            query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?;
+        let epoch_state: EpochStateResponse = query_exchange_rate(
+            deps.as_ref(),
+            config.anchor_contract.to_string(),
+            env.block.height,
+        )?;
 
         // Discount tx taxes
         let net_coin_amount = deduct_tax(
@@ -516,10 +522,14 @@ pub fn execute_sponsor_withdraw(
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
-        env.contract.address,
+        env.clone().contract.address,
     )?;
-    let rate =
-        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
+    let rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
     let aust_to_redeem = sponsor_info.amount / rate;
 
     // Double-checking Lotto pool is solvent against sponsors
@@ -551,14 +561,18 @@ pub fn execute_sponsor_withdraw(
     });
     msgs.push(redeem_msg);
 
-    // Discount tx taxes
-    let net_coin_amount = deduct_tax(
+    // Discount tx taxes from Anchor to Glow
+    let coin_amount = deduct_tax(
         deps.as_ref(),
         coin(
             (sponsor_info.amount * Uint256::one()).into(),
-            config.stable_denom,
+            config.clone().stable_denom,
         ),
-    )?;
+    )?
+    .amount;
+
+    // Discount tx taxes from Glow to User
+    let net_coin_amount = deduct_tax(deps.as_ref(), coin(coin_amount.into(), config.stable_denom))?;
 
     msgs.push(CosmosMsg::Bank(BankMsg::Send {
         to_address: info.sender.to_string(),
@@ -615,8 +629,12 @@ pub fn execute_withdraw(
         env.clone().contract.address,
     )?;
     let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
-    let rate =
-        query_exchange_rate(deps.as_ref(), config.anchor_contract.to_string())?.exchange_rate;
+    let rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
     let pooled_deposits = Uint256::one() * (aust_amount * rate);
 
     // Calculate ratio of deposits, shares and tickets to withdraw
@@ -629,7 +647,15 @@ pub fn execute_withdraw(
         }
     }
     let aust_to_redeem = aust_amount * withdraw_ratio;
-    let mut return_amount = pooled_deposits * withdraw_ratio;
+    let redemed_amount = pooled_deposits * withdraw_ratio;
+    // Discount tax Anchor -> Glow
+    let mut return_amount = Uint256::from(
+        deduct_tax(
+            deps.as_ref(),
+            coin(redemed_amount.into(), config.clone().stable_denom),
+        )?
+        .amount,
+    );
 
     // Double-checking Lotto pool is solvent against deposits
     if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate

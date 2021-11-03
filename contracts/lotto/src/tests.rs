@@ -11,8 +11,8 @@ use crate::state::{
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env,
-    Response, SubMsg, Timestamp, Uint128, WasmMsg,
+    attr, coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, Deps,
+    DepsMut, Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -1587,6 +1587,7 @@ fn claim_lottery_single_winner() {
     let pool = query_pool(deps.as_ref()).unwrap();
 
     let total_prize = calculate_total_prize(
+        deps.as_ref(),
         pool.lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
@@ -2012,7 +2013,7 @@ fn execute_prize_no_winners() {
     // TODO: Calculate and avoid hard-coding
     assert_eq!(
         state.award_available,
-        Decimal256::from_str("107844998.977").unwrap()
+        Decimal256::from_str("107844998").unwrap()
     );
 
     assert_eq!(res.messages, vec![]);
@@ -2113,6 +2114,7 @@ fn execute_prize_one_winner() {
     let pool = query_pool(deps.as_ref()).unwrap();
 
     let total_prize = calculate_total_prize(
+        deps.as_ref(),
         pool.lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
@@ -2272,6 +2274,7 @@ fn execute_prize_winners_diff_ranks() {
     let pool = query_pool(deps.as_ref()).unwrap();
 
     let total_prize = calculate_total_prize(
+        deps.as_ref(),
         pool.lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
@@ -2434,6 +2437,7 @@ fn execute_prize_winners_same_rank() {
     let pool = query_pool(deps.as_ref()).unwrap();
     // total prize
     let total_prize = calculate_total_prize(
+        deps.as_ref(),
         pool.lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
@@ -2585,6 +2589,7 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     // total prize
     let total_prize = calculate_total_prize(
+        deps.as_ref(),
         pool.lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
@@ -2737,6 +2742,7 @@ fn execute_prize_multiple_winners_one_ticket() {
 
     // total prize
     let total_prize = calculate_total_prize(
+        deps.as_ref(),
         pool.lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
@@ -3159,6 +3165,7 @@ fn execute_epoch_operations() {
 }
 
 fn calculate_total_prize(
+    deps: Deps,
     lottery_shares: Decimal256,
     deposit_shares: Decimal256,
     sponsor_shares: Decimal256,
@@ -3173,7 +3180,14 @@ fn calculate_total_prize(
 
     let lottery_deposits =
         Decimal256::from_uint256(aust_lottery_balance) * Decimal256::permille(RATE);
-    let net_yield = lottery_deposits
+    let lottery_yield = lottery_deposits
         - (Decimal256::percent(TICKET_PRICE * total_tickets)) * Decimal256::percent(SPLIT_FACTOR);
+
+    let net_yield = Decimal256::from_uint256(Uint256::from(
+        deduct_tax(deps, coin((lottery_yield * Uint256::one()).into(), "uusd"))
+            .unwrap()
+            .amount,
+    ));
+
     initial_balance + net_yield
 }

@@ -855,7 +855,7 @@ pub fn execute_claim_lottery(
 
     let lottery = read_lottery_info(deps.storage, lottery_id);
     if !lottery.awarded {
-        return Err(ContractError::InvalidLotteryClaim {});
+        return Err(ContractError::InvalidClaimLotteryNotAwarded {});
     }
     //Calculate and add to to_send
     let lottery_key: U64Key = U64Key::from(lottery_id);
@@ -864,7 +864,7 @@ pub fn execute_claim_lottery(
         .unwrap();
     if let Some(prize) = prizes {
         if prize.claimed {
-            return Err(ContractError::InvalidLotteryClaim {});
+            return Err(ContractError::InvalidClaimPrizeAlreadyClaimed {});
         }
 
         to_send += calculate_winner_prize(

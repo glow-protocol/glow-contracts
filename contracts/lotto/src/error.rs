@@ -66,8 +66,11 @@ pub enum ContractError {
     #[error("Max number of concurrent unbonding claims for this users has been reached")]
     MaxUnbondingClaims {},
 
-    #[error("Lottery claim is invalid, as lottery has not still being awarded")]
-    InvalidLotteryClaim {},
+    #[error("Lottery claim is invalid, as lottery has not being awarded yet")]
+    InvalidClaimLotteryNotAwarded {},
+
+    #[error("Lottery claim is invalid, as prize has already been claimed")]
+    InvalidClaimPrizeAlreadyClaimed {},
 
     #[error("There not enough claimable funds for the given user")]
     InsufficientClaimableFunds {},

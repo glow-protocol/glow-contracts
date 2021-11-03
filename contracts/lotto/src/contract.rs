@@ -159,8 +159,8 @@ pub fn execute(
             execute_withdraw(deps, env, info, amount, instant)
         }
         ExecuteMsg::Claim {} => execute_claim_unbonded(deps, env, info),
-        ExecuteMsg::ClaimLottery { lottery_id } => {
-            execute_claim_lottery(deps, env, info, lottery_id)
+        ExecuteMsg::ClaimLottery { lottery_ids } => {
+            execute_claim_lottery(deps, env, info, lottery_ids)
         }
         ExecuteMsg::ClaimRewards {} => execute_claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
@@ -835,7 +835,7 @@ pub fn execute_claim_lottery(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    lottery_id: u64,
+    lottery_ids: Vec<u64>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let pool = POOL.load(deps.storage)?;
@@ -853,35 +853,37 @@ pub fn execute_claim_lottery(
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
-    let lottery = read_lottery_info(deps.storage, lottery_id);
-    if !lottery.awarded {
-        return Err(ContractError::InvalidClaimLotteryNotAwarded {});
-    }
-    //Calculate and add to to_send
-    let lottery_key: U64Key = U64Key::from(lottery_id);
-    let prizes = PRIZES
-        .may_load(deps.storage, (&info.sender, lottery_key.clone()))
-        .unwrap();
-    if let Some(prize) = prizes {
-        if prize.claimed {
-            return Err(ContractError::InvalidClaimPrizeAlreadyClaimed {});
+    for lottery_id in lottery_ids.clone() {
+        let lottery = read_lottery_info(deps.storage, lottery_id);
+        if !lottery.awarded {
+            return Err(ContractError::InvalidClaimLotteryNotAwarded {});
         }
+        //Calculate and add to to_send
+        let lottery_key: U64Key = U64Key::from(lottery_id);
+        let prizes = PRIZES
+            .may_load(deps.storage, (&info.sender, lottery_key.clone()))
+            .unwrap();
+        if let Some(prize) = prizes {
+            if prize.claimed {
+                return Err(ContractError::InvalidClaimPrizeAlreadyClaimed {});
+            }
 
-        to_send += calculate_winner_prize(
-            lottery.total_prizes,
-            prize.matches,
-            lottery.number_winners,
-            config.prize_distribution,
-        );
+            to_send += calculate_winner_prize(
+                lottery.total_prizes,
+                prize.matches,
+                lottery.number_winners,
+                config.prize_distribution,
+            );
 
-        PRIZES.save(
-            deps.storage,
-            (&info.sender, lottery_key),
-            &PrizeInfo {
-                claimed: true,
-                matches: prize.matches,
-            },
-        )?;
+            PRIZES.save(
+                deps.storage,
+                (&info.sender, lottery_key),
+                &PrizeInfo {
+                    claimed: true,
+                    matches: prize.matches,
+                },
+            )?;
+        }
     }
 
     if to_send == Uint128::zero() {
@@ -924,7 +926,7 @@ pub fn execute_claim_lottery(
         }))
         .add_attributes(vec![
             attr("action", "claim_lottery"),
-            attr("lottery_id", lottery_id.to_string()),
+            attr("lottery_ids", format!("{:?}", lottery_ids)),
             attr("depositor", info.sender.to_string()),
             attr("redeemed_amount", net_send),
         ]))

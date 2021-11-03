@@ -71,8 +71,8 @@ pub enum ExecuteMsg {
     },
     /// Claim unbonded withdrawals
     Claim {},
-    /// Claims pending lottery prizes for a given lottery id
-    ClaimLottery { lottery_id: u64 },
+    /// Claims pending lottery prizes for a given list of lottery ids
+    ClaimLottery { lottery_ids: Vec<u64> },
     /// Claims pending depositor rewards
     ClaimRewards {},
     /// First step on the lottery execution. Sets oracle round number

@@ -149,7 +149,7 @@ pub struct StateResponse {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
-    pub total_deposits: Decimal256,
+    pub total_user_savings_deposits: Decimal256,
     pub lottery_deposits: Decimal256,
     pub total_sponsor_amount: Decimal256,
     pub deposit_shares: Decimal256,

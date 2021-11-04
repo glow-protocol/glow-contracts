@@ -193,7 +193,7 @@ fn proper_initialization() {
     assert_eq!(
         pool,
         PoolResponse {
-            total_deposits: Decimal256::zero(),
+            total_user_savings_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             total_sponsor_amount: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
@@ -429,7 +429,7 @@ fn deposit() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
+            total_user_savings_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_amount: Decimal256::zero(),
@@ -787,7 +787,7 @@ fn gift_tickets() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
+            total_user_savings_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_amount: Decimal256::zero(),
@@ -1035,7 +1035,7 @@ fn withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_deposits: Decimal256::zero(),
+            total_user_savings_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             total_sponsor_amount: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
@@ -1311,7 +1311,7 @@ fn instant_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_deposits: Decimal256::zero(),
+            total_user_savings_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             total_sponsor_amount: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
@@ -1412,7 +1412,7 @@ fn claim() {
     let pool = query_pool(deps.as_ref()).unwrap();
     println!("shares: {}", shares);
     println!("pooled_deposits: {}", shares * Decimal256::permille(RATE));
-    println!("total deposits: {}", pool.total_deposits);
+    println!("total deposits: {}", pool.total_user_savings_deposits);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();

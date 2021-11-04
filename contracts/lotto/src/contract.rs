@@ -123,7 +123,7 @@ pub fn instantiate(
     POOL.save(
         deps.storage,
         &Pool {
-            total_deposits: Decimal256::zero(),
+            total_user_savings_deposits: Decimal256::zero(),
             total_sponsor_amount: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
@@ -365,8 +365,8 @@ pub fn deposit(
     pool.deposit_shares = pool
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
-    pool.total_deposits = pool
-        .total_deposits
+    pool.total_user_savings_deposits = pool
+        .total_user_savings_deposits
         .add(Decimal256::from_uint256(post_tax_deposit_amount));
     pool.lottery_deposits = pool
         .lottery_deposits
@@ -551,7 +551,7 @@ pub fn execute_sponsor_withdraw(
 
     // Double-checking Lotto pool is solvent against sponsors
     if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
-        < (pool.total_deposits + pool.total_sponsor_amount)
+        < (pool.total_user_savings_deposits + pool.total_sponsor_amount)
     {
         return Err(ContractError::InsufficientSponsorFunds {});
     }
@@ -676,7 +676,7 @@ pub fn execute_withdraw(
 
     // Double-checking Lotto pool is solvent against deposits
     if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
-        < (pool.total_deposits + pool.total_sponsor_amount)
+        < (pool.total_user_savings_deposits + pool.total_sponsor_amount)
     {
         return Err(ContractError::InsufficientPoolFunds {});
     }
@@ -718,7 +718,7 @@ pub fn execute_withdraw(
 
     // Update global state and pool
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
-    pool.total_deposits = pool.total_deposits.sub(withdrawn_deposits);
+    pool.total_user_savings_deposits = pool.total_user_savings_deposits.sub(withdrawn_deposits);
     pool.lottery_deposits = pool
         .lottery_deposits
         .sub(withdrawn_deposits * config.split_factor);
@@ -1253,7 +1253,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
     let pool = POOL.load(deps.storage)?;
 
     Ok(PoolResponse {
-        total_deposits: pool.total_deposits,
+        total_user_savings_deposits: pool.total_user_savings_deposits,
         total_sponsor_amount: pool.total_sponsor_amount,
         lottery_deposits: pool.lottery_deposits,
         deposit_shares: pool.deposit_shares,

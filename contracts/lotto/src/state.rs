@@ -60,7 +60,7 @@ pub struct State {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    pub total_deposits: Decimal256,
+    pub total_user_savings_deposits: Decimal256,
     pub total_sponsor_amount: Decimal256,
     pub lottery_deposits: Decimal256,
     pub lottery_shares: Decimal256,

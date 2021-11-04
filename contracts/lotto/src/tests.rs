@@ -495,7 +495,7 @@ fn deposit() {
 
     // deposit again
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("19876")],
+        combinations: vec![String::from("19876"), String::from("29876")],
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -521,7 +521,7 @@ fn deposit() {
     assert_eq!(depositor_info.tickets.len(), 6);
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("45639")],
+        combinations: vec![String::from("45639"), String::from("65639")],
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();

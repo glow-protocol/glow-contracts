@@ -269,6 +269,7 @@ pub fn execute_prize(
 
         state.next_lottery_time =
             Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
+        state.next_lottery_exec_time = Expiration::Never {};
         state.award_available = state.award_available.sub(total_awarded_prize);
         STATE.save(deps.storage, &state)?;
     }

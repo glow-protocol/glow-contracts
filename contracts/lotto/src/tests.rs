@@ -181,7 +181,7 @@ fn proper_initialization() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
-            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
             next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
@@ -418,7 +418,7 @@ fn deposit() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
-            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
             next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
@@ -776,7 +776,7 @@ fn gift_tickets() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
-            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
             next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
@@ -1024,7 +1024,7 @@ fn withdraw() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
-            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
             next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
@@ -1300,7 +1300,7 @@ fn instant_withdraw() {
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
-            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
             next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
@@ -1779,6 +1779,16 @@ fn execute_lottery() {
         ]
     );
 
+    // Directly check next_lottery_exec_time has been set up
+    let next_lottery_exec_time = query_state(deps.as_ref(), mock_env(), None)
+        .unwrap()
+        .next_lottery_exec_time;
+
+    assert_eq!(
+        next_lottery_exec_time,
+        Expiration::AtTime(env.block.time).add(HOUR).unwrap()
+    );
+
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
         env.block.time = env.block.time.plus_seconds(time);
@@ -1797,6 +1807,23 @@ fn execute_lottery() {
         next_lottery_time,
         Expiration::AtTime(env.block.time).add(WEEK).unwrap()
     );
+
+    // Directly check next_lottery_time has been set up for next week
+    let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
+        .unwrap()
+        .next_lottery_time;
+
+    assert_eq!(
+        next_lottery_time,
+        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
+    );
+
+    // Directly check next_lottery_exec_time has been set up to Never
+    let next_lottery_exec_time = query_state(deps.as_ref(), mock_env(), None)
+        .unwrap()
+        .next_lottery_exec_time;
+
+    assert_eq!(next_lottery_exec_time, Expiration::Never {});
 
     assert_eq!(res.messages, vec![]);
 
@@ -3159,7 +3186,7 @@ fn execute_epoch_operations() {
             last_reward_updated: 12445,
             global_reward_index: Decimal256::zero(),
             next_lottery_time: WEEK.after(&mock_env().block),
-            next_lottery_exec_time: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
             glow_emission_rate: Decimal256::one(),
             next_epoch: WEEK.after(&env.block)
         }

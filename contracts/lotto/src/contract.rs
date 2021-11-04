@@ -432,7 +432,7 @@ pub fn execute_sponsor(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    // Check deposit is in base stable denom
+    // get the amount of funds sent in the base stable denom
     let sponsor_amount = info
         .funds
         .iter()
@@ -440,6 +440,7 @@ pub fn execute_sponsor(
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
 
+    // validate that the sponsor amount is non zero
     if sponsor_amount.is_zero() {
         return Err(ContractError::InvalidSponsorshipAmount {});
     }

@@ -18,7 +18,7 @@ use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, PoolResponse,
-    QueryMsg, StateResponse,
+    QueryMsg, SponsorInfoResponse, StateResponse,
 };
 
 use crate::error::ContractError;
@@ -48,6 +48,7 @@ const ROUND_DELTA: u64 = 10;
 const FIRST_LOTTO_TIME: u64 = 1595961494; // timestamp between deployment and 1 week after
 const WINNING_SEQUENCE: &str = "be1ce";
 
+// generate glow instantiate msg
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
     InstantiateMsg {
         owner: TEST_CREATOR.to_string(),
@@ -78,6 +79,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
     }
 }
 
+//
 fn mock_instantiate(deps: DepsMut) -> Response {
     let msg = instantiate_msg();
 
@@ -3128,6 +3130,193 @@ fn claim_rewards_multiple_depositors() {
     assert_eq!(res.reward_index, state.global_reward_index);
 
     //TODO: Add a subsequent deposit at a later env.block.height and test again
+}
+
+#[test]
+fn claim_rewards_depositor_and_sponsor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
+    state.glow_emission_rate = Decimal256::one();
+    STATE.save(deps.as_mut().storage, &state).unwrap();
+
+    //TODO: should query glow emission rate instead of hard-code
+    /*
+    STATE.update(deps.as_mut().storage,  |mut state| {
+        state.glow_emission_rate = Decimal256::one();
+        Ok(state)
+    }).unwrap();
+     */
+
+    // USER 0 Deposits 20_000_000 uusd -----------------------------
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+
+    let mut env = mock_env();
+
+    let _res = execute(deps.as_mut(), env.clone(), info, msg);
+
+    // Sponsor deposits 20_000_000 uusd ------------------------------
+    let msg = ExecuteMsg::Sponsor { award: Some(false) };
+
+    let info = mock_info(
+        "addr1111",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+    let _res = execute(deps.as_mut(), env.clone(), info, msg);
+
+    let info = mock_info("addr0000", &[]);
+
+    // Move forward 100 blocks ------------------------------------
+    env.block.height += 100;
+
+    // query the state --------------------------------------------
+    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
+    println!("Global reward index: {:?}", state.global_reward_index);
+    println!("Emission rate {:?}", state.glow_emission_rate);
+    println!("Last reward updated {:?}", state.last_reward_updated);
+    println!("Current height {:?}", env.block.height);
+
+    // claim rewards for user 1
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    println!("{:?}", res.attributes);
+
+    // assert that res has a message to send 50 GLOW (half of the total emission of 100)
+    // from the distributor to addr0000
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: DISTRIBUTOR_ADDR.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(50u128),
+            })
+            .unwrap(),
+        }))]
+    );
+
+    // Checking USER 0 state is correct
+    let res: DepositorInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::Depositor {
+                address: "addr0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    // USER 0 shouldn't have any pending rewards remaining
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+    // the reward index of the USER should equal the global reward index
+    // which is the reward accrued (100) divided by the total deposited value (TICKET_PRICE * 4)
+    assert_eq!(
+        res.reward_index,
+        Decimal256::percent(10000u64) / (Decimal256::percent(TICKET_PRICE * 4u64))
+    );
+
+    // Checking sponsor state is correct
+    let res: SponsorInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::Sponsor {
+                address: "addr1111".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    // assert that the user has 50 GLOW pending rewards
+    assert_eq!(res.pending_rewards, Decimal256::percent(5000u64));
+
+    // assert that the user reward index equals the global_reward_index
+    assert_eq!(res.reward_index, state.global_reward_index);
+
+    // Move forward 100 blocks ------------------------------------
+    env.block.height += 100;
+
+    // query the state --------------------------------------------
+    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
+
+    // claim rewards for user 1
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    println!("{:?}", res.attributes);
+
+    // assert that res has a message to send 50 GLOW (half of the total emission of 100)
+    // from the distributor to addr0000
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: DISTRIBUTOR_ADDR.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(50u128),
+            })
+            .unwrap(),
+        }))]
+    );
+
+    // Checking USER 0 state is correct
+    let res: DepositorInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::Depositor {
+                address: "addr0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    // USER 0 shouldn't have any pending rewards remaining
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+
+    // the reward index of USER 0 should equal the global reward index
+    // which is the reward accrued (100) divided by the total deposited value (TICKET_PRICE * 4)
+    assert_eq!(res.reward_index, state.global_reward_index);
+
+    // Checking sponsor state is correct
+    let res: SponsorInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::Sponsor {
+                address: "addr1111".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    // assert that the user has 50 GLOW pending rewards
+    assert_eq!(res.pending_rewards, Decimal256::percent(10000u64));
+
+    // assert that the user reward index equals the global_reward_index
+    assert_eq!(res.reward_index, state.global_reward_index);
 }
 
 #[test]

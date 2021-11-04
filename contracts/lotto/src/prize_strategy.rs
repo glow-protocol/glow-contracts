@@ -77,9 +77,7 @@ pub fn execute_lottery(
 
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
         (pool.total_user_lottery_shares + pool.total_sponsor_lotto_shares) * Uint256::one(),
-        (pool.total_user_savings_shares
-            + pool.total_user_lottery_shares
-            + pool.total_sponsor_lotto_shares)
+        (pool.total_user_shares + pool.total_user_lottery_shares + pool.total_sponsor_lotto_shares)
             * Uint256::one(),
     );
     let rate = query_exchange_rate(

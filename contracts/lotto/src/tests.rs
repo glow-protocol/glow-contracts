@@ -195,7 +195,7 @@ fn proper_initialization() {
         PoolResponse {
             total_user_savings_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            total_sponsor_amount: Decimal256::zero(),
+            total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
@@ -432,7 +432,7 @@ fn deposit() {
             total_user_savings_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
-            total_sponsor_amount: Decimal256::zero(),
+            total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             sponsor_shares: Decimal256::zero(),
@@ -790,7 +790,7 @@ fn gift_tickets() {
             total_user_savings_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
             lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
-            total_sponsor_amount: Decimal256::zero(),
+            total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             sponsor_shares: Decimal256::zero(),
@@ -883,7 +883,7 @@ fn sponsor() {
     assert_eq!(sponsor_info.shares, minted_shares);
 
     assert_eq!(
-        pool.total_sponsor_amount,
+        pool.total_sponsor_lotto_deposits,
         Decimal256::from_uint256(net_amount)
     );
     assert_eq!(pool.sponsor_shares, minted_shares);
@@ -912,7 +912,7 @@ fn sponsor() {
 
     assert_eq!(sponsor_info.amount, Decimal256::zero());
     assert_eq!(sponsor_info.shares, Decimal256::zero());
-    assert_eq!(pool.total_sponsor_amount, Decimal256::zero());
+    assert_eq!(pool.total_sponsor_lotto_deposits, Decimal256::zero());
     assert_eq!(pool.sponsor_shares, Decimal256::zero());
 }
 
@@ -1037,7 +1037,7 @@ fn withdraw() {
         PoolResponse {
             total_user_savings_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            total_sponsor_amount: Decimal256::zero(),
+            total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
@@ -1313,7 +1313,7 @@ fn instant_withdraw() {
         PoolResponse {
             total_user_savings_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
-            total_sponsor_amount: Decimal256::zero(),
+            total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),

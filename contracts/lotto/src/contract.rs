@@ -124,7 +124,7 @@ pub fn instantiate(
         deps.storage,
         &Pool {
             total_user_savings_deposits: Decimal256::zero(),
-            total_sponsor_amount: Decimal256::zero(),
+            total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_deposits: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
@@ -487,8 +487,8 @@ pub fn execute_sponsor(
         store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
 
         // update pool
-        pool.total_sponsor_amount = pool
-            .total_sponsor_amount
+        pool.total_sponsor_lotto_deposits = pool
+            .total_sponsor_lotto_deposits
             .add(Decimal256::from_uint256(net_sponsor_amount));
         pool.sponsor_shares = pool.sponsor_shares.add(minted_amount);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -551,13 +551,13 @@ pub fn execute_sponsor_withdraw(
 
     // Double-checking Lotto pool is solvent against sponsors
     if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
-        < (pool.total_user_savings_deposits + pool.total_sponsor_amount)
+        < (pool.total_user_savings_deposits + pool.total_sponsor_lotto_deposits)
     {
         return Err(ContractError::InsufficientSponsorFunds {});
     }
 
     // Update global state
-    pool.total_sponsor_amount = pool.total_sponsor_amount.sub(sponsor_info.amount);
+    pool.total_sponsor_lotto_deposits = pool.total_sponsor_lotto_deposits.sub(sponsor_info.amount);
     pool.sponsor_shares = pool.sponsor_shares.sub(sponsor_info.shares);
 
     // Update sponsor info
@@ -676,7 +676,7 @@ pub fn execute_withdraw(
 
     // Double-checking Lotto pool is solvent against deposits
     if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
-        < (pool.total_user_savings_deposits + pool.total_sponsor_amount)
+        < (pool.total_user_savings_deposits + pool.total_sponsor_lotto_deposits)
     {
         return Err(ContractError::InsufficientPoolFunds {});
     }
@@ -1254,7 +1254,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
 
     Ok(PoolResponse {
         total_user_savings_deposits: pool.total_user_savings_deposits,
-        total_sponsor_amount: pool.total_sponsor_amount,
+        total_sponsor_lotto_deposits: pool.total_sponsor_lotto_deposits,
         lottery_deposits: pool.lottery_deposits,
         deposit_shares: pool.deposit_shares,
         lottery_shares: pool.lottery_shares,

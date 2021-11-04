@@ -24,6 +24,6 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 pub struct OracleResponse {
-    pub random: Binary,
+    pub randomness: Binary,
     pub worker: Addr,
 }

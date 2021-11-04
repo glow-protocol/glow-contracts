@@ -178,7 +178,7 @@ pub fn execute_prize(
             config.oracle_contract.into_string(),
             lottery_info.rand_round,
         )?;
-        let random_hash = hex::encode(oracle_response.random.as_slice());
+        let random_hash = hex::encode(oracle_response.randomness.as_slice());
         lottery_info.sequence = sequence_from_hash(random_hash);
     }
 

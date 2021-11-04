@@ -196,7 +196,7 @@ fn proper_initialization() {
             total_user_savings_deposits: Decimal256::zero(),
             total_user_lottery_deposits: Decimal256::zero(),
             total_sponsor_lotto_deposits: Decimal256::zero(),
-            lottery_shares: Decimal256::zero(),
+            total_user_lottery_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
         }
@@ -433,7 +433,7 @@ fn deposit() {
             total_user_lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_lotto_deposits: Decimal256::zero(),
-            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            total_user_lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             sponsor_shares: Decimal256::zero(),
         }
@@ -791,7 +791,7 @@ fn gift_tickets() {
             total_user_lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_lotto_deposits: Decimal256::zero(),
-            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            total_user_lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             sponsor_shares: Decimal256::zero(),
         }
@@ -1038,7 +1038,7 @@ fn withdraw() {
             total_user_savings_deposits: Decimal256::zero(),
             total_user_lottery_deposits: Decimal256::zero(),
             total_sponsor_lotto_deposits: Decimal256::zero(),
-            lottery_shares: Decimal256::zero(),
+            total_user_lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
         }
@@ -1314,7 +1314,7 @@ fn instant_withdraw() {
             total_user_savings_deposits: Decimal256::zero(),
             total_user_lottery_deposits: Decimal256::zero(),
             total_sponsor_lotto_deposits: Decimal256::zero(),
-            lottery_shares: Decimal256::zero(),
+            total_user_lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
         }
@@ -1588,7 +1588,7 @@ fn claim_lottery_single_winner() {
 
     let total_prize = calculate_total_prize(
         deps.as_ref(),
-        pool.lottery_shares,
+        pool.total_user_lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
@@ -2144,7 +2144,7 @@ fn execute_prize_one_winner() {
 
     let total_prize = calculate_total_prize(
         deps.as_ref(),
-        pool.lottery_shares,
+        pool.total_user_lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
@@ -2304,7 +2304,7 @@ fn execute_prize_winners_diff_ranks() {
 
     let total_prize = calculate_total_prize(
         deps.as_ref(),
-        pool.lottery_shares,
+        pool.total_user_lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
@@ -2467,7 +2467,7 @@ fn execute_prize_winners_same_rank() {
     // total prize
     let total_prize = calculate_total_prize(
         deps.as_ref(),
-        pool.lottery_shares,
+        pool.total_user_lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
@@ -2619,7 +2619,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     // total prize
     let total_prize = calculate_total_prize(
         deps.as_ref(),
-        pool.lottery_shares,
+        pool.total_user_lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
@@ -2772,7 +2772,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     // total prize
     let total_prize = calculate_total_prize(
         deps.as_ref(),
-        pool.lottery_shares,
+        pool.total_user_lottery_shares,
         pool.deposit_shares,
         pool.sponsor_shares,
         Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),

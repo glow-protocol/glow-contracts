@@ -127,7 +127,7 @@ pub fn instantiate(
             total_sponsor_lotto_deposits: Decimal256::zero(),
             total_user_lottery_deposits: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
-            lottery_shares: Decimal256::zero(),
+            total_user_lottery_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
         },
     )?;
@@ -361,7 +361,9 @@ pub fn deposit(
 
     // Update global state and pool
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
+    pool.total_user_lottery_shares = pool
+        .total_user_lottery_shares
+        .add(minted_amount * config.split_factor);
     pool.deposit_shares = pool
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
@@ -619,7 +621,7 @@ pub fn execute_withdraw(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
     if depositor.shares.is_zero() || shares_supply.is_zero() {
@@ -722,7 +724,7 @@ pub fn execute_withdraw(
     pool.total_user_lottery_deposits = pool
         .total_user_lottery_deposits
         .sub(withdrawn_deposits * config.split_factor);
-    pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
+    pool.total_user_lottery_shares = pool.total_user_lottery_shares.sub(withdrawn_lottery_shares);
     pool.deposit_shares = pool.deposit_shares.sub(withdrawn_deposit_shares);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
@@ -1257,7 +1259,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
         total_sponsor_lotto_deposits: pool.total_sponsor_lotto_deposits,
         total_user_lottery_deposits: pool.total_user_lottery_deposits,
         deposit_shares: pool.deposit_shares,
-        lottery_shares: pool.lottery_shares,
+        total_user_lottery_shares: pool.total_user_lottery_shares,
         sponsor_shares: pool.sponsor_shares,
     })
 }

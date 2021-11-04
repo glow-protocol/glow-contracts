@@ -237,7 +237,7 @@ pub fn deposit(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    // Get deposit is in base stable denom
+    // get the amount of funds sent in the base stable denom
     let deposit_amount = info
         .funds
         .iter()
@@ -268,7 +268,8 @@ pub fn deposit(
     }
 
     // get the depositor info
-    // depositor being either the message sender or the recipient that will be reciving the deposited funds if specified
+    // depositor being either the message sender
+    // or the recipient that will be reciving the deposited funds if specified
     let depositor = if let Some(recipient) = recipient.clone() {
         deps.api.addr_validate(recipient.as_str())?
     } else {
@@ -276,8 +277,8 @@ pub fn deposit(
     };
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
-    // check that the user's post transaction deposit amount divided by the ticket price
-    // is greater than or equal to the number of tickets the user will have post transaction
+    // check that the size of the deposit the user will have following the transaction divided by the ticket price
+    // is greater than or equal to the number of tickets the user will have following the transaction
 
     // get the number of requested tickets
     let amount_tickets = combinations.len() as u64;
@@ -303,7 +304,7 @@ pub fn deposit(
     // update the glow depositor reward for the depositor
     compute_depositor_reward(&state, &mut depositor_info);
 
-    // query exchange_rate from anchor money market
+    // query the aust exchange_rate from anchor money market
     let epoch_state: EpochStateResponse = query_exchange_rate(
         deps.as_ref(),
         config.anchor_contract.to_string(),
@@ -317,20 +318,21 @@ pub fn deposit(
     )?;
     let amount = net_coin_amount.amount;
 
-    // get the amount of aUST entitled from the deposit
+    // get the amount of aUST entitled to the user from the deposit
     let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
 
     // update the depositors pretax deposit amount
-    // it is pretax because the number of ticktes a user it entitled to is based on the users pretax deposit value for UI purposes
+    // it is stored pretax because the number of ticktes a user
+    // is entitled to is based on the users pretax deposit value for UX purposes
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
         .add(Decimal256::from_uint256(deposit_amount));
 
-    // update the depositors shares (basically the amount of aUST the depositor has minted in exchange for deposited USt)
+    // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in combinations {
-        // check that the number of holders for a ticket isn't too high
+        // check that the number of holders for any given ticket isn't too high
         if let Some(holders) = TICKETS
             .may_load(deps.storage, combination.as_bytes())
             .unwrap()

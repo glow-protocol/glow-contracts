@@ -237,7 +237,7 @@ pub fn deposit(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    // Check deposit is in base stable denom
+    // Get deposit is in base stable denom
     let deposit_amount = info
         .funds
         .iter()
@@ -245,6 +245,7 @@ pub fn deposit(
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
 
+    // validate that the deposit amount is non zero
     if deposit_amount.is_zero() {
         return if let Some(_recipient) = recipient {
             Err(ContractError::InvalidGiftAmount {})
@@ -253,8 +254,13 @@ pub fn deposit(
         };
     }
 
+    // get the number of requested tickets
     let mut amount_tickets = combinations.len() as u64;
+
+    // calculate the deposit size required for the number of requested ticktes
     let required_amount = config.ticket_price * Uint256::from(amount_tickets);
+
+    // if deposit_amount is smaller than required_amount, return an error
     if deposit_amount < required_amount {
         return if let Some(_recipient) = recipient {
             Err(ContractError::InsufficientGiftDepositAmount(amount_tickets))
@@ -263,11 +269,14 @@ pub fn deposit(
         };
     }
 
+    // get lottery info to check if lottery has already started
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
+    // get the depositor info
+    // depositor being either the message sender or the recipient that will be reciving the deposited funds if specified
     let depositor = if let Some(recipient) = recipient {
         deps.api.addr_validate(recipient.as_str())?
     } else {
@@ -276,6 +285,7 @@ pub fn deposit(
 
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
+    // check that all sequence combinations are valid
     for combination in combinations.clone() {
         if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
             return Err(ContractError::InvalidSequence {});
@@ -283,7 +293,10 @@ pub fn deposit(
     }
 
     let mut new_combinations = combinations.clone();
-    // check if we need to round up number of combinations based on depositor total deposits
+
+    // check if the deposited amount divided by the ticket price is greater than or equal to
+    // the number of tickets the user has plus one
+    // this means that the user is eligible for more tickets
     if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
         / config.ticket_price)
         >= (Decimal256::from_uint256(Uint256::from(
@@ -297,7 +310,9 @@ pub fn deposit(
         amount_tickets += 1;
     }
 
+    // update the glow deposit reward index
     compute_reward(&mut state, &pool, env.block.height);
+    // update the glow depositor reward for the depositor
     compute_depositor_reward(&state, &mut depositor_info);
 
     // query exchange_rate from anchor money market
@@ -307,23 +322,27 @@ pub fn deposit(
         env.block.height,
     )?;
 
-    // Discount tx taxes
+    // discount tx taxes when calculating the net deposited amount in anchor
     let net_coin_amount = deduct_tax(
         deps.as_ref(),
         coin(deposit_amount.into(), config.stable_denom.clone()),
     )?;
     let amount = net_coin_amount.amount;
 
-    // add amount of aUST entitled from the deposit
+    // get the amount of aUST entitled from the deposit
     let minted_amount = Decimal256::from_uint256(amount) / epoch_state.exchange_rate;
 
-    // We are storing the deposit amount without the tax deduction, so we subsidy it for UX reasons.
+    // update the depositors pretax deposit amount
+    // it is pretax because the number of ticktes a user it entitled to is based on the users pretax deposit value for UI purposes
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
         .add(Decimal256::from_uint256(deposit_amount));
+
+    // update the depositors shares (basically the amount of aUST the depositor has minted in exchange for deposited USt)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in new_combinations {
+        // check that the number of holders for a ticket isn't too high
         if let Some(holders) = TICKETS
             .may_load(deps.storage, combination.as_bytes())
             .unwrap()
@@ -333,6 +352,7 @@ pub fn deposit(
             }
         }
 
+        // update the TICKETS storage
         let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
             let mut b = a.unwrap_or_default();
             b.push(depositor.clone());
@@ -341,10 +361,12 @@ pub fn deposit(
         TICKETS
             .update(deps.storage, combination.as_bytes(), add_ticket)
             .unwrap();
+
+        // add the combination to the depositor_info
         depositor_info.tickets.push(combination);
     }
 
-    // Update global state and pool
+    // update global state and pool
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
     pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
     pool.deposit_shares = pool
@@ -357,11 +379,12 @@ pub fn deposit(
         .lottery_deposits
         .add(Decimal256::from_uint256(deposit_amount) * config.split_factor);
 
-    // Update depositor and state information
+    // save depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
+    // return response with message to convert deposited UST to aUST in anchor
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),

@@ -1,6 +1,5 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, StdResult, Storage, Uint128};
-use sha3::{Digest, Keccak256};
 
 use crate::state::{
     read_depositor_info, store_depositor_info, DepositorInfo, Pool, SponsorInfo, State,
@@ -111,15 +110,15 @@ pub fn calculate_max_bound(min_bound: &str) -> String {
     }
 }
 
-pub fn pseudo_random_seq(sender_addr: String, time: u64) -> String {
-    let mut input = sender_addr;
-    input.push_str(&time.to_string());
-    let mut hasher = Keccak256::new();
-    hasher.update(input.as_bytes());
-    let result = hasher.finalize();
-    let pseudo_random_hash = &hex::encode(result)[2..7];
-    pseudo_random_hash.to_string()
-}
+// pub fn pseudo_random_seq(sender_addr: String, time: u64) -> String {
+//     let mut input = sender_addr;
+//     input.push_str(&time.to_string());
+//     let mut hasher = Keccak256::new();
+//     hasher.update(input.as_bytes());
+//     let result = hasher.finalize();
+//     let pseudo_random_hash = &hex::encode(result)[2..7];
+//     pseudo_random_hash.to_string()
+// }
 
 pub fn is_valid_sequence(sequence: &str, len: u8) -> bool {
     sequence.len() == (len as usize)

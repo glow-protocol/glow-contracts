@@ -154,7 +154,7 @@ pub struct PoolResponse {
     pub total_user_lottery_deposits: Decimal256,
     pub total_user_lottery_shares: Decimal256,
     pub total_user_savings_shares: Decimal256,
-    pub sponsor_shares: Decimal256,
+    pub total_sponsor_lotto_shares: Decimal256,
 }
 
 // We define a custom struct for each query response

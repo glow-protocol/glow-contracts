@@ -128,7 +128,7 @@ pub fn instantiate(
             total_user_lottery_deposits: Decimal256::zero(),
             total_user_savings_shares: Decimal256::zero(),
             total_user_lottery_shares: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            total_sponsor_lotto_shares: Decimal256::zero(),
         },
     )?;
 
@@ -492,7 +492,7 @@ pub fn execute_sponsor(
         pool.total_sponsor_lotto_deposits = pool
             .total_sponsor_lotto_deposits
             .add(Decimal256::from_uint256(net_sponsor_amount));
-        pool.sponsor_shares = pool.sponsor_shares.add(minted_amount);
+        pool.total_sponsor_lotto_shares = pool.total_sponsor_lotto_shares.add(minted_amount);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
@@ -524,7 +524,7 @@ pub fn execute_sponsor_withdraw(
 
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
-    if sponsor_info.amount.is_zero() || pool.sponsor_shares.is_zero() {
+    if sponsor_info.amount.is_zero() || pool.total_sponsor_lotto_shares.is_zero() {
         return Err(ContractError::InvalidSponsorWithdraw {});
     }
 
@@ -560,7 +560,7 @@ pub fn execute_sponsor_withdraw(
 
     // Update global state
     pool.total_sponsor_lotto_deposits = pool.total_sponsor_lotto_deposits.sub(sponsor_info.amount);
-    pool.sponsor_shares = pool.sponsor_shares.sub(sponsor_info.shares);
+    pool.total_sponsor_lotto_shares = pool.total_sponsor_lotto_shares.sub(sponsor_info.shares);
 
     // Update sponsor info
     sponsor_info.amount = Decimal256::zero();
@@ -621,8 +621,9 @@ pub fn execute_withdraw(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    let shares_supply =
-        pool.total_user_lottery_shares + pool.total_user_savings_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_lottery_shares
+        + pool.total_user_savings_shares
+        + pool.total_sponsor_lotto_shares;
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
     if depositor.shares.is_zero() || shares_supply.is_zero() {
@@ -1261,7 +1262,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
         total_user_lottery_deposits: pool.total_user_lottery_deposits,
         total_user_savings_shares: pool.total_user_savings_shares,
         total_user_lottery_shares: pool.total_user_lottery_shares,
-        sponsor_shares: pool.sponsor_shares,
+        total_sponsor_lotto_shares: pool.total_sponsor_lotto_shares,
     })
 }
 

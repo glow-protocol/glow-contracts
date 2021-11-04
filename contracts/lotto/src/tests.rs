@@ -194,7 +194,7 @@ fn proper_initialization() {
         pool,
         PoolResponse {
             total_user_savings_deposits: Decimal256::zero(),
-            lottery_deposits: Decimal256::zero(),
+            total_user_lottery_deposits: Decimal256::zero(),
             total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
@@ -430,7 +430,7 @@ fn deposit() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_user_savings_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
-            lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
+            total_user_lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
@@ -788,7 +788,7 @@ fn gift_tickets() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_user_savings_deposits: Decimal256::percent(TICKET_PRICE * 2u64),
-            lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
+            total_user_lottery_deposits: Decimal256::percent(TICKET_PRICE * 2u64)
                 * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
@@ -1036,7 +1036,7 @@ fn withdraw() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_user_savings_deposits: Decimal256::zero(),
-            lottery_deposits: Decimal256::zero(),
+            total_user_lottery_deposits: Decimal256::zero(),
             total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
@@ -1312,7 +1312,7 @@ fn instant_withdraw() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_user_savings_deposits: Decimal256::zero(),
-            lottery_deposits: Decimal256::zero(),
+            total_user_lottery_deposits: Decimal256::zero(),
             total_sponsor_lotto_deposits: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),

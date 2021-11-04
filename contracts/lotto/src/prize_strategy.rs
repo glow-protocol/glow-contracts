@@ -91,13 +91,16 @@ pub fn execute_lottery(
     let mut msgs: Vec<CosmosMsg> = vec![];
     // Redeem funds if lottery related shares are greater than outstanding lottery deposits
     let mut aust_to_redeem = Decimal256::zero();
-    if (pool.lottery_deposits + pool.total_sponsor_lotto_deposits) >= pooled_lottery_deposits {
+    if (pool.total_user_lottery_deposits + pool.total_sponsor_lotto_deposits)
+        >= pooled_lottery_deposits
+    {
         if state.award_available.is_zero() {
             return Err(ContractError::InsufficientLotteryFunds {});
         }
     } else {
-        let amount_to_redeem =
-            pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_lotto_deposits;
+        let amount_to_redeem = pooled_lottery_deposits
+            - pool.total_user_lottery_deposits
+            - pool.total_sponsor_lotto_deposits;
         aust_to_redeem = amount_to_redeem / rate;
 
         //Discount tx taxes Anchor -> Glow

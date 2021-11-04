@@ -125,7 +125,7 @@ pub fn instantiate(
         &Pool {
             total_user_savings_deposits: Decimal256::zero(),
             total_sponsor_lotto_deposits: Decimal256::zero(),
-            lottery_deposits: Decimal256::zero(),
+            total_user_lottery_deposits: Decimal256::zero(),
             deposit_shares: Decimal256::zero(),
             lottery_shares: Decimal256::zero(),
             sponsor_shares: Decimal256::zero(),
@@ -368,8 +368,8 @@ pub fn deposit(
     pool.total_user_savings_deposits = pool
         .total_user_savings_deposits
         .add(Decimal256::from_uint256(post_tax_deposit_amount));
-    pool.lottery_deposits = pool
-        .lottery_deposits
+    pool.total_user_lottery_deposits = pool
+        .total_user_lottery_deposits
         .add(Decimal256::from_uint256(post_tax_deposit_amount) * config.split_factor);
 
     // update depositor and state information
@@ -719,8 +719,8 @@ pub fn execute_withdraw(
     // Update global state and pool
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
     pool.total_user_savings_deposits = pool.total_user_savings_deposits.sub(withdrawn_deposits);
-    pool.lottery_deposits = pool
-        .lottery_deposits
+    pool.total_user_lottery_deposits = pool
+        .total_user_lottery_deposits
         .sub(withdrawn_deposits * config.split_factor);
     pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
     pool.deposit_shares = pool.deposit_shares.sub(withdrawn_deposit_shares);
@@ -1255,7 +1255,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
     Ok(PoolResponse {
         total_user_savings_deposits: pool.total_user_savings_deposits,
         total_sponsor_lotto_deposits: pool.total_sponsor_lotto_deposits,
-        lottery_deposits: pool.lottery_deposits,
+        total_user_lottery_deposits: pool.total_user_lottery_deposits,
         deposit_shares: pool.deposit_shares,
         lottery_shares: pool.lottery_shares,
         sponsor_shares: pool.sponsor_shares,

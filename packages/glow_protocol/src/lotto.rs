@@ -151,7 +151,7 @@ pub struct StateResponse {
 pub struct PoolResponse {
     pub total_user_savings_deposits: Decimal256,
     pub total_sponsor_lotto_deposits: Decimal256,
-    pub lottery_deposits: Decimal256,
+    pub total_user_lottery_deposits: Decimal256,
     pub deposit_shares: Decimal256,
     pub lottery_shares: Decimal256,
     pub sponsor_shares: Decimal256,

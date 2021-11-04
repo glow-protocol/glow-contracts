@@ -233,7 +233,7 @@ impl WasmMockQuerier {
 
                 QueryMsg::GetRandomness { round: _ } => {
                     SystemResult::Ok(ContractResult::from(to_binary(&OracleResponse {
-                        random: Binary::from_base64(
+                        randomness: Binary::from_base64(
                             "e74c6cfd99371c817e8c3e0099df9074032eec15189c49e5b4740b084ba5ce2b",
                         )
                         .unwrap(),

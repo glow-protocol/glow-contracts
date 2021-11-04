@@ -112,8 +112,7 @@ pub fn instantiate(
             award_available: Decimal256::from_uint256(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
-            next_lottery_exec_time: Duration::Time(msg.lottery_interval + msg.block_time)
-                .after(&env.block),
+            next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.lottery_interval + msg.block_time).after(&env.block),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),

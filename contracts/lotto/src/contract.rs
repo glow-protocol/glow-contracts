@@ -254,22 +254,14 @@ pub fn deposit(
         };
     }
 
-    // get the number of requested tickets
-    let mut amount_tickets = combinations.len() as u64;
-
-    // calculate the deposit size required for the number of requested ticktes
-    let required_amount = config.ticket_price * Uint256::from(amount_tickets);
-
-    // if deposit_amount is smaller than required_amount, return an error
-    if deposit_amount < required_amount {
-        return if let Some(_recipient) = recipient {
-            Err(ContractError::InsufficientGiftDepositAmount(amount_tickets))
-        } else {
-            Err(ContractError::InsufficientDepositAmount(amount_tickets))
-        };
+    // validate that all sequence combinations are valid
+    for combination in combinations.clone() {
+        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
+            return Err(ContractError::InvalidSequence {});
+        }
     }
 
-    // get lottery info to check if lottery has already started
+    // validate that the lottery has not already started
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
@@ -277,37 +269,33 @@ pub fn deposit(
 
     // get the depositor info
     // depositor being either the message sender or the recipient that will be reciving the deposited funds if specified
-    let depositor = if let Some(recipient) = recipient {
+    let depositor = if let Some(recipient) = recipient.clone() {
         deps.api.addr_validate(recipient.as_str())?
     } else {
         info.sender.clone()
     };
-
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
-    // check that all sequence combinations are valid
-    for combination in combinations.clone() {
-        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
-            return Err(ContractError::InvalidSequence {});
-        }
-    }
+    // check that the user's post transaction deposit amount divided by the ticket price
+    // is greater than or equal to the number of tickets the user will have post transaction
 
-    let mut new_combinations = combinations.clone();
+    // get the number of requested tickets
+    let amount_tickets = combinations.len() as u64;
 
-    // check if the deposited amount divided by the ticket price is greater than or equal to
-    // the number of tickets the user has plus one
-    // this means that the user is eligible for more tickets
-    if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
-        / config.ticket_price)
-        >= (Decimal256::from_uint256(Uint256::from(
-            (depositor_info.tickets.len() + combinations.len()) as u128,
-        )) + Decimal256::one())
-    {
-        let current_time = env.block.time.nanos();
-        let sequence = pseudo_random_seq(info.sender.clone().into_string(), current_time);
+    // get the user's post transaction deposit amount
+    let post_transaction_user_deposit_amount =
+        depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount);
 
-        new_combinations.push(sequence);
-        amount_tickets += 1;
+    // get the deposit size required for the number of tickets the user will have post transaction
+    let post_transaction_required_deposit_amount = config.ticket_price
+        * Decimal256::from_uint256(depositor_info.tickets.len() as u64 + amount_tickets);
+
+    if post_transaction_user_deposit_amount < post_transaction_required_deposit_amount {
+        return if let Some(_recipient) = recipient {
+            Err(ContractError::InsufficientGiftDepositAmount(amount_tickets))
+        } else {
+            Err(ContractError::InsufficientDepositAmount(amount_tickets))
+        };
     }
 
     // update the glow deposit reward index
@@ -341,7 +329,7 @@ pub fn deposit(
     // update the depositors shares (basically the amount of aUST the depositor has minted in exchange for deposited USt)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
-    for combination in new_combinations {
+    for combination in combinations {
         // check that the number of holders for a ticket isn't too high
         if let Some(holders) = TICKETS
             .may_load(deps.storage, combination.as_bytes())

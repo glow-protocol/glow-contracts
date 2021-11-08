@@ -999,12 +999,13 @@ fn gift_tickets() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
 
-    //TODO: Revise this. Clippy complains as variables not being used
-    let _amount_required = TICKET_PRICE * 2u64;
     match res {
-        Err(ContractError::InsufficientGiftDepositAmount(_amount_required)) => {}
+        Err(ContractError::InsufficientGiftDepositAmount(amount_required)) => {
+            assert_eq!(amount_required, TICKET_PRICE * 2u64);
+        }
         _ => panic!("DO NOT ENTER HERE"),
     }
+
     // Invalid recipient - you cannot make a gift to yourself
     let msg = ExecuteMsg::Gift {
         combinations: vec![String::from("13597"), String::from("34567")],

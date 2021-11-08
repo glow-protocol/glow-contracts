@@ -288,7 +288,7 @@ fn claim() {
 }
 
 #[test]
-fn withdraw() {
+fn withdraw_expired_tokens() {
     let seconds1 = 1635256000;
     let seconds2 = 1635256100;
     let seconds3 = 1635256200;
@@ -356,7 +356,7 @@ fn withdraw() {
     assert_eq!(
         res.attributes,
         vec![
-            attr("action", "withdraw"),
+            attr("action", "withdraw_expired_tokens"),
             attr("to", "owner0000"),
             attr("amount", Uint128::from(123u128).to_string())
         ]

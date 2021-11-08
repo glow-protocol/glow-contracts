@@ -136,7 +136,7 @@ pub fn execute_withdraw_expired_tokens(
             })?,
         })])
         .add_attributes(vec![
-            ("action", "withdraw"),
+            ("action", "withdraw_expired_tokens"),
             ("to", &recipient),
             ("amount", &token_balance.to_string()),
         ]))

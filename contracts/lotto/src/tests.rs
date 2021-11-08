@@ -310,7 +310,8 @@ fn deposit() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
-    // Must deposit stable_denom coins
+    // Return InvalidDepositAmount because you tried to specify two tickets combinations
+    // but only deposited enough for a single ticket.
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
@@ -328,7 +329,8 @@ fn deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // correct base denom, zero deposit
+    // Return InvalidDepositAmount because you tried to specify two ticket combinations
+    // but didn't send any funds.
     let info = mock_info(
         "addr0000",
         &[Coin {
@@ -343,7 +345,7 @@ fn deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Invalid ticket sequence - more number of digits
+    // Return InvalidSequence because you tried to specify a ticket combination with 6 digits instead of 5.
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("135797"), String::from("34567")],
     };
@@ -360,7 +362,7 @@ fn deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Invalid ticket sequence - less number of digits
+    // Return InvalidSequence because you tried to specify a ticket combination with 4 digits instead of 5.
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("3457")],
     };
@@ -381,17 +383,17 @@ fn deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Correct deposit - buys two tickets
+    // Set the mock aUST-UST exchange rate for the mock querier.
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    // Correctly purchase two tickets
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    // Check address of sender was stored correctly in both sequence buckets
+    // Check that the address of the sender was stored correctly in both sequence buckets
     assert_eq!(
         query_ticket_info(deps.as_ref(), String::from("13579"))
             .unwrap()
@@ -405,7 +407,7 @@ fn deposit() {
         vec![Addr::unchecked("addr0000")]
     );
 
-    // Check depositor info was updated correctly
+    // Check that the depositor info was updated correctly
     assert_eq!(
         read_depositor_info(
             deps.as_ref().storage,

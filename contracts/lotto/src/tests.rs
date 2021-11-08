@@ -1001,7 +1001,7 @@ fn gift_tickets() {
 
     match res {
         Err(ContractError::InsufficientGiftDepositAmount(amount_required)) => {
-            assert_eq!(amount_required, TICKET_PRICE * 2u64);
+            assert_eq!(amount_required, 2u64);
         }
         _ => panic!("DO NOT ENTER HERE"),
     }

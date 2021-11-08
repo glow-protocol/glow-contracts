@@ -3763,3 +3763,101 @@ fn calculate_total_prize(
 
     initial_balance + net_yield
 }
+
+#[test]
+fn max_unbonding_claim() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    let mut env = mock_env();
+
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    // User deposits and buys one ticket -------------------
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("23456")],
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // Add the funds to the contract address -------------------
+    let shares = Uint256::one()
+        + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+    )]);
+
+    // Address withdraws a small amount of money 15 times -----------------
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        amount: Some(10u128.into()),
+        instant: None,
+    };
+
+    for _ in 0..15 {
+        let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    }
+
+    // Address tries to make another claim but fails
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    match res {
+        Err(ContractError::MaxUnbondingClaims {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Advance one week in time -----------------
+    println!("Block time 1: {}", env.block.time);
+    if let Duration::Time(time) = WEEK {
+        env.block.time = env.block.time.plus_seconds(time * 2);
+    }
+    println!("Block time 2: {}", env.block.time);
+
+    // // Claim amount is already unbonded, so claim execution should work
+    // let msg = ExecuteMsg::Claim {};
+    // let res = execute(deps.as_mut(), env, info, msg).unwrap();
+
+    // // Check depositor info was updated correctly
+    // assert_eq!(
+    //     read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),
+    //     DepositorInfo {
+    //         deposit_amount: Decimal256::zero(),
+    //         shares: Decimal256::zero(),
+    //         reward_index: Decimal256::zero(),
+    //         pending_rewards: Decimal256::zero(),
+    //         tickets: vec![],
+    //         unbonding_info: vec![]
+    //     }
+    // );
+
+    // assert_eq!(
+    //     res.messages,
+    //     vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+    //         to_address: "addr0001".to_string(),
+    //         amount: vec![Coin {
+    //             denom: String::from("uusd"),
+    //             amount: Uint128::from(10_000_000u64),
+    //         }],
+    //     }))]
+    // );
+
+    // assert_eq!(
+    //     res.attributes,
+    //     vec![
+    //         attr("action", "claim_unbonded"),
+    //         attr("depositor", "addr0001"),
+    //         attr("redeemed_amount", 10_000_000u64.to_string()),
+    //     ]
+    // );
+}

@@ -614,6 +614,337 @@ fn deposit() {
 }
 
 #[test]
+fn deposit_with_tax() {
+    // Get mock dependencies and set the tax rate
+    let mut deps = mock_dependencies(&[]);
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::from(1_000_000u128))],
+    );
+
+    // Initialize contract
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    // Return InvalidDepositAmount because you tried to specify two tickets combinations
+    // but only deposited enough for a single ticket.
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: "ukrw".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    match res {
+        Err(ContractError::InvalidDepositAmount {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Return InvalidDepositAmount because you tried to specify two ticket combinations
+    // but didn't send any funds.
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint128::zero(),
+        }],
+    );
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidDepositAmount {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Return InvalidSequence because you tried to specify a ticket combination with 6 digits instead of 5.
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("135797"), String::from("34567")],
+    };
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE * 2u64) * Uint256::one()).into(),
+        }],
+    );
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    match res {
+        Err(ContractError::InvalidSequence {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Return InvalidSequence because you tried to specify a ticket combination with 4 digits instead of 5.
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("13579"), String::from("3457")],
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    match res {
+        Err(ContractError::InvalidSequence {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Invalid ticket sequence - only hex values allowed
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("135w9"), String::from("34567")],
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    match res {
+        Err(ContractError::InvalidSequence {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Set the mock aUST-UST exchange rate for the mock querier.
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    // Correctly purchase two tickets
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("13579"), String::from("34567")],
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Check that the address of the sender was stored correctly in both sequence buckets
+    assert_eq!(
+        query_ticket_info(deps.as_ref(), String::from("13579"))
+            .unwrap()
+            .holders,
+        vec![Addr::unchecked("addr0000")]
+    );
+    assert_eq!(
+        query_ticket_info(deps.as_ref(), String::from("34567"))
+            .unwrap()
+            .holders,
+        vec![Addr::unchecked("addr0000")]
+    );
+
+    let post_tax_deposit_amount = deduct_tax(
+        deps.as_ref(),
+        Coin {
+            denom: String::from("uusd"),
+            amount: Uint128::from(Decimal256::percent(TICKET_PRICE * 2u64) * Uint256::one()),
+        },
+    )
+    .unwrap()
+    .amount;
+
+    let minted_shares =
+        Decimal256::from_uint256(post_tax_deposit_amount) / Decimal256::permille(RATE);
+
+    // Check that the depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr0000").unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: Decimal256::from_uint256(post_tax_deposit_amount),
+            shares: minted_shares,
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+            tickets: vec![String::from("13579"), String::from("34567")],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
+        StateResponse {
+            total_tickets: Uint256::from(2u64),
+            total_reserve: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
+        }
+    );
+
+    // Assert that the pool was updated properly
+    assert_eq!(
+        query_pool(deps.as_ref()).unwrap(),
+        PoolResponse {
+            total_deposits: Decimal256::from_uint256(post_tax_deposit_amount),
+            lottery_deposits: Decimal256::from_uint256(post_tax_deposit_amount)
+                * Decimal256::percent(SPLIT_FACTOR),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            sponsor_shares: Decimal256::zero(),
+        }
+    );
+
+    // Assert that res contains a message for depositing the coins in anchor
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
+                denom: String::from("uusd"),
+                amount: post_tax_deposit_amount,
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+        }))]
+    );
+
+    // Assert that the res attributes are correct
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "deposit"),
+            attr("depositor", "addr0000"),
+            attr("recipient", "addr0000"),
+            attr(
+                "deposit_amount",
+                Decimal256::percent(TICKET_PRICE * 2u64).to_string()
+            ),
+            attr("tickets", 2u64.to_string()),
+            attr("shares_minted", minted_shares.to_string()),
+        ]
+    );
+
+    // Test the ticket round-up functionality
+    // Deposit 10/6 the price of a ticket which is a bit more than 1.5 times the price of a ticket
+    // So that the user will still be eligible for a round-up ticket post taxes
+    // ------------------------------------------------------------------
+    let deposit_amount =
+        Decimal256::percent(TICKET_PRICE) * Decimal256::from_ratio(10, 6) * Uint256::one();
+
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: deposit_amount.into(),
+        }],
+    );
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("14657")],
+    };
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 3);
+
+    // Deposit again
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("19876")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 5);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("45637")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 6);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("45639")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let depositor_info = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0000").unwrap(),
+    );
+
+    assert_eq!(depositor_info.tickets.len(), 8);
+
+    // Test sequential buys of the same ticket by the same address (should fail after the max ticket holders is reached)
+    // -------------------------------------------------------------------------
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("88888")],
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("88888")],
+    };
+
+    // We let users have a repeated ticket
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Ticket is already owner by 10 holders
+    let addresses_count = 10u64;
+    let addresses_range = 0..addresses_count;
+    let addresses = addresses_range
+        .map(|c| format!("addr{:0>4}", c))
+        .collect::<Vec<String>>();
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    for (_index, address) in addresses.iter().enumerate() {
+        // Users buys winning ticket
+        let msg = ExecuteMsg::Deposit {
+            combinations: vec![String::from("66666")],
+        };
+        let info = mock_info(
+            address.as_str(),
+            &[Coin {
+                denom: "uusd".to_string(),
+                amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+            }],
+        );
+
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    }
+
+    let holders = query_ticket_info(deps.as_ref(), String::from("66666"))
+        .unwrap()
+        .holders;
+
+    assert_eq!(holders.len(), 10);
+
+    // 11th holder with same sequence, should fail
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("66666")],
+    };
+    let info = mock_info(
+        "addr1111",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidHolderSequence {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+}
+
+#[test]
 fn gift_tickets() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);

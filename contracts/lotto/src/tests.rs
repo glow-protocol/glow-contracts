@@ -135,6 +135,7 @@ fn proper_initialization() {
 
     let config = query_config(deps.as_ref()).unwrap();
 
+    // assert that config is initialized properly
     assert_eq!(
         config,
         ConfigResponse {
@@ -173,10 +174,16 @@ fn proper_initialization() {
 
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
     let config = query_config(deps.as_ref()).unwrap();
+
+    // assert that the gov_contract address in the config is correct
     assert_eq!(config.gov_contract, GOV_ADDR.to_string());
+
+    // assert that the distributor contract in the config is correct
     assert_eq!(config.distributor_contract, DISTRIBUTOR_ADDR.to_string());
 
     let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
+
+    // assert that the inital state is correct
     assert_eq!(
         state,
         StateResponse {
@@ -194,6 +201,8 @@ fn proper_initialization() {
     );
 
     let pool = query_pool(deps.as_ref()).unwrap();
+
+    // assert that the pools are all empty
     assert_eq!(
         pool,
         PoolResponse {
@@ -362,7 +371,7 @@ fn deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Invalid ticket sequence - only numbers allowed
+    // Invalid ticket sequence - only hex values allowed
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("135w9"), String::from("34567")],
     };

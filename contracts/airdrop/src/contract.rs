@@ -131,7 +131,7 @@ pub fn execute_withdraw_expired_tokens(
             contract_addr: glow_cw20_address.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: info.sender.to_string(),
+                recipient: recipient.clone(),
                 amount: token_balance.into(),
             })?,
         })])

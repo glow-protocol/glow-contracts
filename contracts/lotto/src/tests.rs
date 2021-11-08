@@ -3647,7 +3647,7 @@ fn claim_rewards_depositor_and_sponsor() {
     let res: SponsorInfoResponse = from_binary(
         &query(
             deps.as_ref(),
-            env.clone(),
+            env,
             QueryMsg::Sponsor {
                 address: "addr1111".to_string(),
             },
@@ -3729,7 +3729,7 @@ fn execute_epoch_operations() {
 
     // fails, next epoch time not expired
     let msg = ExecuteMsg::ExecuteEpochOps {};
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    let res = execute(deps.as_mut(), env, info, msg);
     match res {
         Err(ContractError::InvalidEpochExecution {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
@@ -3811,7 +3811,7 @@ fn max_unbonding_claim() {
     }
 
     // Address tries to make another claim but fails
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
     match res {
         Err(ContractError::MaxUnbondingClaims {}) => {}
         _ => panic!("DO NOT ENTER HERE"),

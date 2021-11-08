@@ -3361,7 +3361,7 @@ fn execute_epoch_operations() {
     if let Duration::Time(time) = (WEEK + HOUR).unwrap() {
         env.block.time = env.block.time.plus_seconds(time);
     }
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     assert_eq!(
         res.messages,
@@ -3375,6 +3375,7 @@ fn execute_epoch_operations() {
     );
 
     let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
+
     // Glow Emission rate must be 1 as hard-coded in mock querier
     assert_eq!(
         state,
@@ -3391,6 +3392,14 @@ fn execute_epoch_operations() {
             next_epoch: WEEK.after(&env.block)
         }
     );
+
+    // fails, next epoch time not expired
+    let msg = ExecuteMsg::ExecuteEpochOps {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    match res {
+        Err(ContractError::InvalidEpochExecution {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }
 
 fn calculate_total_prize(

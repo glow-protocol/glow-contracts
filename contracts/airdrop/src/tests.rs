@@ -406,7 +406,7 @@ fn withdraw_expired_tokens() {
 
     // Verify that only the owner of the contract is able to withdraw tokens
     let info = mock_info("owner0001", &[]);
-    let res = execute(deps.as_mut(), env, info.clone(), withdraw_msg);
+    let res = execute(deps.as_mut(), env, info, withdraw_msg);
     match res {
         Err(ContractError::Unauthorized {}) => {}
         _ => panic!("Must return airdrop not expired error"),

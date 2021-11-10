@@ -9,6 +9,7 @@ static KEY_LATEST_STAGE: &[u8] = b"latest_stage";
 
 static PREFIX_MERKLE_ROOT: &[u8] = b"merkle_root";
 static PREFIX_CLAIM_INDEX: &[u8] = b"claim_index";
+static PREFIX_EXPIRY_AT_SECONDS: &[u8] = b"expiry_at_seconds";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -42,9 +43,9 @@ pub fn store_merkle_root(
 }
 
 pub fn read_merkle_root(storage: &dyn Storage, stage: u8) -> StdResult<String> {
-    let claim_index_bucket: ReadonlyBucket<String> =
+    let merkle_root_bucket: ReadonlyBucket<String> =
         ReadonlyBucket::new(storage, PREFIX_MERKLE_ROOT);
-    claim_index_bucket.load(&[stage])
+    merkle_root_bucket.load(&[stage])
 }
 
 pub fn store_claimed(storage: &mut dyn Storage, user: &CanonicalAddr, stage: u8) -> StdResult<()> {
@@ -61,4 +62,19 @@ pub fn read_claimed(storage: &dyn Storage, user: &CanonicalAddr, stage: u8) -> S
         Some(v) => Ok(v),
         None => Ok(false),
     }
+}
+
+pub fn store_expiry_at_seconds(
+    storage: &mut dyn Storage,
+    stage: u8,
+    expiry_at_seconds: u64,
+) -> StdResult<()> {
+    let mut expiry_at_seconds_bucket: Bucket<u64> = Bucket::new(storage, PREFIX_EXPIRY_AT_SECONDS);
+    expiry_at_seconds_bucket.save(&[stage], &expiry_at_seconds)
+}
+
+pub fn read_expiry_at_seconds(storage: &dyn Storage, stage: u8) -> StdResult<u64> {
+    let expiry_at_seconds_bucket: ReadonlyBucket<u64> =
+        ReadonlyBucket::new(storage, PREFIX_EXPIRY_AT_SECONDS);
+    expiry_at_seconds_bucket.load(&[stage])
 }

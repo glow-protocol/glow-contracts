@@ -9,6 +9,15 @@ pub enum ContractError {
     #[error("Already claimed")]
     AlreadyClaimed {},
 
+    #[error("Airdrop expired")]
+    AirdropExpired {},
+
+    #[error("Airdrop not expired")]
+    AirdropNotExpired {},
+
+    #[error("No airdrops have been registered yet")]
+    NoRegisteredAirdrops {},
+
     #[error("Invalid hex encoded proof")]
     InvalidHexProof {},
 
@@ -20,4 +29,7 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("InvalidExpiryAtSeconds")]
+    InvalidExpiryAtSeconds {},
 }

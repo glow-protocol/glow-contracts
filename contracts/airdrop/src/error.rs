@@ -26,4 +26,7 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("InvalidExpiryAtSeconds")]
+    InvalidExpiryAtSeconds {},
 }

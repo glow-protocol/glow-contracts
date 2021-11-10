@@ -61,7 +61,7 @@ pub fn execute(
         ExecuteMsg::RegisterMerkleRoot {
             merkle_root,
             expiry_at_seconds,
-        } => register_merkle_root(deps, info, merkle_root, expiry_at_seconds),
+        } => register_merkle_root(deps, env, info, merkle_root, expiry_at_seconds),
         ExecuteMsg::Claim {
             stage,
             amount,
@@ -144,6 +144,7 @@ pub fn execute_withdraw_expired_tokens(
 
 pub fn register_merkle_root(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     merkle_root: String,
     expiry_at_seconds: u64,
@@ -151,6 +152,11 @@ pub fn register_merkle_root(
     let config: Config = read_config(deps.as_ref().storage)?;
     if deps.api.addr_canonicalize(info.sender.as_str())? != config.owner {
         return Err(ContractError::Unauthorized {});
+    }
+
+    // Validate that the expiry_at_seconds is at a time in the future.
+    if expiry_at_seconds <= env.block.time.seconds() {
+        return Err(ContractError::InvalidExpiryAtSeconds {});
     }
 
     let mut root_buf: [u8; 32] = [0; 32];

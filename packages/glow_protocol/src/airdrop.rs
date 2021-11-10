@@ -15,8 +15,12 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
     },
+    WithdrawExpiredTokens {
+        recipient: String,
+    },
     RegisterMerkleRoot {
         merkle_root: String,
+        expiry_at_seconds: u64,
     },
     Claim {
         stage: u8,
@@ -36,6 +40,7 @@ pub enum QueryMsg {
     MerkleRoot { stage: u8 },
     LatestStage {},
     IsClaimed { stage: u8, address: String },
+    ExpiryAtSeconds { stage: u8 },
 }
 
 // We define a custom struct for each query response
@@ -62,4 +67,10 @@ pub struct LatestStageResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct IsClaimedResponse {
     pub is_claimed: bool,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ExpiryAtSecondsResponse {
+    pub expiry_at_seconds: u64,
 }

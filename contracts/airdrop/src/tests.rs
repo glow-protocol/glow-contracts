@@ -117,7 +117,7 @@ fn register_merkle_root() {
 
     let res = query(
         deps.as_ref(),
-        env,
+        env.clone(),
         QueryMsg::MerkleRoot {
             stage: latest_stage.latest_stage,
         },
@@ -128,6 +128,18 @@ fn register_merkle_root() {
         "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
         merkle_root.merkle_root
     );
+
+    // Verify that only the owner of the contract is able to register airdrop stages
+    let info = mock_info("owner0001", &[]);
+    let msg = ExecuteMsg::RegisterMerkleRoot {
+        merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
+        expiry_at_seconds: seconds2,
+    };
+    let res = execute(deps.as_mut(), env, info, msg);
+    match res {
+        Err(ContractError::Unauthorized {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }
 
 #[test]
@@ -366,7 +378,7 @@ fn withdraw_expired_tokens() {
     env.block.time = Timestamp::from_seconds(seconds3);
 
     // Successfully withdraw the glow tokens
-    let res = execute(deps.as_mut(), env, info, withdraw_msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, withdraw_msg.clone()).unwrap();
 
     assert_eq!(res.messages.len(), 1);
     assert_eq!(
@@ -377,4 +389,12 @@ fn withdraw_expired_tokens() {
             attr("amount", Uint128::from(123u128).to_string())
         ]
     );
+
+    // Verify that only the owner of the contract is able to withdraw tokens
+    let info = mock_info("owner0001", &[]);
+    let res = execute(deps.as_mut(), env, info.clone(), withdraw_msg);
+    match res {
+        Err(ContractError::Unauthorized {}) => {}
+        _ => panic!("Must return airdrop not expired error"),
+    }
 }

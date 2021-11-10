@@ -135,9 +135,23 @@ fn register_merkle_root() {
         merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
         expiry_at_seconds: seconds2,
     };
-    let res = execute(deps.as_mut(), env, info, msg);
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
     match res {
         Err(ContractError::Unauthorized {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    println!("{}, {}", seconds1, env.block.time.seconds());
+
+    // Verify that you can't register an airdrop stage with an expiry in the past
+    let info = mock_info("owner0000", &[]);
+    let msg = ExecuteMsg::RegisterMerkleRoot {
+        merkle_root: "634de21cde1044f41d90373733b0f0fb1c1c71f9652b905cdf159e73c4cf0d37".to_string(),
+        expiry_at_seconds: seconds1,
+    };
+    let res = execute(deps.as_mut(), env, info, msg);
+    match res {
+        Err(ContractError::InvalidExpiryAtSeconds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 }

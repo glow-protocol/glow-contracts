@@ -106,7 +106,7 @@ pub fn execute_withdraw_expired_tokens(
 
     // check that at least one stage has been created
     if latest_stage == 0 {
-        return Err(ContractError::AirdropNotExpired {});
+        return Err(ContractError::NoRegisteredAirdrops {});
     }
 
     // check that every stage has expired

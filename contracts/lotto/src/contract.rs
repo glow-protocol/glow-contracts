@@ -338,10 +338,12 @@ pub fn deposit(
     let minted_amount =
         Decimal256::from_uint256(post_tax_deposit_amount) / epoch_state.exchange_rate;
 
+    // adjusted post tax deposit amount
+    // adjusted for rounding
+    let minted_aust_value = minted_amount * epoch_state.exchange_rate;
+
     // store the post tax deposit amount
-    depositor_info.deposit_amount = depositor_info
-        .deposit_amount
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
+    depositor_info.deposit_amount = depositor_info.deposit_amount.add(minted_aust_value);
 
     // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
@@ -376,12 +378,10 @@ pub fn deposit(
     pool.deposit_shares = pool
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
-    pool.total_deposits = pool
-        .total_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
+    pool.total_deposits = pool.total_deposits.add(minted_aust_value);
     pool.lottery_deposits = pool
         .lottery_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount) * config.split_factor);
+        .add(minted_aust_value * config.split_factor);
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
@@ -629,83 +629,136 @@ pub fn execute_withdraw(
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
-
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
-
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
-    if depositor.shares.is_zero() || shares_supply.is_zero() {
-        return Err(ContractError::InvalidWithdraw {});
-    }
 
-    if (amount.is_some()) && (amount.unwrap().is_zero()) {
-        return Err(ContractError::InvalidWithdraw {});
-    }
-
-    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if current_lottery.rand_round != 0 {
-        return Err(ContractError::LotteryAlreadyStarted {});
-    }
-    // Compute GLOW reward
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
-
-    // Calculate depositor current pooled deposits in uusd
-    let depositor_ratio = depositor.shares / shares_supply;
+    // Get the balance of the smart contract.
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
         env.clone().contract.address,
     )?;
-    let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
+
+    // Get the exchange rate of aust.
     let rate = query_exchange_rate(
         deps.as_ref(),
         config.anchor_contract.to_string(),
         env.block.height,
     )?
     .exchange_rate;
-    let pooled_deposits = Uint256::one() * (aust_amount * rate);
 
-    // Calculate ratio of deposits, shares and tickets to withdraw
-    let mut withdraw_ratio = Decimal256::one();
-    if let Some(amount) = amount {
-        if Uint256::from(amount) > pooled_deposits {
-            return Err(ContractError::InvalidWithdraw {});
-        } else {
-            withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), pooled_deposits);
-        }
-    }
-    let aust_to_redeem = aust_amount * withdraw_ratio;
-    let redemed_amount = pooled_deposits * withdraw_ratio;
-    // Discount tax Anchor -> Glow
-    let mut return_amount = Uint256::from(
-        deduct_tax(
-            deps.as_ref(),
-            coin(redemed_amount.into(), config.clone().stable_denom),
-        )?
-        .amount,
-    );
-
-    // Double-checking Lotto pool is solvent against deposits
+    // Validate that the value of the aust owned by the contract
+    // is at least as big as the amount of money that has been deposited into the pool
+    // Theoretically this check should never fail, but it is in place as a double check
+    // to add protection in the event of an exploit.
     if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
         < (pool.total_deposits + pool.total_sponsor_amount)
     {
         return Err(ContractError::InsufficientPoolFunds {});
     }
 
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+
+    // Get the total aust shares across all pools
+    // This should equal contract_a_balance right?
+    // Should we assert that they are equal?
+    // Only difference seems to be that "with_token_balances" takes a Uint, not a Decimal.
+    // Shares supply is only used for calculating the depositor ratio
+    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+
+    // Validate that the lottery hasn't started yet.
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
+    // Validate that the depositor has non zero shares
+    // and that the pool is not empty.
+    if depositor.shares.is_zero() || shares_supply.is_zero() {
+        return Err(ContractError::InvalidWithdraw {});
+    }
+
+    // Validate that the user is withdrawing a nonzero amount
+    if (amount.is_some()) && (amount.unwrap().is_zero()) {
+        return Err(ContractError::InvalidWithdraw {});
+    }
+
+    // Compute Glow rewards
+    compute_reward(&mut state, &pool, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
+
+    // Calculate the fraction of the aust that belongs to the depositor.
+    let depositor_ratio = depositor.shares / shares_supply;
+
+    // Get the fraction of aust owned by the smart contract that belongs to the depositor.
+    let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
+
+    // Get the ust value of the aust that belongs to the depositor.
+    // Basically depositor.shares * rate
+    // But Uint256
+    // Why not make pooled_deposits a Decimal?
+    let pooled_deposits = Uint256::one() * (aust_amount * rate);
+
+    // Begin with a withdraw_ratio of one.
+    let mut withdraw_ratio = Decimal256::one();
+
+    // If the user is trying to withdraw less than all of their ust,
+    // set the withdraw_ratio accordingly.
+    if let Some(amount) = amount {
+        if Uint256::from(amount) > pooled_deposits {
+            return Err(ContractError::InvalidWithdraw {});
+        } else {
+            // Why not calculate it is as (amount / depositor_info.deposit_amount)?
+            // You want to calculate it as a fraction of the value of their deposit.
+            // Pooled deposits is the value of
+            // Interesting...
+            // Maybe I am onto something! I don't think so.
+
+            // withdraw ratio is amount / (depositor.shares * rate)
+            withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), pooled_deposits);
+        }
+    }
+
+    // Calculate the amount of aust to pull out of anchor.
+    let aust_to_redeem = aust_amount * withdraw_ratio;
+
+    // Calculate the value of the deposit that the user is withdrawing.
+    // This may be different from the amount specified by the user due to rounding.
+    // But this is equal to pooled_deposits * amount / pooled_deposits.
+    // So why not just use amount? You want the rounding error?
+    let redeemed_amount = pooled_deposits * withdraw_ratio;
+
+    // Calculate the amount of ust that will be returned from anchor
+    // when considering tax.
+    let mut return_amount = Uint256::from(
+        deduct_tax(
+            deps.as_ref(),
+            coin(redeemed_amount.into(), config.clone().stable_denom),
+        )?
+        .amount,
+    );
+
+    // Get the number of tickets the depositor owns.
     let tickets_amount = depositor.tickets.len() as u128;
-    // Check for rounding error
+
+    // Multiply the number of tickets by the withdraw ratio to get the number of tickets that will be removed
     let rounded_tickets = Uint256::from(tickets_amount) * withdraw_ratio;
+
+    // Get the fractional number of tickets that would be removed.
     let decimal_tickets = Decimal256::from_uint256(Uint256::from(tickets_amount)) * withdraw_ratio;
 
+    // If the fractional number of tickets is not equal to the rounded number of tickets
+    // it means that we we need to round down. So basically withdrawn_tickets = floor(withdraw_ratio * tickets_amount)
     let mut withdrawn_tickets: u128 = rounded_tickets.into();
     if decimal_tickets != Decimal256::from_uint256(rounded_tickets) {
         withdrawn_tickets += 1u128;
     }
 
+    // Throw an error if more tickets are being withdrawn than the user owns.
+    // This should never happen but double checks for the possibility.
     if withdrawn_tickets > tickets_amount {
         return Err(ContractError::InvalidWithdraw {});
     }
 
+    // Remove `withdrawn_tickets` from the depositors tickets.
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
         TICKETS.update(deps.storage, seq.as_bytes(), |tickets| -> StdResult<_> {
             let mut new_tickets = tickets.unwrap();
@@ -718,23 +771,46 @@ pub fn execute_withdraw(
         })?;
     }
 
+    // Calculate the withdrawn deposits to be the deposit_amount times the withdraw ratio
+    // How does this compare to pooled deposits?
+    // deposit_amount doesn't appreciate while pooled_deposits does
+    // so this gives the fraction of their deposits
+    // system is very overly complicated
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
-    let withdrawn_shares = depositor.shares * withdraw_ratio;
-    let withdrawn_lottery_shares = withdrawn_shares * config.split_factor;
-    let withdrawn_deposit_shares = withdrawn_shares - withdrawn_shares * config.split_factor;
 
-    // Update depositor info
+    // Calculate the fraction of shares that the user is withdrawing.
+    let withdrawn_shares = depositor.shares * withdraw_ratio;
+
+    // Calculate the fraction of lottery shares that the user is withdrawing
+    let withdrawn_lottery_shares = withdrawn_shares * config.split_factor;
+    let withdrawn_savings_shares = withdrawn_shares - withdrawn_shares * config.split_factor;
+
+    // Update depositor info.
+    // Had a scare about storing post tax deposits for a second.
+    // Remove the fraction that they want to pull out from their deposit
     depositor.deposit_amount = depositor.deposit_amount.sub(withdrawn_deposits);
+
+    // Remove the fraction that they want to pull out from their shares
     depositor.shares = depositor.shares.sub(withdrawn_shares);
 
     // Update global state and pool
+
+    // Subtract from total_tickets
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
+
+    // Subtract from total_deposits
     pool.total_deposits = pool.total_deposits.sub(withdrawn_deposits);
+
+    // Subtract from lottery deposits
     pool.lottery_deposits = pool
         .lottery_deposits
         .sub(withdrawn_deposits * config.split_factor);
+
+    // Subtract from lottery shares
     pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
-    pool.deposit_shares = pool.deposit_shares.sub(withdrawn_deposit_shares);
+
+    // Subtract from deposit shares
+    pool.deposit_shares = pool.deposit_shares.sub(withdrawn_savings_shares);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 

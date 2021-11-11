@@ -1797,6 +1797,7 @@ fn claim() {
         env.block.time = env.block.time.plus_seconds(time * 2);
     }
     println!("Block time 2: {}", env.block.time);
+
     // TODO: change also the exchange rate here
     // This update is not needed (??)
     deps.querier.update_balance(
@@ -3764,16 +3765,20 @@ fn calculate_total_prize(
     initial_balance + net_yield
 }
 
+// This is all without taxes lmao
+
 #[test]
-fn max_unbonding_claim() {
+fn small_withdraw() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    let mut env = mock_env();
+    // get env
+    let env = mock_env();
 
+    // mock instantiate the contracts
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -3788,55 +3793,222 @@ fn max_unbonding_claim() {
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("23456")],
     };
-    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Add the funds to the contract address -------------------
-    let shares = Uint256::one()
-        + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+
+    // Add an extra one to account for the rounding error
+    // How do go about this properly?
+    // The extra one is not gonna be there in production
+    let minted_shares = Decimal256::percent(TICKET_PRICE * 1u64).div(Decimal256::permille(RATE));
+
+    let minted_aust_value = minted_shares * Decimal256::permille(RATE);
+
+    // you send ust
+    // gets converted aUst but because of rounding
+    // deposit * RATE / RATE != deposit (off by one)
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(minted_shares * Uint256::one()).into(),
+        )],
     )]);
 
-    // Address withdraws a small amount of money 15 times -----------------
+    // Verify that deposit worked properly ------------------
+
+    // Check that the depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr0001").unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: minted_aust_value,
+            shares: Decimal256::percent(TICKET_PRICE * 1u64) / Decimal256::permille(RATE),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+            tickets: vec![String::from("23456")],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
+        StateResponse {
+            total_tickets: Uint256::from(1u64),
+            total_reserve: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_exec_time: Expiration::Never {},
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
+        }
+    );
+
+    assert_eq!(
+        query_pool(deps.as_ref()).unwrap(),
+        PoolResponse {
+            total_deposits: minted_aust_value,
+            lottery_deposits: minted_aust_value * Decimal256::percent(SPLIT_FACTOR),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+            sponsor_shares: Decimal256::zero(),
+        }
+    );
+
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: ANCHOR.to_string(),
+            funds: vec![Coin {
+                denom: String::from("uusd"),
+                amount: (Decimal256::percent(TICKET_PRICE * 1u64) * Uint256::one()).into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+        }))]
+    );
+
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "deposit"),
+            attr("depositor", "addr0001"),
+            attr("recipient", "addr0001"),
+            attr(
+                "deposit_amount",
+                Decimal256::percent(TICKET_PRICE * 1u64).to_string()
+            ),
+            attr("tickets", 1u64.to_string()),
+            attr("shares_minted", minted_shares.to_string()),
+        ]
+    );
+
+    // Check that things are looking good for withdrawal
+
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    let contract_ust_balance = contract_a_balance * Decimal256::permille(RATE);
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+
+    println!(
+        "{}, {}, {}, {}",
+        contract_ust_balance.to_string(),
+        contract_a_balance.to_string(),
+        pool.total_deposits.to_string(),
+        pool.total_sponsor_amount.to_string()
+    );
+
+    // Address withdraws a small amount of money ----------------
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Withdraw {
         amount: Some(10u128.into()),
         instant: None,
     };
+    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
-    for _ in 0..15 {
-        let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
-    }
+    // Verify that the withdrawal was handled properly
+    // let depositor =
+    //     read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
 
-    // Address tries to make another claim but fails
-    let res = execute(deps.as_mut(), env.clone(), info, msg);
-    match res {
-        Err(ContractError::MaxUnbondingClaims {}) => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
+    // let depositor_ratio = Decimal256::one();
 
-    // Advance one week in time -----------------
-    println!("Block time 1: {}", env.block.time);
-    if let Duration::Time(time) = WEEK {
-        env.block.time = env.block.time.plus_seconds(time * 2);
-    }
-    println!("Block time 2: {}", env.block.time);
+    // let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
+
+    // let pooled_deposits = aust_amount * Decimal256::permille(RATE);
+
+    // let withdraw_ratio = Decimal256::from_uint256(10u128) / pooled_deposits;
+
+    // let aust_to_redeem = aust_amount * withdraw_ratio;
+    // let redeemed_amount = pooled_deposits * withdraw_ratio;
+    // let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
+
+    // println!("Iteration");
+    // println!(
+    //     "{:?}, {}",
+    //     depositor.deposit_amount.to_string(),
+    //     ((Decimal256::percent(TICKET_PRICE)) - withdrawn_amount).to_string()
+    // );
+    // println!(
+    //     "{}, {}. {}, {}",
+    //     pooled_deposits.to_string(),
+    //     depositor.deposit_amount.to_string(),
+    //     redeemed_amount.to_string(),
+    //     withdrawn_deposits.to_string()
+    // );
+    // // println!("{}", withdraw_ratio);
+    // // println!("{}", withdraw_ratio * depositor.deposit_amount);
+    // println!(
+    //     "{}, {}, {}",
+    //     contract_a_balance.to_string(),
+    //     (aust_to_redeem * Uint256::one()).to_string(),
+    //     withdraw_ratio
+    // );
+
+    // withdrawn_amount += withdrawn_deposits;
+
+    // deps.querier.with_token_balances(&[(
+    //     &A_UST.to_string(),
+    //     &[(
+    //         &MOCK_CONTRACT_ADDR.to_string(),
+    //         &(contract_a_balance - aust_to_redeem * Uint256::one()).into(),
+    //     )],
+    // )]);
+
+    // deps.querier.update_balance(
+    //     MOCK_CONTRACT_ADDR.to_string(),
+    //     vec![Coin {
+    //         denom: "uusd".to_string(),
+    //         amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + Uint128::from(15u128 * 10u128),
+    //     }],
+    // );
+
+    // // Advance one week in time -----------------
+    // println!("Block time 1: {}", env.block.time);
+    // if let Duration::Time(time) = WEEK {
+    //     env.block.time = env.block.time.plus_seconds(time * 2);
+    // }
+    // println!("Block time 2: {}", env.block.time);
 
     // // Claim amount is already unbonded, so claim execution should work
     // let msg = ExecuteMsg::Claim {};
     // let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
+    // // let shares = Uint256::one()
+    // //     + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+
+    // let shares = query_token_balance(
+    //     deps.as_ref(),
+    //     Addr::unchecked(A_UST),
+    //     Addr::unchecked(MOCK_CONTRACT_ADDR),
+    // )
+    // .unwrap();
+
     // // Check depositor info was updated correctly
+
     // assert_eq!(
     //     read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),
     //     DepositorInfo {
-    //         deposit_amount: Decimal256::zero(),
-    //         shares: Decimal256::zero(),
+    //         // deposit amount minus the amount withdrawn
+    //         deposit_amount: (Decimal256::percent(TICKET_PRICE)) - withdrawn_amount,
+    //         // shares minus the amount withdrawn divided by rate,
+    //         // but it's not that easy because of rounding errors
+    //         shares: Decimal256::from_uint256(shares),
     //         reward_index: Decimal256::zero(),
     //         pending_rewards: Decimal256::zero(),
     //         tickets: vec![],
+    //         // no remaining unbonding info
     //         unbonding_info: vec![]
     //     }
     // );
@@ -3847,7 +4019,9 @@ fn max_unbonding_claim() {
     //         to_address: "addr0001".to_string(),
     //         amount: vec![Coin {
     //             denom: String::from("uusd"),
-    //             amount: Uint128::from(10_000_000u64),
+    //             amount: Uint128::from(10_000_000u64)
+    //                 - Uint128::from(Decimal256::percent(TICKET_PRICE) * Uint256::one())
+    //                 - Uint128::from(10u128 * 15u128),
     //         }],
     //     }))]
     // );
@@ -3857,7 +4031,203 @@ fn max_unbonding_claim() {
     //     vec![
     //         attr("action", "claim_unbonded"),
     //         attr("depositor", "addr0001"),
-    //         attr("redeemed_amount", 10_000_000u64.to_string()),
+    //         attr(
+    //             "redeemed_amount",
+    //             (Uint256::from(10_000_000u64)
+    //                 - (Decimal256::percent(TICKET_PRICE) * Uint256::one())
+    //                 - Uint256::from(10u128 * 15u128))
+    //             .to_string()
+    //         ),
     //     ]
     // );
 }
+
+// #[test]
+// fn max_unbonding_claim() {
+//     // Initialize contract
+//     let mut deps = mock_dependencies(&[]);
+
+//     // Mock aUST-UST exchange rate
+//     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+//     // deps.querier.with_tax(
+//     //     Decimal::percent(0),
+//     //     &[(&"uusd".to_string(), &Uint128::from(1_000_000u128))],
+//     // );
+
+//     let mut env = mock_env();
+
+//     mock_instantiate(deps.as_mut());
+//     mock_register_contracts(deps.as_mut());
+
+//     // User deposits and buys one ticket -------------------
+//     let info = mock_info(
+//         "addr0001",
+//         &[Coin {
+//             denom: "uusd".to_string(),
+//             amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+//         }],
+//     );
+//     let msg = ExecuteMsg::Deposit {
+//         combinations: vec![String::from("23456")],
+//     };
+//     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+//     // Add the funds to the contract address -------------------
+//     let shares = (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+
+//     deps.querier.with_token_balances(&[(
+//         &A_UST.to_string(),
+//         &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+//     )]);
+
+//     // Address withdraws a small amount of money 15 times -----------------
+//     let info = mock_info("addr0001", &[]);
+//     let msg = ExecuteMsg::Withdraw {
+//         amount: Some(10u128.into()),
+//         instant: None,
+//     };
+
+//     // withdraw amount isn't perfect because of fixed points
+//     let mut withdrawn_amount = Decimal256::from_uint256(0u128);
+
+//     for _ in 0..15 {
+//         let depositor =
+//             read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
+
+//         let depositor_ratio = Decimal256::one();
+
+//         let contract_a_balance = query_token_balance(
+//             deps.as_ref(),
+//             Addr::unchecked(A_UST),
+//             Addr::unchecked(MOCK_CONTRACT_ADDR),
+//         )
+//         .unwrap();
+
+//         let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
+
+//         let pooled_deposits = aust_amount * Decimal256::permille(RATE);
+
+//         let withdraw_ratio = Decimal256::from_uint256(10u128) / pooled_deposits;
+
+//         let aust_to_redeem = aust_amount * withdraw_ratio;
+//         let redeemed_amount = pooled_deposits * withdraw_ratio;
+//         let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
+
+//         println!("Iteration");
+//         println!(
+//             "{:?}, {}",
+//             depositor.deposit_amount.to_string(),
+//             ((Decimal256::percent(TICKET_PRICE)) - withdrawn_amount).to_string()
+//         );
+//         println!(
+//             "{}, {}. {}, {}",
+//             pooled_deposits.to_string(),
+//             depositor.deposit_amount.to_string(),
+//             redeemed_amount.to_string(),
+//             withdrawn_deposits.to_string()
+//         );
+//         // println!("{}", withdraw_ratio);
+//         // println!("{}", withdraw_ratio * depositor.deposit_amount);
+//         println!(
+//             "{}, {}, {}",
+//             contract_a_balance.to_string(),
+//             (aust_to_redeem * Uint256::one()).to_string(),
+//             withdraw_ratio
+//         );
+
+//         let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+
+//         withdrawn_amount += withdrawn_deposits;
+
+//         deps.querier.with_token_balances(&[(
+//             &A_UST.to_string(),
+//             &[(
+//                 &MOCK_CONTRACT_ADDR.to_string(),
+//                 &(contract_a_balance - aust_to_redeem * Uint256::one()).into(),
+//             )],
+//         )]);
+//     }
+
+//     deps.querier.update_balance(
+//         MOCK_CONTRACT_ADDR.to_string(),
+//         vec![Coin {
+//             denom: "uusd".to_string(),
+//             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + Uint128::from(15u128 * 10u128),
+//         }],
+//     );
+
+//     // Address tries to make another claim but fails
+//     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+//     match res {
+//         Err(ContractError::MaxUnbondingClaims {}) => {}
+//         _ => panic!("DO NOT ENTER HERE"),
+//     }
+
+//     // Advance one week in time -----------------
+//     println!("Block time 1: {}", env.block.time);
+//     if let Duration::Time(time) = WEEK {
+//         env.block.time = env.block.time.plus_seconds(time * 2);
+//     }
+//     println!("Block time 2: {}", env.block.time);
+
+//     // Claim amount is already unbonded, so claim execution should work
+//     let msg = ExecuteMsg::Claim {};
+//     let res = execute(deps.as_mut(), env, info, msg).unwrap();
+
+//     // let shares = Uint256::one()
+//     //     + (Decimal256::percent(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+
+//     let shares = query_token_balance(
+//         deps.as_ref(),
+//         Addr::unchecked(A_UST),
+//         Addr::unchecked(MOCK_CONTRACT_ADDR),
+//     )
+//     .unwrap();
+
+//     // Check depositor info was updated correctly
+
+//     assert_eq!(
+//         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),
+//         DepositorInfo {
+//             // deposit amount minus the amount withdrawn
+//             deposit_amount: (Decimal256::percent(TICKET_PRICE)) - withdrawn_amount,
+//             // shares minus the amount withdrawn divided by rate,
+//             // but it's not that easy because of rounding errors
+//             shares: Decimal256::from_uint256(shares),
+//             reward_index: Decimal256::zero(),
+//             pending_rewards: Decimal256::zero(),
+//             tickets: vec![],
+//             // no remaining unbonding info
+//             unbonding_info: vec![]
+//         }
+//     );
+
+//     assert_eq!(
+//         res.messages,
+//         vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+//             to_address: "addr0001".to_string(),
+//             amount: vec![Coin {
+//                 denom: String::from("uusd"),
+//                 amount: Uint128::from(10_000_000u64)
+//                     - Uint128::from(Decimal256::percent(TICKET_PRICE) * Uint256::one())
+//                     - Uint128::from(10u128 * 15u128),
+//             }],
+//         }))]
+//     );
+
+//     assert_eq!(
+//         res.attributes,
+//         vec![
+//             attr("action", "claim_unbonded"),
+//             attr("depositor", "addr0001"),
+//             attr(
+//                 "redeemed_amount",
+//                 (Uint256::from(10_000_000u64)
+//                     - (Decimal256::percent(TICKET_PRICE) * Uint256::one())
+//                     - Uint256::from(10u128 * 15u128))
+//                 .to_string()
+//             ),
+//         ]
+//     );
+// }

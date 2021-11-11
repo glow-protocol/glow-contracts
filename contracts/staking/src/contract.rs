@@ -248,10 +248,10 @@ fn compute_staker_reward(state: &State, staker_info: &mut StakerInfo) -> StdResu
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::State { block_height } => to_binary(&query_state(deps, block_height)?),
+        QueryMsg::State { block_height } => to_binary(&query_state(deps, env, block_height)?),
         QueryMsg::StakerInfo {
             staker,
             block_height,
@@ -270,12 +270,23 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(resp)
 }
 
-pub fn query_state(deps: Deps, block_height: Option<u64>) -> StdResult<StateResponse> {
+pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
     let mut state: State = read_state(deps.storage)?;
-    if let Some(block_height) = block_height {
-        let config = read_config(deps.storage)?;
-        compute_reward(&config, &mut state, block_height);
+    let config = read_config(deps.storage)?;
+
+    let block_height = if let Some(block_height) = block_height {
+        block_height
+    } else {
+        env.block.height
+    };
+
+    if block_height < state.last_distributed {
+        return Err(StdError::generic_err(
+            "Block_height must be greater than last_distributed",
+        ));
     }
+
+    compute_reward(&config, &mut state, block_height);
 
     Ok(StateResponse {
         last_distributed: state.last_distributed,

@@ -1708,7 +1708,7 @@ fn execute_lottery() {
     let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
 
     match res {
-        Err(ContractError::InvalidLotteryExecution {}) => {}
+        Err(ContractError::InvalidLotteryExecutionFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -1739,7 +1739,7 @@ fn execute_lottery() {
 
     // Lottery cannot be run with 0 tickets participating
     match res {
-        Err(ContractError::InvalidLotteryExecution {}) => {}
+        Err(ContractError::InvalidLotteryExecutionTickets {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -1922,7 +1922,7 @@ fn execute_lottery_no_tickets() {
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
     match res {
-        Err(ContractError::InvalidLotteryExecution {}) => {}
+        Err(ContractError::InvalidLotteryExecutionTickets {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 

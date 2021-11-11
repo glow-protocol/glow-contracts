@@ -36,7 +36,7 @@ pub fn execute_lottery(
 
     // No sent funds allowed when executing the lottery
     if !info.funds.is_empty() {
-        return Err(ContractError::InvalidLotteryExecution {});
+        return Err(ContractError::InvalidLotteryExecutionFunds {});
     }
 
     if !state.next_lottery_time.is_expired(&env.block) {
@@ -44,7 +44,7 @@ pub fn execute_lottery(
     }
 
     if state.total_tickets.is_zero() {
-        return Err(ContractError::InvalidLotteryExecution {});
+        return Err(ContractError::InvalidLotteryExecutionTickets {});
     }
 
     state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;

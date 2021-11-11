@@ -125,13 +125,13 @@ fn test_bond_tokens() {
     });
     env.block.height += 10;
 
-    let _res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     assert_eq!(
         from_binary::<StakerInfoResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env.clone(),
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
                     block_height: None,
@@ -152,7 +152,7 @@ fn test_bond_tokens() {
         from_binary::<StateResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env.clone(),
                 QueryMsg::State { block_height: None }
             )
             .unwrap()
@@ -173,7 +173,7 @@ fn test_bond_tokens() {
     });
 
     let info = mock_info("staking0001", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    let res = execute(deps.as_mut(), env, info, msg);
     match res {
         Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "unauthorized"),
         _ => panic!("Must return unauthorized error"),

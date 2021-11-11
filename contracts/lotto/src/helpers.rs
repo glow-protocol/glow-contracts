@@ -111,9 +111,10 @@ pub fn calculate_max_bound(min_bound: &str) -> String {
     }
 }
 
-pub fn pseudo_random_seq(sender_addr: String, time: u64) -> String {
+pub fn pseudo_random_seq(sender_addr: String, tickets: u64, time: u64) -> String {
     let mut input = sender_addr;
     input.push_str(&time.to_string());
+    input.push_str(&tickets.to_string());
     let mut hasher = Keccak256::new();
     hasher.update(input.as_bytes());
     let result = hasher.finalize();

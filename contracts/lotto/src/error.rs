@@ -102,6 +102,12 @@ pub enum ContractError {
     #[error("Invalid execution of the lottery. Execute lottery already been called.")]
     InvalidLotteryExecution {},
 
+    #[error("Invalid execution of the lottery. No sent funds allowed.")]
+    InvalidLotteryExecutionFunds {},
+
+    #[error("Invalid execution of the lottery. No tickets in the lotto.")]
+    InvalidLotteryExecutionTickets {},
+
     #[error("Invalid execution of the lottery prize. The lottery must be executed first.")]
     InvalidLotteryPrizeExecution {},
 

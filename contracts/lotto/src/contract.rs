@@ -305,7 +305,11 @@ pub fn deposit(
         )) + Decimal256::one())
     {
         let current_time = env.block.time.nanos();
-        let sequence = pseudo_random_seq(info.sender.clone().into_string(), current_time);
+        let sequence = pseudo_random_seq(
+            info.sender.clone().into_string(),
+            depositor_info.tickets.len() as u64,
+            current_time,
+        );
 
         new_combinations.push(sequence);
         amount_tickets += 1;

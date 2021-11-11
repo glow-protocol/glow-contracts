@@ -7,6 +7,7 @@
     "aterra_contract",
     "block_time",
     "initial_emission_rate",
+    "initial_lottery_execution",
     "instant_withdrawal_fee",
     "lottery_interval",
     "max_holders",
@@ -35,6 +36,11 @@
     },
     "initial_emission_rate": {
       "$ref": "#/definitions/Decimal256"
+    },
+    "initial_lottery_execution": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "instant_withdrawal_fee": {
       "$ref": "#/definitions/Decimal256"

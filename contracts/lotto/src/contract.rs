@@ -16,7 +16,7 @@ use crate::state::{
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult, Uint128, WasmMsg,
+    Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
 };
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
@@ -104,6 +104,11 @@ pub fn instantiate(
         },
     )?;
 
+    // validate first lottery is in the future
+    if msg.initial_lottery_execution <= env.block.time.seconds() {
+        return Err(ContractError::InvalidFirstLotteryExec {});
+    }
+
     STATE.save(
         deps.storage,
         &State {
@@ -111,7 +116,9 @@ pub fn instantiate(
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(initial_deposit),
             current_lottery: 0,
-            next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
+                msg.initial_lottery_execution,
+            )),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.lottery_interval + msg.block_time).after(&env.block),
             last_reward_updated: 0,

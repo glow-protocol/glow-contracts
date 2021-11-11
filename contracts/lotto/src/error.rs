@@ -90,6 +90,9 @@ pub enum ContractError {
     #[error("Invalid unbonding period config")]
     InvalidUnbondingPeriod {},
 
+    #[error("Invalid first lottery execution time")]
+    InvalidFirstLotteryExec {},
+
     #[error("Invalid execution of the lottery. Funds cannot be sent.")]
     InvalidLotteryFundsExecution {},
 

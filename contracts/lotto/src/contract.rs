@@ -1205,6 +1205,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         distributor_contract: config.distributor_contract.to_string(),
         lottery_interval: config.lottery_interval,
         block_time: config.block_time,
+        round_delta: config.round_delta,
         ticket_price: config.ticket_price,
         max_holders: config.max_holders,
         prize_distribution: config.prize_distribution,

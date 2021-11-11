@@ -121,6 +121,7 @@ pub struct ConfigResponse {
     pub distributor_contract: String,
     pub lottery_interval: Duration,
     pub block_time: Duration,
+    pub round_delta: u64,
     pub ticket_price: Decimal256,
     pub max_holders: u8,
     pub prize_distribution: [Decimal256; 6],

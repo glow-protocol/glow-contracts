@@ -143,6 +143,7 @@ fn proper_initialization() {
             stable_denom: DENOM.to_string(),
             lottery_interval: WEEK,
             block_time: HOUR,
+            round_delta: ROUND_DELTA,
             ticket_price: Decimal256::percent(TICKET_PRICE),
             max_holders: MAX_HOLDERS,
             prize_distribution: [

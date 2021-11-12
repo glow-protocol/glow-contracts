@@ -45,6 +45,7 @@ const RATE: u64 = 1023; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
+const SUNDAY_NOVEMBER_7_2021_18_00_00: u64 = 1636308000;
 
 const WINNING_SEQUENCE: &str = "be1ce";
 
@@ -74,6 +75,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
+        next_lottery_time: SUNDAY_NOVEMBER_7_2021_18_00_00,
     }
 }
 

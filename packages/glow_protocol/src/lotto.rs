@@ -24,6 +24,7 @@ pub struct InstantiateMsg {
     pub instant_withdrawal_fee: Decimal256, // % to be deducted as a fee for instant withdrawals
     pub unbonding_period: u64, // unbonding period after regular withdrawals from pool
     pub initial_emission_rate: Decimal256, // initial GLOW emission rate for depositor rewards
+    pub next_lottery_time: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -965,8 +965,16 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
+    // Validate that executing epoch will follow rate limiting
     if !state.next_epoch.is_expired(&env.block) {
         return Err(ContractError::InvalidEpochExecution {});
+    }
+
+    // Validate that the lottery is not in the process of running
+    // This helps avoid delaying the computing of the reward.
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
     }
 
     // Compute global Glow rewards

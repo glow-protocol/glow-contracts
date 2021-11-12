@@ -91,6 +91,7 @@ pub fn instantiate(
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.addr_validate(msg.anchor_contract.as_str())?,
             lottery_interval: Duration::Time(msg.lottery_interval),
+            epoch_interval: Duration::Time(msg.epoch_interval),
             block_time: Duration::Time(msg.block_time),
             round_delta: msg.round_delta,
             ticket_price: msg.ticket_price,
@@ -113,7 +114,7 @@ pub fn instantiate(
             current_lottery: 0,
             next_lottery_time: Duration::Time(msg.lottery_interval).after(&env.block),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: Duration::Time(msg.lottery_interval + msg.block_time).after(&env.block),
+            next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,
@@ -171,6 +172,7 @@ pub fn execute(
             reserve_factor,
             instant_withdrawal_fee,
             unbonding_period,
+            epoch_interval,
         } => execute_update_config(
             deps,
             info,
@@ -179,6 +181,7 @@ pub fn execute(
             reserve_factor,
             instant_withdrawal_fee,
             unbonding_period,
+            epoch_interval,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -960,7 +963,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     }
 
     // Validate that the lottery is not in the process of running
-    // This helps avoid delaying the computing of the reward.
+    // This helps avoid delaying the computing of the reward following lottery execution.
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
@@ -996,8 +999,9 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
         vec![]
     };
 
+    // Update next_epoch based on epoch_interval
+    state.next_epoch = Expiration::AtTime(env.block.time).add(config.epoch_interval)?;
     // Empty total reserve and store state
-    state.next_epoch = Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
     state.total_reserve = Decimal256::zero();
     STATE.save(deps.storage, &state)?;
 
@@ -1062,6 +1066,7 @@ pub fn execute_update_config(
     reserve_factor: Option<Decimal256>,
     instant_withdrawal_fee: Option<Decimal256>,
     unbonding_period: Option<u64>,
+    epoch_interval: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1096,6 +1101,10 @@ pub fn execute_update_config(
 
     if let Some(unbonding_period) = unbonding_period {
         config.unbonding_period = Duration::Time(unbonding_period);
+    }
+
+    if let Some(epoch_interval) = epoch_interval {
+        config.epoch_interval = Duration::Time(epoch_interval);
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -1212,6 +1221,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         gov_contract: config.gov_contract.to_string(),
         distributor_contract: config.distributor_contract.to_string(),
         lottery_interval: config.lottery_interval,
+        epoch_interval: config.epoch_interval,
         block_time: config.block_time,
         ticket_price: config.ticket_price,
         max_holders: config.max_holders,

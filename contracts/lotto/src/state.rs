@@ -32,6 +32,7 @@ pub struct Config {
     pub oracle_contract: Addr,
     pub stable_denom: String,
     pub lottery_interval: Duration,
+    pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,
     pub ticket_price: Decimal256,

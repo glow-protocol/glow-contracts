@@ -56,6 +56,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         aterra_contract: A_UST.to_string(),
         oracle_contract: ORACLE_ADDR.to_string(),
         lottery_interval: WEEK_TIME,
+        epoch_interval: 3 * HOUR_TIME,
         block_time: HOUR_TIME,
         round_delta: ROUND_DELTA,
         ticket_price: Decimal256::percent(TICKET_PRICE),
@@ -142,6 +143,7 @@ fn proper_initialization() {
             anchor_contract: ANCHOR.to_string(),
             stable_denom: DENOM.to_string(),
             lottery_interval: WEEK,
+            epoch_interval: HOUR.mul(3),
             block_time: HOUR,
             ticket_price: Decimal256::percent(TICKET_PRICE),
             max_holders: MAX_HOLDERS,
@@ -227,6 +229,7 @@ fn update_config() {
         instant_withdrawal_fee: None,
         unbonding_period: None,
         reserve_factor: None,
+        epoch_interval: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -262,6 +265,7 @@ fn update_config() {
         reserve_factor: Some(Decimal256::percent(1)),
         instant_withdrawal_fee: None,
         unbonding_period: None,
+        epoch_interval: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -280,6 +284,7 @@ fn update_config() {
         reserve_factor: None,
         instant_withdrawal_fee: None,
         unbonding_period: None,
+        epoch_interval: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);

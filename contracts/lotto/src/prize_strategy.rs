@@ -163,15 +163,19 @@ pub fn execute_prize(
 
     // No sent funds allowed when executing the lottery
     if !info.funds.is_empty() {
-        return Err(ContractError::InvalidLotteryExecution {});
+        return Err(ContractError::InvalidLotteryPrizeExecutionFunds {});
     }
 
     // Execute lottery must be called before execute_prize
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
     let current_lottery = state.current_lottery;
 
-    if lottery_info.rand_round == 0 || !state.next_lottery_exec_time.is_expired(&env.block) {
+    if lottery_info.rand_round == 0 {
         return Err(ContractError::InvalidLotteryPrizeExecution {});
+    }
+
+    if !state.next_lottery_exec_time.is_expired(&env.block) {
+        return Err(ContractError::InvalidLotteryPrizeExecutionExpired {});
     }
 
     // If first time called in current lottery, get winning sequence

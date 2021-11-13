@@ -111,6 +111,12 @@ pub enum ContractError {
     #[error("Invalid execution of the lottery prize. The lottery must be executed first.")]
     InvalidLotteryPrizeExecution {},
 
+    #[error("Invalid execution of the lottery prize. Block time has not expired yet.")]
+    InvalidLotteryPrizeExecutionExpired {},
+
+    #[error("Invalid execution of the lottery prize. Sent funds not allowed.")]
+    InvalidLotteryPrizeExecutionFunds {},
+
     #[error("Invalid execute epochs execution")]
     InvalidEpochExecution {},
 

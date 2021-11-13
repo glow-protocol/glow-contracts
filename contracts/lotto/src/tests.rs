@@ -187,9 +187,11 @@ fn proper_initialization() {
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
+                SUNDAY_JULY_26_2020_18_00_00
+            )),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&env.block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -427,9 +429,11 @@ fn deposit() {
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
+                SUNDAY_JULY_26_2020_18_00_00
+            )),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -785,9 +789,11 @@ fn gift_tickets() {
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
+                SUNDAY_JULY_26_2020_18_00_00
+            )),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1033,9 +1039,11 @@ fn withdraw() {
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
+                SUNDAY_JULY_26_2020_18_00_00
+            )),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1309,9 +1317,11 @@ fn instant_withdraw() {
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
+                SUNDAY_JULY_26_2020_18_00_00
+            )),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1815,17 +1825,9 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
-    );
-
-    // Directly check next_lottery_time has been set up for next week
-    let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
-        .unwrap()
-        .next_lottery_time;
-
-    assert_eq!(
-        next_lottery_time,
-        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
+        Expiration::AtTime(Timestamp::from_seconds(SUNDAY_JULY_26_2020_18_00_00))
+            .add(WEEK)
+            .unwrap()
     );
 
     // Directly check next_lottery_exec_time has been set up to Never
@@ -1893,7 +1895,7 @@ fn execute_lottery() {
     }
 
     // Execute prize
-    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg).unwrap();
+    let _res = execute(deps.as_mut(), env, info, execute_prize_msg).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
     let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
@@ -1902,7 +1904,9 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
+        Expiration::AtTime(Timestamp::from_seconds(SUNDAY_JULY_26_2020_18_00_00))
+            .add(WEEK * 2)
+            .unwrap()
     );
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
@@ -3200,9 +3204,7 @@ fn execute_epoch_operations() {
             )),
             next_lottery_exec_time: Expiration::Never {},
             glow_emission_rate: Decimal256::one(),
-            next_epoch: Expiration::AtTime(Timestamp::from_seconds(
-                SUNDAY_JULY_26_2020_18_00_00 + HOUR_TIME
-            ))
+            next_epoch: HOUR.mul(3).after(&env.block)
         }
     );
 }

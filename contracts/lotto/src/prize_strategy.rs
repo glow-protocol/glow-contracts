@@ -7,7 +7,7 @@ use crate::state::{
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    WasmMsg,
+    Uint128, WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
@@ -90,7 +90,7 @@ pub fn execute_lottery(
 
     let mut msgs: Vec<CosmosMsg> = vec![];
     // Redeem funds if lottery related shares are greater than outstanding lottery deposits
-    let mut aust_to_redeem = Decimal256::zero();
+    let mut aust_to_redeem = Uint128::zero();
     if (pool.lottery_deposits + pool.total_sponsor_amount) >= pooled_lottery_deposits {
         if state.award_available.is_zero() {
             return Err(ContractError::InsufficientLotteryFunds {});
@@ -98,7 +98,7 @@ pub fn execute_lottery(
     } else {
         let amount_to_redeem =
             pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
-        aust_to_redeem = amount_to_redeem / rate;
+        aust_to_redeem = ((amount_to_redeem / rate) * Uint256::one()).into();
 
         //Discount tx taxes Anchor -> Glow
         let net_amount = deduct_tax(
@@ -110,19 +110,25 @@ pub fn execute_lottery(
         )?
         .amount;
 
-        state.award_available += Decimal256::from_uint256(Uint256::from(net_amount));
-
-        // Message for redeem amount operation of aUST
-        let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.a_terra_contract.to_string(),
-            funds: vec![],
-            msg: to_binary(&Cw20Send {
-                contract: config.anchor_contract.to_string(),
-                amount: (aust_to_redeem * Uint256::one()).into(),
-                msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
-            })?,
-        });
-        msgs.push(redeem_msg);
+        // Check for floor rounding errors
+        if aust_to_redeem.is_zero() {
+            if state.award_available.is_zero() {
+                return Err(ContractError::InsufficientLotteryFunds {});
+            }
+        } else {
+            state.award_available += Decimal256::from_uint256(Uint256::from(net_amount));
+            // Message for redeem amount operation of aUST
+            let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: config.a_terra_contract.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20Send {
+                    contract: config.anchor_contract.to_string(),
+                    amount: aust_to_redeem,
+                    msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
+                })?,
+            });
+            msgs.push(redeem_msg);
+        }
     }
 
     // Store state
@@ -130,10 +136,7 @@ pub fn execute_lottery(
 
     let res = Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "execute_lottery"),
-        attr(
-            "redeemed_amount",
-            (aust_to_redeem * Uint256::one()).to_string(),
-        ),
+        attr("redeemed_amount", aust_to_redeem.to_string()),
     ]);
     Ok(res)
 }

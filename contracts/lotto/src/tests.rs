@@ -45,7 +45,10 @@ const RATE: u64 = 1023; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
-const SUNDAY_NOVEMBER_7_2021_18_00_00: u64 = 1636308000;
+// const SUNDAY_NOVEMBER_7_2021_18_00_00: u64 = 1636308000;
+// this is the first sunday following the mock_env timestamp
+// the mock_env timestamp occurs at Wednesday, July 22, 2020 3:17:30 PM
+const SUNDAY_JULY_26_2020_18_00_00: u64 = 1595786400;
 
 const WINNING_SEQUENCE: &str = "be1ce";
 
@@ -75,7 +78,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
-        next_lottery_time: SUNDAY_NOVEMBER_7_2021_18_00_00,
+        next_lottery_time: SUNDAY_JULY_26_2020_18_00_00,
     }
 }
 
@@ -3187,10 +3190,14 @@ fn execute_epoch_operations() {
             current_lottery: 0,
             last_reward_updated: 12445,
             global_reward_index: Decimal256::zero(),
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
+                SUNDAY_JULY_26_2020_18_00_00
+            )),
             next_lottery_exec_time: Expiration::Never {},
             glow_emission_rate: Decimal256::one(),
-            next_epoch: WEEK.after(&env.block)
+            next_epoch: Expiration::AtTime(Timestamp::from_seconds(
+                SUNDAY_JULY_26_2020_18_00_00 + HOUR_TIME
+            ))
         }
     );
 }

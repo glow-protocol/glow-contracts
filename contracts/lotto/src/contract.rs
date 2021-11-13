@@ -40,7 +40,7 @@ pub const MAX_CLAIMS: u8 = 15;
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
@@ -113,7 +113,9 @@ pub fn instantiate(
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(msg.next_lottery_time)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: Duration::Time(msg.lottery_interval + msg.block_time).after(&env.block),
+            next_epoch: Expiration::AtTime(Timestamp::from_seconds(
+                msg.next_lottery_time + msg.block_time,
+            )),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,

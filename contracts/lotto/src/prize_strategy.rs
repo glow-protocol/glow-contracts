@@ -7,9 +7,9 @@ use crate::state::{
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    WasmMsg,
+    Timestamp, WasmMsg,
 };
-use cw0::Expiration;
+use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
@@ -267,8 +267,39 @@ pub fn execute_prize(
         lottery_info.total_prizes = total_awarded_prize;
         state.current_lottery += 1;
 
-        state.next_lottery_time =
-            Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
+        // set next_lottery_time to the current lottery time plus the lottery interval
+        // want next_lottery_time to be a time in the future
+        // so next_lottery_time = next_lottery_time + x * lottery_interval
+        // but next_lottery_time + x * lottery_interval > env.block_time
+
+        // get the amount of time between now and the time at which the lottery
+        // became runnable
+        let time_since_last_lottery = match state.next_lottery_time {
+            Expiration::AtHeight(height) => env.block.time.minus_seconds(height),
+            _ => Timestamp::from_seconds(0),
+        };
+
+        // get the lottery interval in seconds
+        let lottery_interval_seconds = match config.lottery_interval {
+            Duration::Time(time) => time,
+            _ => 0,
+        };
+
+        // get the number of lottery intervals that have passed
+        // since the lottery became runnable
+        // this should be 0 everytime
+        // unless somebody forgot to run the lottery for a week for example
+        let lottery_intervals_since_last_lottery =
+            time_since_last_lottery.seconds() / lottery_interval_seconds;
+
+        // set the next_lottery_time to the closest time in the future that is
+        // the current value of next_lottery_time plus a multiple of lottery_interval
+        // normally this multiple will be 1 everytime
+        // but if somebody forgot to run the lottery for a week, it will be 2 for example
+        state.next_lottery_time = state
+            .next_lottery_time
+            .add(config.lottery_interval * (1 + lottery_intervals_since_last_lottery))?;
+
         state.next_lottery_exec_time = Expiration::Never {};
         state.award_available = state.award_available.sub(total_awarded_prize);
         STATE.save(deps.storage, &state)?;

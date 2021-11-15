@@ -1760,7 +1760,7 @@ fn execute_lottery() {
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
 
     match res {
-        Err(ContractError::LotteryInProgress {}) => {}
+        Err(ContractError::LotteryNotReady {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 

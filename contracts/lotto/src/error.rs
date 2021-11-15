@@ -39,8 +39,8 @@ pub enum ContractError {
     #[error("Lottery already in progress, wait until the next one begins")]
     LotteryAlreadyStarted {},
 
-    #[error("Lottery still in progress, wait until next lottery time")]
-    LotteryInProgress {},
+    #[error("Lottery is not ready to undergo execution yet, please wait until next_lottery_time")]
+    LotteryNotReady {},
 
     #[error("There are no deposits to withdraw")]
     InvalidWithdraw {},

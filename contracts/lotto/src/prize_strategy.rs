@@ -41,7 +41,7 @@ pub fn execute_lottery(
 
     // Validate that the next_lottery_time has passed
     if !state.next_lottery_time.is_expired(&env.block) {
-        return Err(ContractError::LotteryInProgress {});
+        return Err(ContractError::LotteryNotReady {});
     }
 
     // Validate that there are a non zero number of tickets

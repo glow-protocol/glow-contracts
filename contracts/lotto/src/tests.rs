@@ -252,7 +252,7 @@ fn update_config() {
         prize_distribution: None,
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // check lottery_interval has changed

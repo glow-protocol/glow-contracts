@@ -3908,12 +3908,6 @@ fn small_withdraw() {
         ]
     );
 
-    // // Update aust exchange rate to have gone up ------------
-    // deps.querier
-    //     .with_exchange_rate(Decimal256::permille(RATE + 1000));
-
-    // Look at pool valvues
-
     let pool = query_pool(deps.as_ref()).unwrap();
 
     let contract_a_balance = query_token_balance(

@@ -80,6 +80,11 @@ pub fn instantiate(
         return Err(ContractError::InvalidWithdrawalFee {});
     }
 
+    // Validate that epoch_interval is at least 30 minutes
+    if msg.epoch_interval < 60 * 30 {
+        return Err(ContractError::InvalidEpochInterval {});
+    }
+
     CONFIG.save(
         deps.storage,
         &Config {

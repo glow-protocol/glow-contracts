@@ -759,9 +759,9 @@ fn deposit_with_tax() {
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: HOUR.mul(3).after(&mock_env().block),
+            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -2038,6 +2038,9 @@ fn execute_lottery() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -3286,6 +3289,9 @@ fn claim_rewards_one_depositor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -3367,6 +3373,9 @@ fn claim_rewards_one_depositor() {
 fn claim_rewards_multiple_depositors() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
@@ -3480,6 +3489,9 @@ fn claim_rewards_multiple_depositors() {
 fn claim_rewards_depositor_and_sponsor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
@@ -3798,15 +3810,8 @@ fn small_withdraw() {
     // Add the funds to the contract address -------------------
 
     // Add an extra one to account for the rounding error
-    // How do go about this properly?
-    // The extra one is not gonna be there in production
+    // Not just rounding error, also tax, but tax is 0 in this case
     let minted_shares = Decimal256::percent(TICKET_PRICE * 1u64).div(Decimal256::permille(RATE));
-
-    let minted_aust_value = minted_shares * Decimal256::permille(RATE);
-
-    // you send ust
-    // gets converted aUst but because of rounding
-    // deposit * RATE / RATE != deposit (off by one)
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -3825,7 +3830,7 @@ fn small_withdraw() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            deposit_amount: minted_aust_value,
+            deposit_amount: Decimal256::percent(TICKET_PRICE),
             shares: Decimal256::percent(TICKET_PRICE * 1u64) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -3841,7 +3846,7 @@ fn small_withdraw() {
             total_reserve: Decimal256::zero(),
             award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
-            next_lottery_time: WEEK.after(&mock_env().block),
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
             last_reward_updated: 12345,
@@ -3853,8 +3858,8 @@ fn small_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_deposits: minted_aust_value,
-            lottery_deposits: minted_aust_value * Decimal256::percent(SPLIT_FACTOR),
+            total_deposits: Decimal256::percent(TICKET_PRICE),
+            lottery_deposits: Decimal256::percent(TICKET_PRICE) * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_amount: Decimal256::zero(),
             lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
@@ -3889,7 +3894,11 @@ fn small_withdraw() {
         ]
     );
 
-    // Check that things are looking good for withdrawal
+    // Update aust exchange rate to have gone up ------------
+    deps.querier
+        .with_exchange_rate(Decimal256::permille(RATE + 1000));
+
+    // Check that things are looking good for withdrawal ------------
 
     let contract_a_balance = query_token_balance(
         deps.as_ref(),
@@ -3898,7 +3907,7 @@ fn small_withdraw() {
     )
     .unwrap();
 
-    let contract_ust_balance = contract_a_balance * Decimal256::permille(RATE);
+    let contract_ust_balance = contract_a_balance * Decimal256::permille(RATE + 1000);
 
     let pool = query_pool(deps.as_ref()).unwrap();
 
@@ -3911,6 +3920,7 @@ fn small_withdraw() {
     );
 
     // Address withdraws a small amount of money ----------------
+
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Withdraw {
         amount: Some(10u128.into()),

@@ -761,7 +761,7 @@ fn deposit_with_tax() {
             current_lottery: 0,
             next_lottery_time: WEEK.after(&mock_env().block),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),

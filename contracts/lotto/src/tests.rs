@@ -186,7 +186,7 @@ fn proper_initialization() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -426,7 +426,7 @@ fn deposit() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: (HOUR.mul(3)).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -784,7 +784,7 @@ fn gift_tickets() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1032,7 +1032,7 @@ fn withdraw() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1308,7 +1308,7 @@ fn instant_withdraw() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -3195,7 +3195,7 @@ fn execute_epoch_operations() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             glow_emission_rate: Decimal256::one(),
-            next_epoch: WEEK.after(&env.block)
+            next_epoch: HOUR.mul(3).after(&env.block)
         }
     );
 }

@@ -50,7 +50,6 @@ pub fn execute_lottery(
     }
 
     // Set the next_lottery_exec_time to one block after the current block
-    // What is the point of this? Why do you need to wait a block before executing the next lottery?
     state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
 
     // check execute_lottery has not been called already

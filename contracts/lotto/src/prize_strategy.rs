@@ -309,7 +309,7 @@ pub fn execute_prize(
                 total_awarded_prize += state.award_available * config.prize_distribution[index];
             }
         }
-        // Save thte total_prizes
+        // Save the total_prizes
         lottery_info.total_prizes = total_awarded_prize;
 
         // Increment the current_lottery_number

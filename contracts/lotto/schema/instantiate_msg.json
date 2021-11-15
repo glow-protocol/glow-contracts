@@ -6,6 +6,7 @@
     "anchor_contract",
     "aterra_contract",
     "block_time",
+    "epoch_interval",
     "initial_emission_rate",
     "initial_lottery_execution",
     "instant_withdrawal_fee",
@@ -30,6 +31,11 @@
       "type": "string"
     },
     "block_time": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "epoch_interval": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0

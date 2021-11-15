@@ -93,6 +93,9 @@ pub enum ContractError {
     #[error("Invalid first lottery execution time")]
     InvalidFirstLotteryExec {},
 
+    #[error("Invalid epoch interval config")]
+    InvalidEpochInterval {},
+
     #[error("Invalid execution of the lottery. Funds cannot be sent.")]
     InvalidLotteryFundsExecution {},
 

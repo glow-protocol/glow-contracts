@@ -56,6 +56,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         aterra_contract: A_UST.to_string(),
         oracle_contract: ORACLE_ADDR.to_string(),
         lottery_interval: WEEK_TIME,
+        epoch_interval: 3 * HOUR_TIME,
         block_time: HOUR_TIME,
         round_delta: ROUND_DELTA,
         ticket_price: Decimal256::percent(TICKET_PRICE),
@@ -143,6 +144,7 @@ fn proper_initialization() {
             anchor_contract: ANCHOR.to_string(),
             stable_denom: DENOM.to_string(),
             lottery_interval: WEEK,
+            epoch_interval: HOUR.mul(3),
             block_time: HOUR,
             round_delta: ROUND_DELTA,
             ticket_price: Decimal256::percent(TICKET_PRICE),
@@ -184,7 +186,7 @@ fn proper_initialization() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -229,6 +231,7 @@ fn update_config() {
         instant_withdrawal_fee: None,
         unbonding_period: None,
         reserve_factor: None,
+        epoch_interval: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -249,7 +252,7 @@ fn update_config() {
         prize_distribution: None,
     };
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
     // check lottery_interval has changed
@@ -258,12 +261,14 @@ fn update_config() {
     assert_eq!(config_response.lottery_interval, Duration::Time(1800));
 
     // update reserve_factor to 1%
+    let info = mock_info("owner1", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         oracle_addr: None,
         reserve_factor: Some(Decimal256::percent(1)),
         instant_withdrawal_fee: None,
         unbonding_period: None,
+        epoch_interval: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -274,6 +279,43 @@ fn update_config() {
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.reserve_factor, Decimal256::percent(1));
 
+    // update epoch_interval to 5 hours
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: Some(HOUR_TIME * 5),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // check that epoch_interval changed
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
+    assert_eq!(config_response.epoch_interval, HOUR.mul(5));
+
+    // check that you can't set epoch_interval to a value
+    // less than 30 minutes
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: Some(HOUR_TIME / 3),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidEpochInterval {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
     // check only owner can update config
     let info = mock_info("owner2", &[]);
     let msg = ExecuteMsg::UpdateConfig {
@@ -282,6 +324,7 @@ fn update_config() {
         reserve_factor: None,
         instant_withdrawal_fee: None,
         unbonding_period: None,
+        epoch_interval: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -421,7 +464,7 @@ fn deposit() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: (HOUR.mul(3)).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -779,7 +822,7 @@ fn gift_tickets() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1027,7 +1070,7 @@ fn withdraw() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -1303,7 +1346,7 @@ fn instant_withdraw() {
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
@@ -3190,7 +3233,7 @@ fn execute_epoch_operations() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             glow_emission_rate: Decimal256::one(),
-            next_epoch: WEEK.after(&env.block)
+            next_epoch: HOUR.mul(3).after(&env.block)
         }
     );
 }

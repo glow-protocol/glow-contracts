@@ -39,6 +39,14 @@
         "update_config": {
           "type": "object",
           "properties": {
+            "epoch_interval": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
             "instant_withdrawal_fee": {
               "anyOf": [
                 {

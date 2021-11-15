@@ -49,7 +49,9 @@ pub fn execute_lottery(
         return Err(ContractError::InvalidLotteryExecutionTickets {});
     }
 
-    // Set the next_lottery_exec_time to one block after the current block time
+    // Set the next_lottery_exec_time to the current block time plus `config.block_time`
+    // This is so that `execute_prize` can't be run until the randomness oracle is ready
+    // with the rand_round calculated below
     state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
 
     // Validate that the lottery hasn't already started

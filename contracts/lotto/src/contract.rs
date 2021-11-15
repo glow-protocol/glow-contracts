@@ -36,7 +36,7 @@ pub const INITIAL_DEPOSIT_AMOUNT: u128 = 100_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
 pub const PRIZE_DISTR_LEN: usize = 6;
 pub const MAX_CLAIMS: u8 = 15;
-pub const THIRTY_MINUTE_TIME: u64 = 60;
+pub const THIRTY_MINUTE_TIME: u64 = 60 * 30;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
-  "anyOf": [
+  "oneOf": [
     {
       "type": "object",
       "required": [
@@ -25,15 +25,41 @@
     {
       "type": "object",
       "required": [
+        "withdraw_expired_tokens"
+      ],
+      "properties": {
+        "withdraw_expired_tokens": {
+          "type": "object",
+          "required": [
+            "recipient"
+          ],
+          "properties": {
+            "recipient": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "register_merkle_root"
       ],
       "properties": {
         "register_merkle_root": {
           "type": "object",
           "required": [
+            "expiry_at_seconds",
             "merkle_root"
           ],
           "properties": {
+            "expiry_at_seconds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
             "merkle_root": {
               "type": "string"
             }

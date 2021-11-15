@@ -17,9 +17,9 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
 use glow_protocol::common::OrderBy;
 use glow_protocol::gov::{
-    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollExecuteMsg, PollResponse,
-    PollStatus, PollsResponse, QueryMsg, StateResponse, VoteOption, VoterInfo, VotersResponse,
-    VotersResponseItem,
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PollExecuteMsg,
+    PollResponse, PollStatus, PollsResponse, QueryMsg, StateResponse, VoteOption, VoterInfo,
+    VotersResponse, VotersResponseItem,
 };
 
 use terraswap::asset::{Asset, AssetInfo, PairInfo};
@@ -905,4 +905,9 @@ fn query_voters(
     Ok(VotersResponse {
         voters: voters_response?,
     })
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::default())
 }

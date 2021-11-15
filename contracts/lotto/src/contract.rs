@@ -36,6 +36,7 @@ pub const INITIAL_DEPOSIT_AMOUNT: u128 = 100_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
 pub const PRIZE_DISTR_LEN: usize = 6;
 pub const MAX_CLAIMS: u8 = 15;
+pub const THIRTY_MINUTE_TIME: u64 = 60 * 30;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -80,6 +81,11 @@ pub fn instantiate(
         return Err(ContractError::InvalidWithdrawalFee {});
     }
 
+    // Validate that epoch_interval is at least 30 minutes
+    if msg.epoch_interval < THIRTY_MINUTE_TIME {
+        return Err(ContractError::InvalidEpochInterval {});
+    }
+
     CONFIG.save(
         deps.storage,
         &Config {
@@ -91,6 +97,7 @@ pub fn instantiate(
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.addr_validate(msg.anchor_contract.as_str())?,
             lottery_interval: Duration::Time(msg.lottery_interval),
+            epoch_interval: Duration::Time(msg.epoch_interval),
             block_time: Duration::Time(msg.block_time),
             round_delta: msg.round_delta,
             ticket_price: msg.ticket_price,
@@ -120,7 +127,7 @@ pub fn instantiate(
                 msg.initial_lottery_execution,
             )),
             next_lottery_exec_time: Expiration::Never {},
-            next_epoch: Duration::Time(msg.lottery_interval + msg.block_time).after(&env.block),
+            next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,
@@ -178,6 +185,7 @@ pub fn execute(
             reserve_factor,
             instant_withdrawal_fee,
             unbonding_period,
+            epoch_interval,
         } => execute_update_config(
             deps,
             info,
@@ -186,6 +194,7 @@ pub fn execute(
             reserve_factor,
             instant_withdrawal_fee,
             unbonding_period,
+            epoch_interval,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -965,8 +974,16 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
+    // Validate that executing epoch will follow rate limiting
     if !state.next_epoch.is_expired(&env.block) {
         return Err(ContractError::InvalidEpochExecution {});
+    }
+
+    // Validate that the lottery is not in the process of running
+    // This helps avoid delaying the computing of the reward following lottery execution.
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
     }
 
     // Compute global Glow rewards
@@ -999,8 +1016,9 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
         vec![]
     };
 
+    // Update next_epoch based on epoch_interval
+    state.next_epoch = Expiration::AtTime(env.block.time).add(config.epoch_interval)?;
     // Empty total reserve and store state
-    state.next_epoch = Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
     state.total_reserve = Decimal256::zero();
     STATE.save(deps.storage, &state)?;
 
@@ -1065,6 +1083,7 @@ pub fn execute_update_config(
     reserve_factor: Option<Decimal256>,
     instant_withdrawal_fee: Option<Decimal256>,
     unbonding_period: Option<u64>,
+    epoch_interval: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1099,6 +1118,15 @@ pub fn execute_update_config(
 
     if let Some(unbonding_period) = unbonding_period {
         config.unbonding_period = Duration::Time(unbonding_period);
+    }
+
+    if let Some(epoch_interval) = epoch_interval {
+        // validate that epoch_interval is at least 30 minutes
+        if epoch_interval < THIRTY_MINUTE_TIME {
+            return Err(ContractError::InvalidEpochInterval {});
+        }
+
+        config.epoch_interval = Duration::Time(epoch_interval);
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -1215,6 +1243,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         gov_contract: config.gov_contract.to_string(),
         distributor_contract: config.distributor_contract.to_string(),
         lottery_interval: config.lottery_interval,
+        epoch_interval: config.epoch_interval,
         block_time: config.block_time,
         round_delta: config.round_delta,
         ticket_price: config.ticket_price,

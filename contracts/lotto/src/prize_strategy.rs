@@ -39,14 +39,17 @@ pub fn execute_lottery(
         return Err(ContractError::InvalidLotteryExecutionFunds {});
     }
 
+    // Verify that the next_lottery_time is expired
     if !state.next_lottery_time.is_expired(&env.block) {
         return Err(ContractError::LotteryInProgress {});
     }
 
+    // Verify that there is at least one registered ticket
     if state.total_tickets.is_zero() {
         return Err(ContractError::InvalidLotteryExecutionTickets {});
     }
 
+    // Set the next_lottery_exec_time to one block after the current block
     state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
 
     // check execute_lottery has not been called already

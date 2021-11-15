@@ -7,6 +7,7 @@
     "anchor_contract",
     "block_time",
     "distributor_contract",
+    "epoch_interval",
     "gov_contract",
     "instant_withdrawal_fee",
     "lottery_interval",
@@ -33,6 +34,9 @@
     },
     "distributor_contract": {
       "type": "string"
+    },
+    "epoch_interval": {
+      "$ref": "#/definitions/Duration"
     },
     "gov_contract": {
       "type": "string"

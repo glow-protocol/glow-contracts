@@ -12,7 +12,8 @@ pub struct InstantiateMsg {
     pub anchor_contract: String,             // anchor money market address
     pub aterra_contract: String,             // aterra auusd contract address
     pub oracle_contract: String,             // oracle address
-    pub lottery_interval: u64,               // number of blocks (or time) between lotteries
+    pub lottery_interval: u64,               // time between lotteries
+    pub epoch_interval: u64,                 // time between executing epoch operations
     pub block_time: u64, // number of blocks (or time) lottery is blocked while is executed
     pub round_delta: u64, // number of rounds of security to get oracle rand
     pub ticket_price: Decimal256, // prize of a ticket in stable_denom
@@ -44,6 +45,7 @@ pub enum ExecuteMsg {
         reserve_factor: Option<Decimal256>,
         instant_withdrawal_fee: Option<Decimal256>,
         unbonding_period: Option<u64>,
+        epoch_interval: Option<u64>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {
@@ -121,6 +123,7 @@ pub struct ConfigResponse {
     pub gov_contract: String,
     pub distributor_contract: String,
     pub lottery_interval: Duration,
+    pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,
     pub ticket_price: Decimal256,

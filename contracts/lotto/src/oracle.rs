@@ -8,7 +8,7 @@ const RAND_PERIOD: u64 = 30;
 pub fn calculate_lottery_rand_round(env: Env, round_delta: u64) -> u64 {
     let from_genesis = env.block.time.seconds().checked_sub(RAND_GENESIS).unwrap();
     let current_round = from_genesis.checked_div(RAND_PERIOD).unwrap();
-    current_round + round_delta //make round delta as config param
+    current_round + round_delta // make round delta as config param
 }
 
 pub fn sequence_from_hash(hash: String) -> String {

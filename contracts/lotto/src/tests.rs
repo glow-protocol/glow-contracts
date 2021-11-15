@@ -261,6 +261,7 @@ fn update_config() {
     assert_eq!(config_response.lottery_interval, Duration::Time(1800));
 
     // update reserve_factor to 1%
+    let info = mock_info("owner1", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
         oracle_addr: None,
@@ -277,6 +278,25 @@ fn update_config() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.reserve_factor, Decimal256::percent(1));
+
+    // update epoch_interval to 5 hours
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: Some(WEEK_TIME * 5),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // check that epoch_interval changed
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
+    assert_eq!(config_response.epoch_interval, WEEK.mul(5));
 
     // check only owner can update config
     let info = mock_info("owner2", &[]);

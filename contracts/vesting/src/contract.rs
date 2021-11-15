@@ -12,8 +12,8 @@ use crate::state::{
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::common::OrderBy;
 use glow_protocol::vesting::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, VestingAccount, VestingAccountResponse,
-    VestingAccountsResponse, VestingInfo,
+    ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, VestingAccount,
+    VestingAccountResponse, VestingAccountsResponse, VestingInfo,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -252,6 +252,11 @@ pub fn query_vesting_accounts(
     Ok(VestingAccountsResponse {
         vesting_accounts: vesting_account_responses?,
     })
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::default())
 }
 
 #[test]

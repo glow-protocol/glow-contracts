@@ -24,7 +24,7 @@ use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
-    InstantiateMsg, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg,
+    InstantiateMsg, LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse, QueryMsg,
     SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::querier::deduct_tax;
@@ -1391,4 +1391,9 @@ pub fn query_depositors(
 
     let depositors = read_depositors(deps, start_after, limit)?;
     Ok(DepositorsInfoResponse { depositors })
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::default())
 }

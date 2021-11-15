@@ -94,21 +94,9 @@ pub fn calculate_winner_prize(
     to_send
 }
 
+// Get max bounds
 pub fn calculate_max_bound(min_bound: &str) -> String {
-    // Get max bounds
-    let max_bound: Vec<char> = min_bound[..2].chars().collect();
-    let first_char = max_bound[0].to_digit(16).unwrap();
-    let second_char = max_bound[1].to_digit(16).unwrap();
-
-    if second_char == 15 {
-        if first_char == 15 {
-            "fffff".to_string()
-        } else {
-            format!("{:x}0000", first_char + 1)
-        }
-    } else {
-        format!("{}{:x}000", max_bound[0], second_char + 1)
-    }
+    format!("{}fff", min_bound[..2].to_string())
 }
 
 pub fn pseudo_random_seq(sender_addr: String, tickets: u64, time: u64) -> String {

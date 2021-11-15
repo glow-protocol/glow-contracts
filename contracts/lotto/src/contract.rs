@@ -36,6 +36,7 @@ pub const INITIAL_DEPOSIT_AMOUNT: u128 = 100_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
 pub const PRIZE_DISTR_LEN: usize = 6;
 pub const MAX_CLAIMS: u8 = 15;
+pub const MINUTE_TIME: u64 = 60;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -81,7 +82,7 @@ pub fn instantiate(
     }
 
     // Validate that epoch_interval is at least 30 minutes
-    if msg.epoch_interval < 60 * 30 {
+    if msg.epoch_interval < MINUTE_TIME * 30 {
         return Err(ContractError::InvalidEpochInterval {});
     }
 
@@ -1121,7 +1122,7 @@ pub fn execute_update_config(
 
     if let Some(epoch_interval) = epoch_interval {
         // validate that epoch_interval is at least 30 minutes
-        if epoch_interval < 60 * 30 {
+        if epoch_interval < MINUTE_TIME * 30 {
             return Err(ContractError::InvalidEpochInterval {});
         }
 

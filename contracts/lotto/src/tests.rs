@@ -3811,7 +3811,9 @@ fn small_withdraw() {
 
     // Add an extra one to account for the rounding error
     // Not just rounding error, also tax, but tax is 0 in this case
-    let minted_shares = Decimal256::percent(TICKET_PRICE * 1u64).div(Decimal256::permille(RATE));
+    let minted_shares = Decimal256::from_uint256(
+        Decimal256::percent(TICKET_PRICE * 1u64).div(Decimal256::permille(RATE)) * Uint256::one(),
+    );
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -3830,8 +3832,13 @@ fn small_withdraw() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            deposit_amount: Decimal256::percent(TICKET_PRICE),
-            shares: Decimal256::percent(TICKET_PRICE * 1u64) / Decimal256::permille(RATE),
+            deposit_amount: Decimal256::from_uint256(
+                minted_shares * Decimal256::permille(RATE) * Uint256::one()
+            ),
+            shares: Decimal256::from_uint256(
+                Decimal256::percent(TICKET_PRICE * 1u64) / Decimal256::permille(RATE)
+                    * Uint256::one()
+            ),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("23456")],
@@ -3858,8 +3865,15 @@ fn small_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_deposits: Decimal256::percent(TICKET_PRICE),
-            lottery_deposits: Decimal256::percent(TICKET_PRICE) * Decimal256::percent(SPLIT_FACTOR),
+            total_deposits: Decimal256::from_uint256(
+                minted_shares * Decimal256::permille(RATE) * Uint256::one()
+            ),
+            lottery_deposits: Decimal256::from_uint256(
+                Decimal256::from_uint256(
+                    minted_shares * Decimal256::permille(RATE) * Uint256::one()
+                ) * Decimal256::percent(SPLIT_FACTOR)
+                    * Uint256::one()
+            ),
             total_sponsor_amount: Decimal256::zero(),
             lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
@@ -3894,9 +3908,25 @@ fn small_withdraw() {
         ]
     );
 
-    // Update aust exchange rate to have gone up ------------
-    deps.querier
-        .with_exchange_rate(Decimal256::permille(RATE + 1000));
+    // // Update aust exchange rate to have gone up ------------
+    // deps.querier
+    //     .with_exchange_rate(Decimal256::permille(RATE + 1000));
+
+    // Look at pool valvues
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+
+    // Shares supply should equal contract_a_balance
+    println!("{}, {}", shares_supply, contract_a_balance);
+    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
 
     // Check that things are looking good for withdrawal ------------
 
@@ -3926,9 +3956,36 @@ fn small_withdraw() {
         amount: Some(10u128.into()),
         instant: None,
     };
-    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
-    //
+    // Message for redeem amount operation of aUST
+
+    // Get the sent_amount
+    let sent_amount = if let CosmosMsg::Wasm(wasm_msg) = &res.messages[0].msg {
+        if let WasmMsg::Execute { msg, .. } = wasm_msg {
+            let send_msg: Cw20ExecuteMsg = from_binary(&msg).unwrap();
+            if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+                amount
+            } else {
+                panic!("DO NOT ENTER HERE")
+            }
+        } else {
+            panic!("DO NOT ENTER HERE");
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
+
+    // Update contract_balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(contract_a_balance - sent_amount.into()).into(),
+        )],
+    )]);
+
+    // Compare shares_supply with contract_a_balance
 
     let pool = query_pool(deps.as_ref()).unwrap();
 

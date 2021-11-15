@@ -335,13 +335,17 @@ pub fn deposit(
     let post_tax_deposit_amount = net_coin_amount.amount;
 
     // get the amount of aUST entitled to the user from the deposit
-    let minted_amount =
-        Decimal256::from_uint256(post_tax_deposit_amount) / epoch_state.exchange_rate;
+    let minted_amount = Decimal256::from_uint256(
+        Decimal256::from_uint256(post_tax_deposit_amount) / epoch_state.exchange_rate
+            * Uint256::one(),
+    );
+
+    let minted_amount_value = minted_amount * epoch_state.exchange_rate * Uint256::one();
 
     // store the post tax deposit amount
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
+        .add(Decimal256::from_uint256(minted_amount_value));
 
     // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
@@ -378,10 +382,10 @@ pub fn deposit(
         .add(minted_amount - minted_amount * config.split_factor);
     pool.total_deposits = pool
         .total_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
-    pool.lottery_deposits = pool
-        .lottery_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount) * config.split_factor);
+        .add(Decimal256::from_uint256(minted_amount_value));
+    pool.lottery_deposits = pool.lottery_deposits.add(Decimal256::from_uint256(
+        Decimal256::from_uint256(minted_amount_value) * config.split_factor * Uint256::one(),
+    ));
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
@@ -394,7 +398,7 @@ pub fn deposit(
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
                 denom: config.stable_denom,
-                amount: post_tax_deposit_amount,
+                amount: post_tax_deposit_amount.into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })])
@@ -756,7 +760,8 @@ pub fn execute_withdraw(
 
     // Get the amount of withdrawn deposits, shares, lottery_shares, and savings_shares
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
-    let withdrawn_shares = depositor.shares * withdraw_ratio;
+    let withdrawn_shares =
+        Decimal256::from_uint256(depositor.shares * withdraw_ratio * Uint256::one());
     let withdrawn_lottery_shares = withdrawn_shares * config.split_factor;
     let withdrawn_savings_shares = withdrawn_shares - withdrawn_shares * config.split_factor;
 

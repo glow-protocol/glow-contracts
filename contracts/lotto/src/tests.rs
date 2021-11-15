@@ -3928,6 +3928,93 @@ fn small_withdraw() {
     };
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
+    //
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+
+    // why are these so different from one another????
+    println!("{}, {}", shares_supply, contract_a_balance);
+    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+
+    // // Check that the depositor info was updated correctly
+    // assert_eq!(
+    //     read_depositor_info(
+    //         deps.as_ref().storage,
+    //         &deps.api.addr_validate("addr0001").unwrap()
+    //     ),
+    //     DepositorInfo {
+    //         deposit_amount: Decimal256::percent(TICKET_PRICE),
+    //         shares: Decimal256::percent(TICKET_PRICE * 1u64) / Decimal256::permille(RATE),
+    //         reward_index: Decimal256::zero(),
+    //         pending_rewards: Decimal256::zero(),
+    //         tickets: vec![String::from("23456")],
+    //         unbonding_info: vec![]
+    //     }
+    // );
+
+    // assert_eq!(
+    //     query_state(deps.as_ref(), mock_env(), None).unwrap(),
+    //     StateResponse {
+    //         total_tickets: Uint256::from(1u64),
+    //         total_reserve: Decimal256::zero(),
+    //         award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+    //         current_lottery: 0,
+    //         next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+    //         next_lottery_exec_time: Expiration::Never {},
+    //         next_epoch: (WEEK + HOUR).unwrap().after(&mock_env().block),
+    //         last_reward_updated: 12345,
+    //         global_reward_index: Decimal256::zero(),
+    //         glow_emission_rate: Decimal256::zero(),
+    //     }
+    // );
+
+    // assert_eq!(
+    //     query_pool(deps.as_ref()).unwrap(),
+    //     PoolResponse {
+    //         total_deposits: Decimal256::percent(TICKET_PRICE),
+    //         lottery_deposits: Decimal256::percent(TICKET_PRICE) * Decimal256::percent(SPLIT_FACTOR),
+    //         total_sponsor_amount: Decimal256::zero(),
+    //         lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+    //         deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
+    //         sponsor_shares: Decimal256::zero(),
+    //     }
+    // );
+
+    // assert_eq!(
+    //     res.messages,
+    //     vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+    //         contract_addr: ANCHOR.to_string(),
+    //         funds: vec![Coin {
+    //             denom: String::from("uusd"),
+    //             amount: (Decimal256::percent(TICKET_PRICE * 1u64) * Uint256::one()).into(),
+    //         }],
+    //         msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
+    //     }))]
+    // );
+
+    // assert_eq!(
+    //     res.attributes,
+    //     vec![
+    //         attr("action", "deposit"),
+    //         attr("depositor", "addr0001"),
+    //         attr("recipient", "addr0001"),
+    //         attr(
+    //             "deposit_amount",
+    //             Decimal256::percent(TICKET_PRICE * 1u64).to_string()
+    //         ),
+    //         attr("tickets", 1u64.to_string()),
+    //         attr("shares_minted", minted_shares.to_string()),
+    //     ]
+    // );
+
     // Verify that the withdrawal was handled properly
     // let depositor =
     //     read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());

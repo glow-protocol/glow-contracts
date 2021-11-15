@@ -1115,6 +1115,11 @@ pub fn execute_update_config(
     }
 
     if let Some(epoch_interval) = epoch_interval {
+        // validate that epoch_interval is at least 30 minutes
+        if epoch_interval < 60 * 30 {
+            return Err(ContractError::InvalidEpochInterval {});
+        }
+
         config.epoch_interval = Duration::Time(epoch_interval);
     }
 

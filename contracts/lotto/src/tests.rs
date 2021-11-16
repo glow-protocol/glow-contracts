@@ -3265,3 +3265,87 @@ fn calculate_total_prize(
 
     initial_balance + net_yield
 }
+
+#[test]
+fn small_withdraw() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    // get env
+    let env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    // User deposits and buys one ticket -------------------
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: (Decimal256::percent(TICKET_PRICE) * Uint256::one()).into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("23456")],
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // Add the funds to the contract address -------------------
+
+    // Calculate the number of minted_shares
+    let minted_shares = Decimal256::from_uint256(
+        Decimal256::percent(TICKET_PRICE * 1u64).div(Decimal256::permille(RATE)) * Uint256::one(),
+    );
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(minted_shares * Uint256::one()).into(),
+        )],
+    )]);
+
+    // Compare shares_supply with contract_a_balance -----------
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+
+    // Shares supply should equal contract_a_balance
+    println!("{}, {}", shares_supply, contract_a_balance);
+    // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+
+    // Address withdraws a small amount of money ----------------
+
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        amount: Some(10u128.into()),
+        instant: None,
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+
+    // Compare shares_supply with contract_a_balance
+    let pool = query_pool(deps.as_ref()).unwrap();
+
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+
+    // why are these so different from one another????
+    println!("{}, {}", shares_supply, contract_a_balance);
+    // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+}

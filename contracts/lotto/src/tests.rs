@@ -1622,16 +1622,12 @@ fn claim_lottery_single_winner() {
 
     // Get the amount of aust that is being redeemed
 
-    let sent_amount = if let CosmosMsg::Wasm(wasm_msg) = &res.messages[0].msg {
-        if let WasmMsg::Execute { msg, .. } = wasm_msg {
-            let send_msg: Cw20ExecuteMsg = from_binary(&msg).unwrap();
-            if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
-                amount
-            } else {
-                panic!("DO NOT ENTER HERE")
-            }
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
         } else {
-            panic!("DO NOT ENTER HERE");
+            panic!("DO NOT ENTER HERE")
         }
     } else {
         panic!("DO NOT ENTER HERE");

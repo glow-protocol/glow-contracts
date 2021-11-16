@@ -1618,7 +1618,45 @@ fn claim_lottery_single_winner() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
 
-    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // Get the amount of aust that is being redeemed
+
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
+        } else {
+            panic!("DO NOT ENTER HERE")
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
+
+    // Update contract_balance based on the amount of redeemed aust --
+
+    // Increase the uusd balance by the value of the aust
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR,
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(
+                Uint256::from(INITIAL_DEPOSIT_AMOUNT)
+                    + Decimal256::from_uint256(sent_amount)
+                        * Decimal256::permille(RATE)
+                        * Uint256::one(),
+            ),
+        }],
+    );
+
+    // Decrease the aust balance by the amount of redeemed aust
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(Uint128::from(20_000_000u128) - sent_amount),
+        )],
+    )]);
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -2084,11 +2122,19 @@ fn execute_prize_no_winners() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
-    // TODO: Calculate and avoid hard-coding
-    assert_eq!(
-        state.award_available,
-        Decimal256::from_str("107844998").unwrap()
+    // Calculate the total_prize
+    let pool = query_pool(deps.as_ref()).unwrap();
+    let total_prize = calculate_total_prize(
+        deps.as_ref(),
+        pool.lottery_shares,
+        pool.deposit_shares,
+        pool.sponsor_shares,
+        Decimal256::from_uint256(Uint256::from(INITIAL_DEPOSIT_AMOUNT)),
+        Uint256::from(20_000_000u128),
+        1,
     );
+
+    assert_eq!(state.award_available, total_prize);
 
     assert_eq!(res.messages, vec![]);
 

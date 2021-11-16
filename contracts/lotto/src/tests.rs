@@ -3301,6 +3301,9 @@ fn small_withdraw() {
         Decimal256::percent(TICKET_PRICE * 1u64).div(Decimal256::permille(RATE)) * Uint256::one(),
     );
 
+    let minted_shares_value =
+        Decimal256::from_uint256(minted_shares * Decimal256::permille(RATE) * Uint256::one());
+
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
         &[(
@@ -3323,7 +3326,58 @@ fn small_withdraw() {
 
     // Shares supply should equal contract_a_balance
     println!("{}, {}", shares_supply, contract_a_balance);
-    // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+
+    // Check that the depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr0001").unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: minted_shares_value,
+            shares: minted_shares,
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+            tickets: vec![String::from("23456")],
+            unbonding_info: vec![]
+        }
+    );
+
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
+        StateResponse {
+            total_tickets: Uint256::from(1u64),
+            total_reserve: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_exec_time: Expiration::Never {},
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
+        }
+    );
+
+    assert_eq!(
+        query_pool(deps.as_ref()).unwrap(),
+        PoolResponse {
+            total_deposits: minted_shares_value,
+            lottery_deposits: Decimal256::from_uint256(
+                minted_shares_value * Decimal256::percent(SPLIT_FACTOR) * Uint256::one()
+            ),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: Decimal256::from_uint256(
+                minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)) * Uint256::one()
+            ),
+            deposit_shares: minted_shares
+                - Decimal256::from_uint256(
+                    minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)) * Uint256::one()
+                ),
+            sponsor_shares: Decimal256::zero(),
+        }
+    );
 
     // Address withdraws a small amount of money ----------------
 
@@ -3374,7 +3428,94 @@ fn small_withdraw() {
 
     // why are these so different from one another????
     println!("{}, {}", shares_supply, contract_a_balance);
-    // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+
+    // Check that the depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr0001").unwrap()
+        ),
+        DepositorInfo {
+            deposit_amount: minted_shares_value
+                - Decimal256::from_uint256(
+                    Decimal256::from_uint256(sent_amount)
+                        * Decimal256::permille(RATE)
+                        * Uint256::one()
+                ),
+            shares: minted_shares - Decimal256::from_uint256(sent_amount),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+            tickets: vec![],
+            unbonding_info: vec![Claim {
+                amount: Decimal256::from_uint256(
+                    Decimal256::from_uint256(sent_amount)
+                        * Decimal256::permille(RATE)
+                        * Uint256::one()
+                ),
+                release_at: WEEK.after(&env.block),
+            }]
+        }
+    );
+
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
+        StateResponse {
+            total_tickets: Uint256::from(0u64),
+            total_reserve: Decimal256::zero(),
+            award_available: Decimal256::from_uint256(INITIAL_DEPOSIT_AMOUNT),
+            current_lottery: 0,
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_exec_time: Expiration::Never {},
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
+            last_reward_updated: 12345,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::zero(),
+        }
+    );
+
+    let withdraw_ratio =
+        Decimal256::from_ratio(Uint256::from(10u128), minted_shares_value * Uint256::one());
+
+    let withdrawn_deposits =
+        Decimal256::from_uint256(minted_shares_value * withdraw_ratio * Uint256::one());
+    let withdrawn_shares =
+        Decimal256::from_uint256(minted_shares * withdraw_ratio * Uint256::one());
+    let withdrawn_lottery_shares = Decimal256::from_uint256(
+        withdrawn_shares * Decimal256::percent(SPLIT_FACTOR) * Uint256::one(),
+    );
+    let withdrawn_deposit_shares = withdrawn_shares
+        - Decimal256::from_uint256(
+            withdrawn_shares * Decimal256::percent(SPLIT_FACTOR) * Uint256::one(),
+        );
+
+    // let remaining_shares = minted_shares - Decimal256::from_uint256(sent_amount);
+
+    // let remaining_shares_value =
+    //     Decimal256::from_uint256(minted_shares * Decimal256::permille(RATE) * Uint256::one());
+
+    let lottery_shares = Decimal256::from_uint256(
+        minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)) * Uint256::one(),
+    );
+    let deposit_shares = minted_shares
+        - Decimal256::from_uint256(
+            minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)) * Uint256::one(),
+        );
+
+    assert_eq!(
+        query_pool(deps.as_ref()).unwrap(),
+        PoolResponse {
+            total_deposits: minted_shares_value - withdrawn_deposits,
+            lottery_deposits: Decimal256::from_uint256(
+                minted_shares_value * Decimal256::percent(SPLIT_FACTOR) * Uint256::one()
+                    - withdrawn_deposits * Decimal256::percent(SPLIT_FACTOR) * Uint256::one()
+            ),
+            total_sponsor_amount: Decimal256::zero(),
+            lottery_shares: lottery_shares - withdrawn_lottery_shares,
+            deposit_shares: deposit_shares - withdrawn_deposit_shares,
+            sponsor_shares: Decimal256::zero(),
+        }
+    );
 }
 
 #[test]
@@ -3491,4 +3632,13 @@ fn small_withdraw_update_exchange_rate() {
     // why are these so different from one another????
     println!("{}, {}", shares_supply, contract_a_balance);
     // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+}
+
+#[test]
+pub fn test_rounding() {
+    let two = Decimal256::from_uint256(Uint256::from(2u128));
+    let two_thirds = two.div(Decimal256::from_uint256(Uint256::from(3u128)));
+    println!("{}", two_thirds.to_string());
+    println!("{}", two_thirds * Uint256::one());
+    println!("{}", Uint256::one() - two_thirds * Uint256::one());
 }

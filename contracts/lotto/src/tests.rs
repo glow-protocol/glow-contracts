@@ -1633,8 +1633,9 @@ fn claim_lottery_single_winner() {
         panic!("DO NOT ENTER HERE");
     };
 
-    // Update contract_balance
+    // Update contract_balance based on the amount of redeemed aust --
 
+    // Increase the uusd balance by the value of the aust
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR,
         vec![Coin {
@@ -1647,6 +1648,15 @@ fn claim_lottery_single_winner() {
             ),
         }],
     );
+
+    // Decrease the aust balance by the amount of redeemed aust
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(Uint128::from(20_000_000u128) - sent_amount),
+        )],
+    )]);
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -2112,7 +2122,7 @@ fn execute_prize_no_winners() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Decimal256::zero());
 
-    // calculate the total_prize
+    // Calculate the total_prize
     let pool = query_pool(deps.as_ref()).unwrap();
     let total_prize = calculate_total_prize(
         deps.as_ref(),
@@ -2124,7 +2134,6 @@ fn execute_prize_no_winners() {
         1,
     );
 
-    // TODO: Calculate and avoid hard-coding
     assert_eq!(state.award_available, total_prize);
 
     assert_eq!(res.messages, vec![]);

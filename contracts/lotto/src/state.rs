@@ -35,10 +35,10 @@ pub struct Config {
     pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,
-    pub ticket_price: Decimal256,
+    pub ticket_price: Uint256,
     pub max_holders: u8,
     pub prize_distribution: [Decimal256; 6],
-    pub target_award: Decimal256,
+    pub target_award: Uint256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
     pub instant_withdrawal_fee: Decimal256,
@@ -83,7 +83,7 @@ pub struct DepositorInfo {
 pub struct SponsorInfo {
     pub amount: Uint256,
     pub shares: Uint256,
-    pub pending_rewards: Decimal256,
+    pub pending_rewards: Uint256,
     pub reward_index: Decimal256,
 }
 
@@ -171,7 +171,7 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
         _ => SponsorInfo {
             amount: Uint256::zero(),
             shares: Uint256::zero(),
-            pending_rewards: Decimal256::zero(),
+            pending_rewards: Uint256::zero(),
             reward_index: Decimal256::zero(),
         },
     }

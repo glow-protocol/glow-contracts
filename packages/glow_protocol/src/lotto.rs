@@ -158,12 +158,12 @@ pub struct StateResponse {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
-    pub total_deposits: Decimal256,
-    pub lottery_deposits: Decimal256,
-    pub total_sponsor_amount: Decimal256,
-    pub deposit_shares: Decimal256,
-    pub lottery_shares: Decimal256,
-    pub sponsor_shares: Decimal256,
+    pub total_deposits: Uint256,
+    pub lottery_deposits: Uint256,
+    pub total_sponsor_amount: Uint256,
+    pub deposit_shares: Uint256,
+    pub lottery_shares: Uint256,
+    pub sponsor_shares: Uint256,
 }
 
 // We define a custom struct for each query response
@@ -174,7 +174,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub total_prizes: Decimal256,
+    pub total_prizes: Uint256,
     pub number_winners: [u32; 6],
     pub page: String,
 }
@@ -183,10 +183,10 @@ pub struct LotteryInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfoResponse {
     pub depositor: String,
-    pub deposit_amount: Decimal256,
-    pub shares: Decimal256,
+    pub deposit_amount: Uint256,
+    pub shares: Uint256,
     pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
+    pub pending_rewards: Uint256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }

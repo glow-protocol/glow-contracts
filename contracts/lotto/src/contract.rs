@@ -344,13 +344,17 @@ pub fn deposit(
     let post_tax_deposit_amount = net_coin_amount.amount;
 
     // get the amount of aUST entitled to the user from the deposit
-    let minted_amount =
-        Decimal256::from_uint256(post_tax_deposit_amount) / epoch_state.exchange_rate;
+    let minted_amount = Decimal256::from_uint256(
+        Decimal256::from_uint256(post_tax_deposit_amount) / epoch_state.exchange_rate
+            * Uint256::one(),
+    );
+
+    let minted_amount_value = minted_amount * epoch_state.exchange_rate * Uint256::one();
 
     // store the post tax deposit amount
     depositor_info.deposit_amount = depositor_info
         .deposit_amount
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
+        .add(Decimal256::from_uint256(minted_amount_value));
 
     // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
@@ -381,16 +385,19 @@ pub fn deposit(
 
     // Update global state and pool
     state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
-    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
-    pool.deposit_shares = pool
-        .deposit_shares
-        .add(minted_amount - minted_amount * config.split_factor);
+    pool.lottery_shares = pool.lottery_shares.add(Decimal256::from_uint256(
+        minted_amount * config.split_factor * Uint256::one(),
+    ));
+    pool.deposit_shares = pool.deposit_shares.add(
+        minted_amount
+            - Decimal256::from_uint256(minted_amount * config.split_factor * Uint256::one()),
+    );
     pool.total_deposits = pool
         .total_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
-    pool.lottery_deposits = pool
-        .lottery_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount) * config.split_factor);
+        .add(Decimal256::from_uint256(minted_amount_value));
+    pool.lottery_deposits = pool.lottery_deposits.add(Decimal256::from_uint256(
+        Decimal256::from_uint256(minted_amount_value) * config.split_factor * Uint256::one(),
+    ));
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
@@ -683,7 +690,7 @@ pub fn execute_withdraw(
             withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), pooled_deposits);
         }
     }
-    let aust_to_redeem = aust_amount * withdraw_ratio;
+    let aust_to_redeem = Decimal256::from_uint256(aust_amount * withdraw_ratio * Uint256::one());
     let redemed_amount = pooled_deposits * withdraw_ratio;
     // Discount tax Anchor -> Glow
     let mut return_amount = Uint256::from(
@@ -727,10 +734,14 @@ pub fn execute_withdraw(
         })?;
     }
 
-    let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
-    let withdrawn_shares = depositor.shares * withdraw_ratio;
-    let withdrawn_lottery_shares = withdrawn_shares * config.split_factor;
-    let withdrawn_deposit_shares = withdrawn_shares - withdrawn_shares * config.split_factor;
+    let withdrawn_deposits =
+        Decimal256::from_uint256(depositor.deposit_amount * withdraw_ratio * Uint256::one());
+    let withdrawn_shares =
+        Decimal256::from_uint256(depositor.shares * withdraw_ratio * Uint256::one());
+    let withdrawn_lottery_shares =
+        Decimal256::from_uint256(withdrawn_shares * config.split_factor * Uint256::one());
+    let withdrawn_deposit_shares = withdrawn_shares
+        - Decimal256::from_uint256(withdrawn_shares * config.split_factor * Uint256::one());
 
     // Update depositor info
     depositor.deposit_amount = depositor.deposit_amount.sub(withdrawn_deposits);
@@ -739,9 +750,9 @@ pub fn execute_withdraw(
     // Update global state and pool
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
     pool.total_deposits = pool.total_deposits.sub(withdrawn_deposits);
-    pool.lottery_deposits = pool
-        .lottery_deposits
-        .sub(withdrawn_deposits * config.split_factor);
+    pool.lottery_deposits = pool.lottery_deposits.sub(Decimal256::from_uint256(
+        withdrawn_deposits * config.split_factor * Uint256::one(),
+    ));
     pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
     pool.deposit_shares = pool.deposit_shares.sub(withdrawn_deposit_shares);
 

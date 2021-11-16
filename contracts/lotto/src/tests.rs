@@ -3332,7 +3332,34 @@ fn small_withdraw() {
         amount: Some(10u128.into()),
         instant: None,
     };
-    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+
+    // Message for redeem amount operation of aUST
+
+    // Get the sent_amount
+    let sent_amount = if let CosmosMsg::Wasm(wasm_msg) = &res.messages[0].msg {
+        if let WasmMsg::Execute { msg, .. } = wasm_msg {
+            let send_msg: Cw20ExecuteMsg = from_binary(&msg).unwrap();
+            if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+                amount
+            } else {
+                panic!("DO NOT ENTER HERE")
+            }
+        } else {
+            panic!("DO NOT ENTER HERE");
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
+
+    // Update contract_balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(contract_a_balance - sent_amount.into()).into(),
+        )],
+    )]);
 
     // Compare shares_supply with contract_a_balance
     let pool = query_pool(deps.as_ref()).unwrap();

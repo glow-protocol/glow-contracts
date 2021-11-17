@@ -391,7 +391,7 @@ pub fn deposit(
 
     pool.lottery_deposits = pool
         .lottery_deposits
-        .add((minted_amount_value * config.split_factor).into());
+        .add(minted_amount_value * config.split_factor);
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;

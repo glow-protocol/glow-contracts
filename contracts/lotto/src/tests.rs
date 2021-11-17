@@ -1569,8 +1569,6 @@ fn claim_lottery_single_winner() {
 
     let address_raw = deps.api.addr_validate("addr0000").unwrap();
 
-    let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
-
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw),
@@ -1963,7 +1961,7 @@ fn execute_lottery() {
 
     // Get the number of shares that are dedicated to the lottery
     // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
-    let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
+    let aust_lottery_balance = aust_balance.multiply_ratio(
         (pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
         (pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
     );
@@ -1987,7 +1985,7 @@ fn execute_lottery() {
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: ANCHOR.to_string(),
-                amount: Uint128::from(aust_to_redeem),
+                amount: aust_to_redeem,
                 msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
             })
             .unwrap(),

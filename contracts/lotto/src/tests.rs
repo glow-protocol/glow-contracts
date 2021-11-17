@@ -1193,7 +1193,7 @@ fn withdraw() {
         vec![Addr::unchecked("addr2222")]
     );
 
-    // Withdraws a very small amount, burns a ticket
+    // Withdraws a very small amount, burns a ticket as rounding
     let msg = ExecuteMsg::Withdraw {
         amount: Some(Uint128::from(1u128)),
         instant: None,

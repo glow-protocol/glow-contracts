@@ -324,8 +324,6 @@ pub fn execute_prize(
         state.next_lottery_exec_time = Expiration::Never {};
 
         // Subtract the awarded prize from the award_available to get the remaining award_available
-        // total_awarded prize is rounded down so award_available might have some remaining
-        // if there are winners for all match types
         state.award_available = state.award_available.sub(total_awarded_prize);
 
         // Save the state

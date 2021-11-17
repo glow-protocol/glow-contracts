@@ -102,7 +102,7 @@ pub fn execute_lottery(
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
-    let mut aust_to_redeem = Uint128::zero();
+    let mut aust_to_redeem = Uint256::zero();
 
     // Lottery deposits plus sponsor amount gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
     // pooled_lottery_deposits gives the total ust value of the lottery pool according to the fraction of the aust owned by the contract.
@@ -122,15 +122,15 @@ pub fn execute_lottery(
             pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
 
         // Divide by the rate to get the number of shares to redeem
-        aust_to_redeem = ((amount_to_redeem / rate) * Uint256::one()).into();
+        aust_to_redeem = amount_to_redeem / rate;
+
+        // Get the value of the aust that will be redeemed
+        let aust_to_redeem_value = aust_to_redeem * rate;
 
         // Get the amount of ust that will be received after accounting for taxes
         let net_amount = deduct_tax(
             deps.as_ref(),
-            coin(
-                (amount_to_redeem * Uint256::one()).into(),
-                config.clone().stable_denom,
-            ),
+            coin(aust_to_redeem_value.into(), config.clone().stable_denom),
         )?
         .amount;
 
@@ -149,7 +149,7 @@ pub fn execute_lottery(
                 funds: vec![],
                 msg: to_binary(&Cw20Send {
                     contract: config.anchor_contract.to_string(),
-                    amount: aust_to_redeem,
+                    amount: aust_to_redeem.into(),
                     msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
                 })?,
             });
@@ -308,6 +308,7 @@ pub fn execute_prize(
         // Calculate the total_awarded_prize from the number_winners array
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
+                // increase total_awarded_prize
                 total_awarded_prize += state.award_available * config.prize_distribution[index];
             }
         }
@@ -323,6 +324,8 @@ pub fn execute_prize(
         state.next_lottery_exec_time = Expiration::Never {};
 
         // Subtract the awarded prize from the award_available to get the remaining award_available
+        // total_awarded prize is rounded down so award_available might have some remaining
+        // if there are winners for all match types
         state.award_available = state.award_available.sub(total_awarded_prize);
 
         // Save the state

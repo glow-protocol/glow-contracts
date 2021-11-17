@@ -932,7 +932,9 @@ fn sponsor() {
 
     // withdraw sponsor
     // adding 1 to account for rounding error
-    let app_shares = (net_amount) / Decimal256::permille(RATE);
+    let app_shares = (Decimal256::from_uint256((net_amount) / Decimal256::permille(RATE))
+        + Decimal256::one())
+        * Uint256::one();
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -1933,6 +1935,37 @@ fn execute_lottery() {
     let info = mock_info("addr0001", &[]);
     let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
+    // Amount of aust to redeem
+
+    // Get this contracts aust balance
+    let aust_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+
+    // Get the number of shares that are dedicated to the lottery
+    // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
+    let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
+        (pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
+        (pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
+    );
+
+    // Get the pooled lottery_deposit
+    let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
+
+    // Get the amount to redeem
+    let amount_to_redeem =
+        pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
+
+    // Divide by the rate to get the number of shares to redeem
+    let aust_to_redeem: Uint128 =
+        ((amount_to_redeem / Decimal256::permille(RATE)) * Uint256::one()).into();
+
+    // Calculate amount to redeem for the lottery
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -1940,7 +1973,7 @@ fn execute_lottery() {
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: ANCHOR.to_string(),
-                amount: Uint128::from(337242u128), // TODO: Do the math, not hard-coded value
+                amount: Uint128::from(aust_to_redeem),
                 msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
             })
             .unwrap(),
@@ -1951,7 +1984,7 @@ fn execute_lottery() {
         res.attributes,
         vec![
             attr("action", "execute_lottery"),
-            attr("redeemed_amount", "337242"),
+            attr("redeemed_amount", aust_to_redeem.to_string()),
         ]
     );
 
@@ -3193,7 +3226,7 @@ fn claim_rewards_multiple_depositors() {
     assert_eq!(res.pending_rewards, Uint256::zero());
     assert_eq!(
         res.reward_index,
-        Decimal256::percent(10000u64) / (Decimal256::percent(TICKET_PRICE * 4u64))
+        Decimal256::from_ratio(100, Uint256::from(TICKET_PRICE * 4))
     );
 
     // Checking USER 1 state is correct
@@ -3293,10 +3326,9 @@ fn calculate_total_prize(
         (deposit_shares + lottery_shares + sponsor_shares) * Uint256::one(),
     );
 
-    let lottery_deposits =
-        Decimal256::from_uint256(aust_lottery_balance) * Decimal256::permille(RATE);
+    let lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
     let lottery_yield = lottery_deposits
-        - (Decimal256::percent(TICKET_PRICE * total_tickets)) * Decimal256::percent(SPLIT_FACTOR);
+        - (Uint256::from(TICKET_PRICE * total_tickets)) * Decimal256::percent(SPLIT_FACTOR);
 
     let net_yield = Uint256::from(
         deduct_tax(deps, coin((lottery_yield * Uint256::one()).into(), "uusd"))

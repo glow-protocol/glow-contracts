@@ -42,7 +42,7 @@ const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const MAX_HOLDERS: u8 = 10;
 // const RATE: u64 = 1023; // as a permille
-pub const RATE: u64 = 2000; // as a permille
+pub const RATE: u64 = 1023; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
@@ -419,9 +419,6 @@ fn deposit() {
         combinations: vec![String::from("13579"), String::from("34567")],
     };
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was stored correctly in both sequence buckets
@@ -599,9 +596,6 @@ fn deposit() {
         .map(|c| format!("addr{:0>4}", c))
         .collect::<Vec<String>>();
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     for (_index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
@@ -776,9 +770,6 @@ fn gift_tickets() {
         recipient: "addr1111".to_string(),
     };
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Check address of sender was stored correctly in both sequence buckets
@@ -882,9 +873,6 @@ fn sponsor() {
 
     let sponsor_amount = 100_000_000u128;
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     deps.querier.with_tax(
         Decimal::percent(1),
         &[(&"uusd".to_string(), &Uint128::from(1_000_000u128))],
@@ -985,8 +973,6 @@ fn withdraw() {
         combinations: vec![String::from("23456")],
     };
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Add 1 to account for rounding error
@@ -1265,8 +1251,6 @@ fn instant_withdraw() {
         combinations: vec![String::from("23456")],
     };
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
@@ -1423,8 +1407,6 @@ fn claim() {
         combinations: vec![String::from("23456")],
     };
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Address withdraws one ticket
@@ -1568,9 +1550,6 @@ fn claim_lottery_single_winner() {
             amount: (Uint256::from(TICKET_PRICE)).into(),
         }],
     );
-
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -2077,9 +2056,6 @@ fn execute_prize_no_winners() {
         }],
     );
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let address_raw = deps.api.addr_validate("addr0000").unwrap();
@@ -2203,9 +2179,6 @@ fn execute_prize_one_winner() {
         }],
     );
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let address_raw = deps.api.addr_validate("addr0000").unwrap();
@@ -2324,9 +2297,6 @@ fn execute_prize_winners_diff_ranks() {
         }],
     );
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from(WINNING_SEQUENCE)],
@@ -2347,7 +2317,8 @@ fn execute_prize_winners_diff_ranks() {
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw_0),
         DepositorInfo {
-            deposit_amount: Uint256::from(TICKET_PRICE),
+            deposit_amount: Uint256::from(TICKET_PRICE) * Decimal256::permille(RATE)
+                / Decimal256::permille(RATE),
             shares: Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE),
             reward_index: Decimal256::zero(),
             pending_rewards: Uint256::zero(),
@@ -2487,9 +2458,6 @@ fn execute_prize_winners_same_rank() {
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
-
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
@@ -2642,9 +2610,6 @@ fn execute_prize_one_winner_multiple_ranks() {
             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
         }],
     );
-
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
@@ -2803,9 +2768,6 @@ fn execute_prize_multiple_winners_one_ticket() {
         }],
     );
 
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from(WINNING_SEQUENCE)],
     };
@@ -2957,9 +2919,6 @@ fn execute_prize_pagination() {
         .map(|c| format!("addr{:0>4}", c))
         .collect::<Vec<String>>();
     // println!("addresses: {:?}", addresses);
-
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     for (index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket

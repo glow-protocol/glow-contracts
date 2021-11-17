@@ -933,9 +933,7 @@ fn sponsor() {
 
     // withdraw sponsor
     // adding 1 to account for rounding error
-    let app_shares = (Decimal256::from_uint256((net_amount) / Decimal256::permille(RATE))
-        + Decimal256::one())
-        * Uint256::one();
+    let app_shares = (net_amount) / Decimal256::permille(RATE);
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),

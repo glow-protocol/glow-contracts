@@ -356,7 +356,7 @@ pub fn deposit(
     // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
-    for combination in new_combinations {
+    for combination in combinations {
         // check that the number of holders for any given ticket isn't too high
         if let Some(holders) = TICKETS
             .may_load(deps.storage, combination.as_bytes())

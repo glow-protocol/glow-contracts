@@ -42,7 +42,7 @@ const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const MAX_HOLDERS: u8 = 10;
 // const RATE: u64 = 1023; // as a permille
-pub const RATE: u64 = 1000; // as a permille
+pub const RATE: u64 = 2000; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
@@ -925,10 +925,12 @@ fn sponsor() {
 
     let minted_shares = net_amount / Decimal256::permille(RATE);
 
-    assert_eq!(sponsor_info.amount, Uint256::from(net_amount));
+    let minted_shares_value = minted_shares * Decimal256::permille(RATE);
+
+    assert_eq!(sponsor_info.amount, minted_shares_value);
     assert_eq!(sponsor_info.shares, minted_shares);
 
-    assert_eq!(pool.total_sponsor_amount, net_amount);
+    assert_eq!(pool.total_sponsor_amount, minted_shares_value);
     assert_eq!(pool.sponsor_shares, minted_shares);
 
     // withdraw sponsor
@@ -1941,6 +1943,8 @@ fn execute_lottery() {
     .unwrap();
 
     let pool = query_pool(deps.as_ref()).unwrap();
+
+    println!("{:?}", pool);
 
     // Get the number of shares that are dedicated to the lottery
     // by multiplying the total number of shares by the fraction of shares dedicated to the lottery

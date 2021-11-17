@@ -356,7 +356,7 @@ pub fn deposit(
     // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
-    for combination in combinations {
+    for combination in new_combinations {
         // check that the number of holders for any given ticket isn't too high
         if let Some(holders) = TICKETS
             .may_load(deps.storage, combination.as_bytes())
@@ -490,6 +490,9 @@ pub fn execute_sponsor(
         // add amount of aUST entitled from the deposit
         let minted_amount = net_sponsor_amount / epoch_state.exchange_rate;
 
+        // get minted_amount_value
+        let minted_amount_value = minted_amount * epoch_state.exchange_rate;
+
         // fetch sponsor_info
         let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
@@ -498,12 +501,12 @@ pub fn execute_sponsor(
         compute_sponsor_reward(&state, &mut sponsor_info);
 
         // add sponsor_amount to depositor
-        sponsor_info.amount = sponsor_info.amount.add(net_sponsor_amount);
+        sponsor_info.amount = sponsor_info.amount.add(minted_amount_value);
         sponsor_info.shares = sponsor_info.shares.add(minted_amount);
         store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
 
         // update pool
-        pool.total_sponsor_amount = pool.total_sponsor_amount.add(net_sponsor_amount);
+        pool.total_sponsor_amount = pool.total_sponsor_amount.add(minted_amount_value);
         pool.sponsor_shares = pool.sponsor_shares.add(minted_amount);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),

@@ -7,7 +7,7 @@ use crate::state::{
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
     attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    Uint128, WasmMsg,
+    WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;

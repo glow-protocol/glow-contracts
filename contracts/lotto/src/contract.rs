@@ -1043,8 +1043,8 @@ pub fn execute_claim_rewards(
     compute_sponsor_reward(&state, &mut sponsor);
 
     let claim_amount = (depositor.pending_rewards + sponsor.pending_rewards) * Uint256::one();
-    depositor.pending_rewards = Uint256::zero();
-    sponsor.pending_rewards = Uint256::zero();
+    depositor.pending_rewards = Decimal256::zero();
+    sponsor.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
     store_depositor_info(deps.storage, &info.sender, &depositor)?;

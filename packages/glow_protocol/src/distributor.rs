@@ -1,8 +1,7 @@
+use cosmwasm_bignumber::{Decimal256, Uint256};
+use cosmwasm_std::Uint128;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-
-use cosmwasm_bignumber::Decimal256;
-use cosmwasm_std::Uint128;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -48,8 +47,8 @@ pub struct MigrateMsg {}
 pub enum QueryMsg {
     Config {},
     GlowEmissionRate {
-        current_award: Decimal256,
-        target_award: Decimal256,
+        current_award: Uint256,
+        target_award: Uint256,
         current_emission_rate: Decimal256,
     },
 }

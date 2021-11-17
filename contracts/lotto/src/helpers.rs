@@ -17,7 +17,7 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
 
     let total_deposited = pool.total_deposits + pool.total_sponsor_amount;
     if !reward_accrued.is_zero() && !total_deposited.is_zero() {
-        state.global_reward_index += reward_accrued / total_deposited;
+        state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
     }
 
     state.last_reward_updated = block_height;
@@ -73,7 +73,7 @@ pub fn claim_deposits(
 }
 
 pub fn calculate_winner_prize(
-    total_awarded: Decimal256,
+    total_awarded: Uint256,
     address_rank: [u32; 6],
     lottery_winners: [u32; 6],
     prize_dis: [Decimal256; 6],

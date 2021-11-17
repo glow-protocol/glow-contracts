@@ -4,7 +4,7 @@ use crate::state::{
     read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
     TICKETS,
 };
-use cosmwasm_bignumber::{Decimal256, Uint256};
+use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
     attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
     Uint128, WasmMsg,
@@ -69,7 +69,7 @@ pub fn execute_lottery(
         sequence: "".to_string(),
         awarded: false,
         timestamp: env.block.height,
-        total_prizes: Decimal256::zero(),
+        total_prizes: Uint256::zero(),
         number_winners: [0; 6],
         page: "".to_string(),
     };
@@ -98,7 +98,7 @@ pub fn execute_lottery(
     .exchange_rate;
 
     // Get the ust value of the aust going towards the lottery
-    let pooled_lottery_deposits = Decimal256::from_uint256(aust_lottery_balance) * rate;
+    let pooled_lottery_deposits = aust_lottery_balance * rate;
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -141,7 +141,7 @@ pub fn execute_lottery(
             }
         } else {
             // Add the net redeemed amount to the award available.
-            state.award_available += Decimal256::from_uint256(Uint256::from(net_amount));
+            state.award_available += Uint256::from(net_amount);
 
             // Message to redeem "aust_to_redeem" of aust from the Anchor contract
             let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -303,7 +303,7 @@ pub fn execute_prize(
     }
 
     // If all winners have been accounted, update lottery info and jump to next round
-    let mut total_awarded_prize = Decimal256::zero();
+    let mut total_awarded_prize = Uint256::zero();
     if lottery_info.awarded {
         // Calculate the total_awarded_prize from the number_winners array
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {

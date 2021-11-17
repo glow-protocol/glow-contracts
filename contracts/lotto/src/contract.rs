@@ -120,8 +120,8 @@ pub fn instantiate(
         deps.storage,
         &State {
             total_tickets: Uint256::zero(),
-            total_reserve: Decimal256::zero(),
-            award_available: Decimal256::from_uint256(initial_deposit),
+            total_reserve: Uint256::zero(),
+            award_available: Uint256::from(initial_deposit),
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
                 msg.initial_lottery_execution,
@@ -137,12 +137,12 @@ pub fn instantiate(
     POOL.save(
         deps.storage,
         &Pool {
-            total_deposits: Decimal256::zero(),
-            total_sponsor_amount: Decimal256::zero(),
-            lottery_deposits: Decimal256::zero(),
-            deposit_shares: Decimal256::zero(),
-            lottery_shares: Decimal256::zero(),
-            sponsor_shares: Decimal256::zero(),
+            total_deposits: Uint256::zero(),
+            total_sponsor_amount: Uint256::zero(),
+            lottery_deposits: Uint256::zero(),
+            deposit_shares: Uint256::zero(),
+            lottery_shares: Uint256::zero(),
+            sponsor_shares: Uint256::zero(),
         },
     )?;
 
@@ -305,10 +305,11 @@ pub fn deposit(
     };
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
+    let post_transaction_deposit_amount = depositor_info.deposit_amount + deposit_amount;
+
     // check if we need to round up number of combinations based on depositor total deposits
     let mut new_combinations = combinations.clone();
-    if ((depositor_info.deposit_amount + Decimal256::from_uint256(deposit_amount))
-        / config.ticket_price)
+    if (Decimal256::from_ratio(post_transaction_deposit_amount, config.ticket_price))
         >= (Decimal256::from_uint256(Uint256::from(
             (depositor_info.tickets.len() + combinations.len()) as u128,
         )) + Decimal256::one())
@@ -341,21 +342,18 @@ pub fn deposit(
         deps.as_ref(),
         coin(deposit_amount.into(), config.stable_denom.clone()),
     )?;
-    let post_tax_deposit_amount = net_coin_amount.amount;
+    let post_tax_deposit_amount = Uint256::from(net_coin_amount.amount);
 
     // get the amount of aUST entitled to the user from the deposit
-    let minted_amount =
-        Decimal256::from_uint256(post_tax_deposit_amount) / epoch_state.exchange_rate;
+    let minted_amount = post_tax_deposit_amount / epoch_state.exchange_rate;
 
     // store the post tax deposit amount
-    depositor_info.deposit_amount = depositor_info
-        .deposit_amount
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
+    depositor_info.deposit_amount = depositor_info.deposit_amount.add(post_tax_deposit_amount);
 
     // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
 
-    for combination in new_combinations {
+    for combination in combinations {
         // check that the number of holders for any given ticket isn't too high
         if let Some(holders) = TICKETS
             .may_load(deps.storage, combination.as_bytes())
@@ -380,17 +378,17 @@ pub fn deposit(
     }
 
     // Update global state and pool
-    state.total_tickets = state.total_tickets.add(Uint256::from(amount_tickets));
+    state.total_tickets = state.total_tickets.add(amount_tickets.into());
     pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
     pool.deposit_shares = pool
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
-    pool.total_deposits = pool
-        .total_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount));
+
+    pool.total_deposits = pool.total_deposits.add(post_tax_deposit_amount);
+
     pool.lottery_deposits = pool
         .lottery_deposits
-        .add(Decimal256::from_uint256(post_tax_deposit_amount) * config.split_factor);
+        .add((post_tax_deposit_amount * config.split_factor).into());
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
@@ -403,7 +401,7 @@ pub fn deposit(
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
                 denom: config.stable_denom,
-                amount: post_tax_deposit_amount,
+                amount: post_tax_deposit_amount.into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         })])
@@ -470,9 +468,7 @@ pub fn execute_sponsor(
     let mut messages: Vec<CosmosMsg> = vec![];
 
     if let Some(true) = award {
-        state.award_available = state
-            .award_available
-            .add(Decimal256::from_uint256(sponsor_amount));
+        state.award_available = state.award_available.add(sponsor_amount);
     } else {
         // query exchange_rate from anchor money market
         let epoch_state: EpochStateResponse = query_exchange_rate(
@@ -486,11 +482,10 @@ pub fn execute_sponsor(
             deps.as_ref(),
             coin(sponsor_amount.into(), config.stable_denom.clone()),
         )?;
-        let net_sponsor_amount = net_coin_amount.amount;
+        let net_sponsor_amount = Uint256::from(net_coin_amount.amount);
 
         // add amount of aUST entitled from the deposit
-        let minted_amount =
-            Decimal256::from_uint256(net_sponsor_amount) / epoch_state.exchange_rate;
+        let minted_amount = net_sponsor_amount / epoch_state.exchange_rate;
 
         // fetch sponsor_info
         let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
@@ -500,22 +495,18 @@ pub fn execute_sponsor(
         compute_sponsor_reward(&state, &mut sponsor_info);
 
         // add sponsor_amount to depositor
-        sponsor_info.amount = sponsor_info
-            .amount
-            .add(Decimal256::from_uint256(net_sponsor_amount));
+        sponsor_info.amount = sponsor_info.amount.add(net_sponsor_amount);
         sponsor_info.shares = sponsor_info.shares.add(minted_amount);
         store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
 
         // update pool
-        pool.total_sponsor_amount = pool
-            .total_sponsor_amount
-            .add(Decimal256::from_uint256(net_sponsor_amount));
+        pool.total_sponsor_amount = pool.total_sponsor_amount.add(net_sponsor_amount);
         pool.sponsor_shares = pool.sponsor_shares.add(minted_amount);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
                 denom: config.stable_denom,
-                amount: net_sponsor_amount,
+                amount: net_sponsor_amount.into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {})?,
         }));
@@ -570,8 +561,7 @@ pub fn execute_sponsor_withdraw(
     let aust_to_redeem = sponsor_info.amount / rate;
 
     // Double-checking Lotto pool is solvent against sponsors
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
-        < (pool.total_deposits + pool.total_sponsor_amount)
+    if Uint256::from(contract_a_balance) * rate < (pool.total_deposits + pool.total_sponsor_amount)
     {
         return Err(ContractError::InsufficientSponsorFunds {});
     }
@@ -581,8 +571,8 @@ pub fn execute_sponsor_withdraw(
     pool.sponsor_shares = pool.sponsor_shares.sub(sponsor_info.shares);
 
     // Update sponsor info
-    sponsor_info.amount = Decimal256::zero();
-    sponsor_info.shares = Decimal256::zero();
+    sponsor_info.amount = Uint256::zero();
+    sponsor_info.shares = Uint256::zero();
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -659,7 +649,7 @@ pub fn execute_withdraw(
     compute_depositor_reward(&state, &mut depositor);
 
     // Calculate depositor current pooled deposits in uusd
-    let depositor_ratio = depositor.shares / shares_supply;
+    let depositor_ratio = Decimal256::from_ratio(depositor.shares, shares_supply);
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
@@ -695,8 +685,7 @@ pub fn execute_withdraw(
     );
 
     // Double-checking Lotto pool is solvent against deposits
-    if Decimal256::from_uint256(Uint256::from(contract_a_balance)) * rate
-        < (pool.total_deposits + pool.total_sponsor_amount)
+    if Uint256::from(contract_a_balance) * rate < (pool.total_deposits + pool.total_sponsor_amount)
     {
         return Err(ContractError::InsufficientPoolFunds {});
     }
@@ -788,7 +777,7 @@ pub fn execute_withdraw(
         }
         // Place amount in unbonding state as a claim
         depositor.unbonding_info.push(Claim {
-            amount: Decimal256::from_uint256(Uint256::from(net_coin_amount.amount)),
+            amount: Uint256::from(net_coin_amount.amount),
             release_at: config.unbonding_period.after(&env.block),
         });
     }
@@ -930,7 +919,7 @@ pub fn execute_claim_lottery(
     // Deduct reserve fee
     let reserve_fee = Uint256::from(to_send) * config.reserve_factor;
     to_send -= Uint128::from(reserve_fee);
-    state.total_reserve += Decimal256::from_uint256(reserve_fee);
+    state.total_reserve += reserve_fee;
 
     // Deduct taxes on the claim
     let net_send = deduct_tax(
@@ -1019,7 +1008,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     // Update next_epoch based on epoch_interval
     state.next_epoch = Expiration::AtTime(env.block.time).add(config.epoch_interval)?;
     // Empty total reserve and store state
-    state.total_reserve = Decimal256::zero();
+    state.total_reserve = Uint256::zero();
     STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_messages(messages).add_attributes(vec![
@@ -1048,8 +1037,8 @@ pub fn execute_claim_rewards(
     compute_sponsor_reward(&state, &mut sponsor);
 
     let claim_amount = (depositor.pending_rewards + sponsor.pending_rewards) * Uint256::one();
-    depositor.pending_rewards = Decimal256::zero();
-    sponsor.pending_rewards = Decimal256::zero();
+    depositor.pending_rewards = Uint256::zero();
+    sponsor.pending_rewards = Uint256::zero();
 
     STATE.save(deps.storage, &state)?;
     store_depositor_info(deps.storage, &info.sender, &depositor)?;
@@ -1139,7 +1128,7 @@ pub fn execute_update_lottery_config(
     info: MessageInfo,
     lottery_interval: Option<u64>,
     block_time: Option<u64>,
-    ticket_price: Option<Decimal256>,
+    ticket_price: Option<Uint256>,
     prize_distribution: Option<[Decimal256; 6]>,
     round_delta: Option<u64>,
 ) -> Result<Response, ContractError> {

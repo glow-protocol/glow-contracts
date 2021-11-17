@@ -347,8 +347,11 @@ pub fn deposit(
     // get the amount of aUST entitled to the user from the deposit
     let minted_amount = post_tax_deposit_amount / epoch_state.exchange_rate;
 
+    // get the value of the minted shares of aUST after accounting for rounding errors
+    let minted_amount_value = minted_amount * epoch_state.exchange_rate;
+
     // store the post tax deposit amount
-    depositor_info.deposit_amount = depositor_info.deposit_amount.add(post_tax_deposit_amount);
+    depositor_info.deposit_amount = depositor_info.deposit_amount.add(minted_amount_value);
 
     // update the depositors shares (basically the amount of aUST the depositor is entitled to)
     depositor_info.shares = depositor_info.shares.add(minted_amount);
@@ -384,11 +387,11 @@ pub fn deposit(
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
 
-    pool.total_deposits = pool.total_deposits.add(post_tax_deposit_amount);
+    pool.total_deposits = pool.total_deposits.add(minted_amount_value);
 
     pool.lottery_deposits = pool
         .lottery_deposits
-        .add((post_tax_deposit_amount * config.split_factor).into());
+        .add((minted_amount_value * config.split_factor).into());
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;

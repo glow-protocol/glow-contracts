@@ -41,7 +41,8 @@ const SPLIT_FACTOR: u64 = 75; // as a %
 const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const MAX_HOLDERS: u8 = 10;
-const RATE: u64 = 1023; // as a permille
+// const RATE: u64 = 1023; // as a permille
+pub const RATE: u64 = 1000; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
@@ -989,8 +990,7 @@ fn withdraw() {
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Add 1 to account for rounding error
-    let shares = Uint256::one()
-        + (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+    let shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
     let info = mock_info("addr0001", &[]);
 
@@ -1139,8 +1139,7 @@ fn withdraw() {
 
     println!("depositor: {:?}", dep);
     // Add 1 to account for rounding error
-    let shares = Uint256::one()
-        + (Uint256::from(10 * TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+    let shares = Uint256::from(10 * TICKET_PRICE) / Decimal256::permille(RATE);
 
     let info = mock_info("addr2222", &[]);
 
@@ -1270,8 +1269,7 @@ fn instant_withdraw() {
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let shares = Uint256::one()
-        + (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+    let shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
     let info = mock_info("addr0001", &[]);
 
@@ -1437,8 +1435,7 @@ fn claim() {
     };
 
     // Add one to account for rounding error
-    let shares = Uint256::one()
-        + (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)) * Uint256::one();
+    let shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),

@@ -391,7 +391,7 @@ pub fn deposit(
 
     pool.lottery_deposits = pool
         .lottery_deposits
-        .add((minted_amount_value * config.split_factor).into());
+        .add(minted_amount_value * config.split_factor);
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
@@ -490,6 +490,9 @@ pub fn execute_sponsor(
         // add amount of aUST entitled from the deposit
         let minted_amount = net_sponsor_amount / epoch_state.exchange_rate;
 
+        // get minted_amount_value
+        let minted_amount_value = minted_amount * epoch_state.exchange_rate;
+
         // fetch sponsor_info
         let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
@@ -498,12 +501,12 @@ pub fn execute_sponsor(
         compute_sponsor_reward(&state, &mut sponsor_info);
 
         // add sponsor_amount to depositor
-        sponsor_info.amount = sponsor_info.amount.add(net_sponsor_amount);
+        sponsor_info.amount = sponsor_info.amount.add(minted_amount_value);
         sponsor_info.shares = sponsor_info.shares.add(minted_amount);
         store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
 
         // update pool
-        pool.total_sponsor_amount = pool.total_sponsor_amount.add(net_sponsor_amount);
+        pool.total_sponsor_amount = pool.total_sponsor_amount.add(minted_amount_value);
         pool.sponsor_shares = pool.sponsor_shares.add(minted_amount);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),
@@ -1040,8 +1043,8 @@ pub fn execute_claim_rewards(
     compute_sponsor_reward(&state, &mut sponsor);
 
     let claim_amount = (depositor.pending_rewards + sponsor.pending_rewards) * Uint256::one();
-    depositor.pending_rewards = Uint256::zero();
-    sponsor.pending_rewards = Uint256::zero();
+    depositor.pending_rewards = Decimal256::zero();
+    sponsor.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
     store_depositor_info(deps.storage, &info.sender, &depositor)?;

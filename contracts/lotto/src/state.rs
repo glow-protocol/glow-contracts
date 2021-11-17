@@ -74,7 +74,7 @@ pub struct DepositorInfo {
     pub deposit_amount: Uint256,
     pub shares: Uint256,
     pub reward_index: Decimal256,
-    pub pending_rewards: Uint256,
+    pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }
@@ -83,7 +83,7 @@ pub struct DepositorInfo {
 pub struct SponsorInfo {
     pub amount: Uint256,
     pub shares: Uint256,
-    pub pending_rewards: Uint256,
+    pub pending_rewards: Decimal256,
     pub reward_index: Decimal256,
 }
 
@@ -150,7 +150,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
             deposit_amount: Uint256::zero(),
             shares: Uint256::zero(),
             reward_index: Decimal256::zero(),
-            pending_rewards: Uint256::zero(),
+            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![],
         },
@@ -171,7 +171,7 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
         _ => SponsorInfo {
             amount: Uint256::zero(),
             shares: Uint256::zero(),
-            pending_rewards: Uint256::zero(),
+            pending_rewards: Decimal256::zero(),
             reward_index: Decimal256::zero(),
         },
     }

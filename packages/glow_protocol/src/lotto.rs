@@ -186,7 +186,7 @@ pub struct DepositorInfoResponse {
     pub deposit_amount: Uint256,
     pub shares: Uint256,
     pub reward_index: Decimal256,
-    pub pending_rewards: Uint256,
+    pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }
@@ -198,7 +198,7 @@ pub struct SponsorInfoResponse {
     pub amount: Uint256,
     pub shares: Uint256,
     pub reward_index: Decimal256,
-    pub pending_rewards: Uint256,
+    pub pending_rewards: Decimal256,
 }
 
 // We define a custom struct for each query response

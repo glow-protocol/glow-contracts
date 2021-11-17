@@ -25,14 +25,15 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
 
 /// Compute reward amount a depositor received
 pub fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
-    depositor.pending_rewards +=
-        depositor.deposit_amount * (state.global_reward_index - depositor.reward_index);
+    depositor.pending_rewards += Decimal256::from_uint256(depositor.deposit_amount)
+        * (state.global_reward_index - depositor.reward_index);
     depositor.reward_index = state.global_reward_index;
 }
 
 /// Compute reward amount a sponsor received
 pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
-    sponsor.pending_rewards += sponsor.amount * (state.global_reward_index - sponsor.reward_index);
+    sponsor.pending_rewards += Decimal256::from_uint256(sponsor.amount)
+        * (state.global_reward_index - sponsor.reward_index);
     sponsor.reward_index = state.global_reward_index;
 }
 

@@ -774,6 +774,9 @@ fn gift_tickets() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
+    let minted_shares = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+    let minted_shares_value = minted_shares * Decimal256::permille(RATE);
+
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
         query_ticket_info(deps.as_ref(), String::from("13579"))
@@ -795,16 +798,14 @@ fn gift_tickets() {
             &deps.api.addr_validate("addr1111").unwrap()
         ),
         DepositorInfo {
-            deposit_amount: Uint256::from(2 * TICKET_PRICE),
-            shares: Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE),
+            deposit_amount: minted_shares_value,
+            shares: minted_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Uint256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
             unbonding_info: vec![]
         }
     );
-
-    let minted_shares = Uint256::from(2 * TICKET_PRICE).div(Decimal256::permille(RATE));
 
     assert_eq!(
         query_state(deps.as_ref(), mock_env(), None).unwrap(),
@@ -825,8 +826,8 @@ fn gift_tickets() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_deposits: Uint256::from(2 * TICKET_PRICE),
-            lottery_deposits: Uint256::from(2 * TICKET_PRICE) * Decimal256::percent(SPLIT_FACTOR),
+            total_deposits: minted_shares_value,
+            lottery_deposits: minted_shares_value * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_amount: Uint256::zero(),
             lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
@@ -857,10 +858,7 @@ fn gift_tickets() {
                 Uint256::from(2 * TICKET_PRICE).to_string()
             ),
             attr("tickets", 2u64.to_string()),
-            attr(
-                "shares_minted",
-                (Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE)).to_string()
-            ),
+            attr("shares_minted", minted_shares.to_string()),
         ]
     );
 }
@@ -1040,7 +1038,8 @@ fn withdraw() {
             pending_rewards: Uint256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
-                amount: Uint256::from(10000000u128),
+                amount: Uint256::from(10000000u128) / Decimal256::permille(RATE)
+                    * Decimal256::permille(RATE),
                 release_at: WEEK.after(&mock_env().block),
             }]
         }
@@ -1097,7 +1096,9 @@ fn withdraw() {
             attr("redeem_amount_anchor", shares.to_string()),
             attr(
                 "redeem_stable_amount",
-                Decimal256::from_str("10000000").unwrap().to_string()
+                (Uint256::from(10000000u128) / Decimal256::permille(RATE)
+                    * Decimal256::permille(RATE))
+                .to_string()
             ),
             attr("instant_withdrawal_fee", Uint256::zero().to_string())
         ]
@@ -1161,7 +1162,8 @@ fn withdraw() {
         )
         .tickets,
         vec![
-            String::from("00005"),
+            // TODO: Don't hardcode the number of tickets
+            // String::from("00005"),
             String::from("00006"),
             String::from("00007"),
             String::from("00008"),
@@ -1173,7 +1175,7 @@ fn withdraw() {
         query_state(deps.as_ref(), mock_env(), None)
             .unwrap()
             .total_tickets,
-        Uint256::from(5u64)
+        Uint256::from(4u64)
     );
 
     // Check ticket map is updated correctly
@@ -1185,13 +1187,13 @@ fn withdraw() {
     );
 
     assert_eq!(
-        query_ticket_info(deps.as_ref(), String::from("00005"))
+        query_ticket_info(deps.as_ref(), String::from("00006"))
             .unwrap()
             .holders,
         vec![Addr::unchecked("addr2222")]
     );
 
-    // Withdraws a very small amount, burns a ticket as rounding
+    // Withdraws a very small amount, burns a ticket
     let msg = ExecuteMsg::Withdraw {
         amount: Some(Uint128::from(1u128)),
         instant: None,
@@ -1208,7 +1210,8 @@ fn withdraw() {
         )
         .tickets,
         vec![
-            String::from("00006"),
+            // TODO Don't hardcode
+            // String::from("00006"),
             String::from("00007"),
             String::from("00008"),
             String::from("00009")
@@ -1219,7 +1222,8 @@ fn withdraw() {
         query_state(deps.as_ref(), mock_env(), None)
             .unwrap()
             .total_tickets,
-        Uint256::from(4u64)
+        // TODO Don't hardcode
+        Uint256::from(3u64)
     );
     // Check ticket map is updated correctly
     assert_eq!(
@@ -1382,7 +1386,8 @@ fn instant_withdraw() {
             ),
             attr(
                 "instant_withdrawal_fee",
-                Decimal256::from_str("1000000").unwrap().to_string()
+                // TODO don't hardcode
+                Decimal256::from_str("999999").unwrap().to_string()
             )
         ]
     )
@@ -2565,6 +2570,7 @@ fn execute_prize_winners_same_rank() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let pool = query_pool(deps.as_ref()).unwrap();
+
     // total prize
     let total_prize = calculate_total_prize(
         deps.as_ref(),
@@ -2595,7 +2601,7 @@ fn execute_prize_winners_same_rank() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
-    // From the initialization of the contract
+    // Check award_available
     assert_eq!(state.award_available, total_prize - awarded_prize);
 
     assert_eq!(res.messages, vec![]);

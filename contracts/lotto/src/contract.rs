@@ -305,26 +305,6 @@ pub fn deposit(
     };
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
-    let post_transaction_deposit_amount = depositor_info.deposit_amount + deposit_amount;
-
-    // check if we need to round up number of combinations based on depositor total deposits
-    let mut new_combinations = combinations.clone();
-    if (Decimal256::from_ratio(post_transaction_deposit_amount, config.ticket_price))
-        >= (Decimal256::from_uint256(Uint256::from(
-            (depositor_info.tickets.len() + combinations.len()) as u128,
-        )) + Decimal256::one())
-    {
-        let current_time = env.block.time.nanos();
-        let sequence = pseudo_random_seq(
-            info.sender.clone().into_string(),
-            depositor_info.tickets.len() as u64,
-            current_time,
-        );
-
-        new_combinations.push(sequence);
-        amount_tickets += 1;
-    }
-
     // update the glow deposit reward index
     compute_reward(&mut state, &pool, env.block.height);
     // update the glow depositor reward for the depositor
@@ -349,6 +329,28 @@ pub fn deposit(
 
     // get the value of the minted shares of aUST after accounting for rounding errors
     let minted_amount_value = minted_amount * epoch_state.exchange_rate;
+
+    // Calculate what depositor_info.depositor_amount will equal following the successfully execution
+    // of this transaction
+    let post_transaction_deposit_amount = depositor_info.deposit_amount + minted_amount_value;
+
+    // Check if we need to round up number of combinations based on depositor total deposits
+    let mut new_combinations = combinations.clone();
+    if (Decimal256::from_ratio(post_transaction_deposit_amount, config.ticket_price))
+        >= (Decimal256::from_uint256(Uint256::from(
+            (depositor_info.tickets.len() + combinations.len()) as u128,
+        )) + Decimal256::one())
+    {
+        let current_time = env.block.time.nanos();
+        let sequence = pseudo_random_seq(
+            info.sender.clone().into_string(),
+            depositor_info.tickets.len() as u64,
+            current_time,
+        );
+
+        new_combinations.push(sequence);
+        amount_tickets += 1;
+    }
 
     // store the post tax deposit amount
     depositor_info.deposit_amount = depositor_info.deposit_amount.add(minted_amount_value);

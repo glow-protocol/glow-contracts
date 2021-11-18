@@ -2896,12 +2896,6 @@ fn execute_prize_multiple_winners_one_ticket() {
         pool.lottery_deposits,
     );
 
-    println!(
-        "{}, {}, {}",
-        total_prize,
-        total_prize - total_prize * Decimal256::percent(50),
-        total_prize * Decimal256::percent(50)
-    );
     let awarded_prize = total_prize * Decimal256::percent(50);
 
     assert_eq!(
@@ -3480,7 +3474,6 @@ fn small_withdraw() {
     .unwrap();
     let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
-    // why are these so different from one another????
     println!("{}, {}", shares_supply, contract_a_balance);
     assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
 
@@ -3528,11 +3521,6 @@ fn small_withdraw() {
     let withdrawn_lottery_shares = withdrawn_shares * Decimal256::percent(SPLIT_FACTOR);
     let withdrawn_deposit_shares =
         withdrawn_shares - withdrawn_shares * Decimal256::percent(SPLIT_FACTOR);
-
-    // let remaining_shares = minted_shares - Decimal256::from_uint256(sent_amount);
-
-    // let remaining_shares_value =
-    //     Decimal256::from_uint256(minted_shares * Decimal256::permille(RATE) * Uint256::one());
 
     let lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
     let deposit_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
@@ -3606,7 +3594,7 @@ fn small_withdraw_update_exchange_rate() {
 
     // Shares supply should equal contract_a_balance
     println!("{}, {}", shares_supply, contract_a_balance);
-    // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
 
     // Increase anchor exchange rate in order to withdraw properly
 
@@ -3656,9 +3644,8 @@ fn small_withdraw_update_exchange_rate() {
     .unwrap();
     let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
-    // why are these so different from one another????
     println!("{}, {}", shares_supply, contract_a_balance);
-    // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+    assert_eq!(shares_supply, contract_a_balance);
 }
 
 fn calculate_total_prize(

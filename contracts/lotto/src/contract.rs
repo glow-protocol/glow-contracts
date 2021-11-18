@@ -680,12 +680,12 @@ pub fn execute_withdraw(
         }
     }
     let aust_to_redeem = aust_amount * withdraw_ratio;
-    let redemed_amount = pooled_deposits * withdraw_ratio;
+    let redeemed_amount = pooled_deposits * withdraw_ratio;
     // Discount tax Anchor -> Glow
     let mut return_amount = Uint256::from(
         deduct_tax(
             deps.as_ref(),
-            coin(redemed_amount.into(), config.clone().stable_denom),
+            coin(redeemed_amount.into(), config.clone().stable_denom),
         )?
         .amount,
     );

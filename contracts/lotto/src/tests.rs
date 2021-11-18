@@ -1306,7 +1306,7 @@ fn instant_withdraw() {
         query_state(deps.as_ref(), mock_env(), None).unwrap(),
         StateResponse {
             total_tickets: Uint256::zero(),
-            total_reserve: Uint256::zero(),
+            total_reserve: minted_shares_value * Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
             award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),

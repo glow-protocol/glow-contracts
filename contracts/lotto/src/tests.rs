@@ -1586,6 +1586,14 @@ fn claim_lottery_single_winner() {
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    // Check that award_available lines up
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    let award_available =
+        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
+
+    assert_eq!(state.award_available, award_available);
+
     // Get the amount of aust that is being redeemed
     let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
         let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
@@ -1622,22 +1630,6 @@ fn claim_lottery_single_winner() {
         )],
     )]);
 
-    // Check that award_available lines up
-
-    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
-    let pool = query_pool(deps.as_ref()).unwrap();
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(20_000_000u128),
-        pool.lottery_deposits,
-    );
-
-    assert_eq!(state.award_available, total_prize);
-
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
         env.block.time = env.block.time.plus_seconds(time);
@@ -1646,20 +1638,7 @@ fn claim_lottery_single_winner() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    // Check lottery info was updated correctly
-    let pool = query_pool(deps.as_ref()).unwrap();
-
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(20_000_000u128),
-        pool.lottery_deposits,
-    );
-
-    let awarded_prize = total_prize * Decimal256::percent(50);
+    let awarded_prize = award_available * Decimal256::percent(50);
     println!("awarded_prize: {}", awarded_prize);
 
     let lottery = read_lottery_info(deps.as_ref().storage, 0u64);
@@ -1691,7 +1670,7 @@ fn claim_lottery_single_winner() {
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
     // From the initialization of the contract
-    assert_eq!(state.award_available, total_prize - awarded_prize);
+    assert_eq!(state.award_available, award_available - awarded_prize);
 
     let info = mock_info("addr0000", &[]);
     let msg = ExecuteMsg::ClaimLottery {
@@ -2133,18 +2112,10 @@ fn execute_prize_no_winners() {
     assert_eq!(state.total_reserve, Uint256::zero());
 
     // Calculate the total_prize
-    let pool = query_pool(deps.as_ref()).unwrap();
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(20_000_000u128),
-        pool.lottery_deposits,
-    );
+    let award_available =
+        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
-    assert_eq!(state.award_available, total_prize);
+    assert_eq!(state.award_available, award_available);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2238,20 +2209,10 @@ fn execute_prize_one_winner() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check lottery info was updated correctly
+    let award_available =
+        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
-    let pool = query_pool(deps.as_ref()).unwrap();
-
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(20_000_000u128),
-        pool.lottery_deposits,
-    );
-
-    let awarded_prize = total_prize * Decimal256::percent(50);
+    let awarded_prize = award_available * Decimal256::percent(50);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -2275,7 +2236,7 @@ fn execute_prize_one_winner() {
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
     // From the initialization of the contract
-    assert_eq!(state.award_available, total_prize - awarded_prize);
+    assert_eq!(state.award_available, award_available - awarded_prize);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2398,20 +2359,11 @@ fn execute_prize_winners_diff_ranks() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check lottery info was updated correctly
-    let pool = query_pool(deps.as_ref()).unwrap();
+    let award_available =
+        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(30_000_000u128),
-        pool.lottery_deposits,
-    );
-
-    let awarded_prize_0 = total_prize * Decimal256::percent(50);
-    let awarded_prize_1 = total_prize * Decimal256::percent(5);
+    let awarded_prize_0 = award_available * Decimal256::percent(50);
+    let awarded_prize_1 = award_available * Decimal256::percent(5);
     let awarded_prize = awarded_prize_0 + awarded_prize_1;
 
     assert_eq!(
@@ -2438,7 +2390,7 @@ fn execute_prize_winners_diff_ranks() {
     assert_eq!(state.current_lottery, 1u64);
 
     // From the initialization of the contract
-    assert_eq!(state.award_available, total_prize - awarded_prize);
+    assert_eq!(state.award_available, award_available - awarded_prize);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2560,20 +2512,11 @@ fn execute_prize_winners_same_rank() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let pool = query_pool(deps.as_ref()).unwrap();
+    // Get total_prize
+    let award_available =
+        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
-    // total prize
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(30_000_000u128),
-        pool.lottery_deposits,
-    );
-
-    let awarded_prize = total_prize * Decimal256::percent(30);
+    let awarded_prize = award_available * Decimal256::percent(30);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -2593,7 +2536,7 @@ fn execute_prize_winners_same_rank() {
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
     // Check award_available
-    assert_eq!(state.award_available, total_prize - awarded_prize);
+    assert_eq!(state.award_available, award_available - awarded_prize);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2713,20 +2656,11 @@ fn execute_prize_one_winner_multiple_ranks() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let pool = query_pool(deps.as_ref()).unwrap();
+    // Get total prize
+    let award_available =
+        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
-    // total prize
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(55_000_000u128),
-        pool.lottery_deposits,
-    );
-
-    let awarded_prize = total_prize * Decimal256::percent(50 + 30);
+    let awarded_prize = award_available * Decimal256::percent(50 + 30);
 
     println!(
         "lottery_info: {:x?}",
@@ -2754,7 +2688,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     assert_eq!(state.total_reserve, Uint256::zero());
 
     // From the initialization of the contract
-    assert_eq!(state.award_available, total_prize - awarded_prize);
+    assert_eq!(state.award_available, award_available - awarded_prize);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2863,20 +2797,11 @@ fn execute_prize_multiple_winners_one_ticket() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let pool = query_pool(deps.as_ref()).unwrap();
+    // Get total_prize
+    let award_available =
+        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
 
-    // total prize
-    let total_prize = calculate_total_prize(
-        deps.as_ref(),
-        pool.lottery_shares,
-        pool.deposit_shares,
-        pool.sponsor_shares,
-        Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-        Uint256::from(31_000_000u128),
-        pool.lottery_deposits,
-    );
-
-    let awarded_prize = total_prize * Decimal256::percent(50);
+    let awarded_prize = award_available * Decimal256::percent(50);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -2899,7 +2824,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     assert_eq!(state.total_reserve, Uint256::zero());
 
     // From the initialization of the contract
-    assert_eq!(state.award_available, total_prize - awarded_prize);
+    assert_eq!(state.award_available, award_available - awarded_prize);
 
     assert_eq!(res.messages, vec![]);
 
@@ -3360,8 +3285,7 @@ fn small_withdraw() {
 
     let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
-    // Shares supply should equal contract_a_balance
-    println!("{}, {}", shares_supply, contract_a_balance);
+    // Shares supply should equal contract_a_balance because no lottery has been executed yet
     assert_eq!(shares_supply, contract_a_balance);
 
     // Check that the depositor info was updated correctly
@@ -3565,12 +3489,10 @@ fn small_withdraw_update_exchange_rate() {
 
     let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
-    // Shares supply should equal contract_a_balance
-    println!("{}, {}", shares_supply, contract_a_balance);
+    // Shares supply should equal contract_a_balance because no lottery has been executed yet
     assert_eq!(shares_supply, contract_a_balance);
 
     // Increase anchor exchange rate in order to withdraw properly
-
     deps.querier
         .with_exchange_rate(Decimal256::permille(RATE + 1));
 
@@ -3606,7 +3528,7 @@ fn small_withdraw_update_exchange_rate() {
         )],
     )]);
 
-    // Compare shares_supply with contract_a_balance
+    // Shares supply should equal contract_a_balance because no lottery has been executed yet
     let pool = query_pool(deps.as_ref()).unwrap();
 
     let contract_a_balance = query_token_balance(
@@ -3617,39 +3539,45 @@ fn small_withdraw_update_exchange_rate() {
     .unwrap();
     let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
-    println!("{}, {}", shares_supply, contract_a_balance);
     assert_eq!(shares_supply, contract_a_balance);
 }
 
-fn calculate_total_prize(
-    deps: Deps,
-    lottery_shares: Uint256,
-    deposit_shares: Uint256,
-    sponsor_shares: Uint256,
-    initial_balance: Uint256,
-    aust_balance: Uint256,
-    lottery_deposits: Uint256,
-) -> Uint256 {
-    // get the aust lottery balance
-    let aust_lottery_balance = aust_balance.multiply_ratio(
-        lottery_shares + sponsor_shares,
-        deposit_shares + lottery_shares + sponsor_shares,
+fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
+    let pool = query_pool(deps).unwrap();
+
+    let contract_a_balance = query_token_balance(
+        deps,
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    // Get the aust lottery balance
+    let aust_lottery_balance = contract_a_balance.multiply_ratio(
+        pool.lottery_shares + pool.sponsor_shares,
+        pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares,
     );
 
-    // get the value of the lottery balance
+    // Get the value of the lottery balance
     let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
 
-    let amount_to_redeem = pooled_lottery_deposits - lottery_deposits;
+    // Calculate the amount of ust to be redeemed for the lottery
+    let amount_to_redeem =
+        pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
 
+    // Calculate the corresponding amount of aust to redeem
     let aust_to_redeem = amount_to_redeem / Decimal256::permille(RATE);
 
+    // Get the value of the redeemed aust after accounting for rounding errors
     let aust_to_redeem_value = aust_to_redeem * Decimal256::permille(RATE);
-    // get the post tax amount
+
+    // Get the post tax amount
     let net_amount = Uint256::from(
         deduct_tax(deps, coin((aust_to_redeem_value).into(), "uusd"))
             .unwrap()
             .amount,
     );
 
+    // Return the initial balance plus the post tax redeemed aust value
     initial_balance + net_amount
 }

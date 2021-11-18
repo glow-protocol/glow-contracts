@@ -42,13 +42,13 @@ pub enum ContractError {
     #[error("Lottery is not ready to undergo execution yet, please wait until next_lottery_time")]
     LotteryNotReady {},
 
-    #[error("The user doesn't have any shares so there is nothing to withdraw")]
-    NoSharesToWithdraw {},
+    #[error("The depositor doesn't have any shares so there is nothing to withdraw")]
+    NoDepositorSharesToWithdraw {},
 
-    #[error("The user specified to withdraw zero funds which is too small")]
+    #[error("The depositor specified to withdraw zero funds which is too small")]
     SpecifiedWithdrawAmountTooSmall {},
 
-    #[error("The user specified to withdraw more funds than they have to withdraw")]
+    #[error("The depositor specified to withdraw more funds than they have to withdraw")]
     SpecifiedWithdrawAmountTooBig {},
 
     #[error("The number of tickets to be withdrawn is more tickets than the depositor owns")]
@@ -57,8 +57,8 @@ pub enum ContractError {
     #[error("There are no enough funds in the contract for that operation")]
     InsufficientFunds {},
 
-    #[error("There are no sponsor deposits to withdraw")]
-    InvalidSponsorWithdraw {},
+    #[error("The sponsor doesn't have any shares so there is nothing to withdraw")]
+    NoSponsorSharesToWithdraw {},
 
     #[error("The Anchor Sponsor Pool is smaller than total sponsors, no withdraws allowed")]
     InsufficientSponsorFunds {},

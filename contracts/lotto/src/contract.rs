@@ -542,7 +542,7 @@ pub fn execute_sponsor_withdraw(
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
     if sponsor_info.amount.is_zero() || pool.sponsor_shares.is_zero() {
-        return Err(ContractError::NoSharesToWithdraw {});
+        return Err(ContractError::NoSponsorSharesToWithdraw {});
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
@@ -643,7 +643,7 @@ pub fn execute_withdraw(
 
     // Validate that the user has shares to withdraw
     if depositor.shares.is_zero() || shares_supply.is_zero() {
-        return Err(ContractError::NoSharesToWithdraw {});
+        return Err(ContractError::NoDepositorSharesToWithdraw {});
     }
 
     // Validate that the user is withdrawing a non zero amount

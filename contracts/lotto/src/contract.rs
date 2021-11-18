@@ -542,7 +542,7 @@ pub fn execute_sponsor_withdraw(
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
     if sponsor_info.amount.is_zero() || pool.sponsor_shares.is_zero() {
-        return Err(ContractError::InvalidSponsorWithdraw {});
+        return Err(ContractError::NoSharesToWithdraw {});
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
@@ -640,12 +640,15 @@ pub fn execute_withdraw(
     let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
+
+    // Validate that the user has shares to withdraw
     if depositor.shares.is_zero() || shares_supply.is_zero() {
-        return Err(ContractError::InvalidWithdraw {});
+        return Err(ContractError::NoSharesToWithdraw {});
     }
 
+    // Validate that the user is withdrawing a non zero amount
     if (amount.is_some()) && (amount.unwrap().is_zero()) {
-        return Err(ContractError::InvalidWithdraw {});
+        return Err(ContractError::SpecifiedWithdrawAmountTooSmall {});
     }
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
@@ -676,7 +679,7 @@ pub fn execute_withdraw(
     let mut withdraw_ratio = Decimal256::one();
     if let Some(amount) = amount {
         if Uint256::from(amount) > pooled_deposits {
-            return Err(ContractError::InvalidWithdraw {});
+            return Err(ContractError::SpecifiedWithdrawAmountTooBig {});
         } else {
             withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), pooled_deposits);
         }
@@ -699,6 +702,7 @@ pub fn execute_withdraw(
     }
 
     let tickets_amount = depositor.tickets.len() as u128;
+
     // Check for rounding error
     let rounded_tickets = Uint256::from(tickets_amount) * withdraw_ratio;
     let decimal_tickets = Decimal256::from_uint256(Uint256::from(tickets_amount)) * withdraw_ratio;
@@ -709,7 +713,7 @@ pub fn execute_withdraw(
     }
 
     if withdrawn_tickets > tickets_amount {
-        return Err(ContractError::InvalidWithdraw {});
+        return Err(ContractError::WithdrawingTooManyTickets {});
     }
 
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {

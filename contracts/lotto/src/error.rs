@@ -42,8 +42,17 @@ pub enum ContractError {
     #[error("Lottery is not ready to undergo execution yet, please wait until next_lottery_time")]
     LotteryNotReady {},
 
-    #[error("There are no deposits to withdraw")]
-    InvalidWithdraw {},
+    #[error("The user doesn't have any shares so there is nothing to withdraw")]
+    NoSharesToWithdraw {},
+
+    #[error("The user specified to withdraw zero funds which is too small")]
+    SpecifiedWithdrawAmountTooSmall {},
+
+    #[error("The user specified to withdraw more funds than they have to withdraw")]
+    SpecifiedWithdrawAmountTooBig {},
+
+    #[error("The number of tickets to be withdrawn is more tickets than the depositor owns")]
+    WithdrawingTooManyTickets {},
 
     #[error("There are no enough funds in the contract for that operation")]
     InsufficientFunds {},

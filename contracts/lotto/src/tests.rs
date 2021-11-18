@@ -1299,7 +1299,7 @@ fn instant_withdraw() {
         deps.as_ref(),
         Coin {
             denom: String::from("uusd"),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         },
     )
     .unwrap()
@@ -1828,7 +1828,7 @@ fn execute_lottery() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(2 * TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
     let msg = ExecuteMsg::Deposit {
@@ -2078,7 +2078,7 @@ fn execute_prize_no_winners() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2496,7 +2496,7 @@ fn execute_prize_winners_same_rank() {
         "addr0000",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2651,7 +2651,7 @@ fn execute_prize_one_winner_multiple_ranks() {
         "addr0000",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2813,7 +2813,7 @@ fn execute_prize_multiple_winners_one_ticket() {
         "addr0000",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2824,7 +2824,7 @@ fn execute_prize_multiple_winners_one_ticket() {
         "addr1111",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2835,7 +2835,7 @@ fn execute_prize_multiple_winners_one_ticket() {
         "addr2222",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 

@@ -783,6 +783,9 @@ pub fn execute_withdraw(
         withdrawal_fee = return_amount * config.instant_withdrawal_fee;
         return_amount = return_amount.sub(withdrawal_fee);
 
+        // Add the withdrawal fee to the total_reserve
+        state.total_reserve += withdrawal_fee;
+
         // Get the amount of ust to return after tax
         let net_coin_amount = deduct_tax(
             deps.as_ref(),

@@ -1255,7 +1255,8 @@ fn instant_withdraw() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
+    let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
+    let minted_shares_value = minted_shares * Decimal256::permille(RATE);
 
     let info = mock_info("addr0001", &[]);
 
@@ -1274,7 +1275,7 @@ fn instant_withdraw() {
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &shares.into())],
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_shares.into())],
     )]);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
@@ -1289,21 +1290,6 @@ fn instant_withdraw() {
             .holders,
         empty_addr
     );
-
-    deps.querier.with_tax(
-        Decimal::percent(1),
-        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
-    );
-
-    let _redeem_amount = deduct_tax(
-        deps.as_ref(),
-        Coin {
-            denom: String::from("uusd"),
-            amount: Uint256::from(TICKET_PRICE).into(),
-        },
-    )
-    .unwrap()
-    .amount;
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1354,7 +1340,7 @@ fn instant_withdraw() {
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: ANCHOR.to_string(),
-                    amount: shares.into(),
+                    amount: minted_shares.into(),
                     msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
                 })
                 .unwrap(),
@@ -1375,15 +1361,14 @@ fn instant_withdraw() {
             attr("action", "withdraw_ticket"),
             attr("depositor", "addr0001"),
             attr("tickets_amount", 1u64.to_string()),
-            attr("redeem_amount_anchor", shares.to_string()),
+            attr("redeem_amount_anchor", minted_shares.to_string()),
             attr(
                 "redeem_stable_amount",
                 Decimal256::from_str("9000000").unwrap().to_string()
             ),
             attr(
                 "instant_withdrawal_fee",
-                // TODO don't hardcode
-                Decimal256::from_str("999999").unwrap().to_string()
+                (minted_shares_value * Decimal256::percent(INSTANT_WITHDRAWAL_FEE)).to_string()
             )
         ]
     )

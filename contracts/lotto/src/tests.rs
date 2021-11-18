@@ -512,8 +512,7 @@ fn deposit() {
     );
 
     // test round-up tickets
-    let deposit_amount =
-        Uint256::from(TICKET_PRICE) * Decimal256::from_ratio(16, 10) * Uint256::one();
+    let deposit_amount = Uint256::from(TICKET_PRICE) * Decimal256::from_ratio(16, 10);
 
     let info = mock_info(
         "addr0000",
@@ -686,7 +685,7 @@ fn gift_tickets() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (wrong_amount * Uint256::one()).into(),
+            amount: wrong_amount.into(),
         }],
     );
 
@@ -920,7 +919,6 @@ fn sponsor() {
     assert_eq!(pool.sponsor_shares, minted_shares);
 
     // withdraw sponsor
-    // adding 1 to account for rounding error
     let app_shares = net_amount / Decimal256::permille(RATE);
 
     deps.querier.with_token_balances(&[(
@@ -1610,9 +1608,7 @@ fn claim_lottery_single_winner() {
             denom: "uusd".to_string(),
             amount: Uint128::from(
                 Uint256::from(INITIAL_DEPOSIT_AMOUNT)
-                    + Decimal256::from_uint256(sent_amount)
-                        * Decimal256::permille(RATE)
-                        * Uint256::one(),
+                    + Uint256::from(sent_amount) * Decimal256::permille(RATE),
             ),
         }],
     );
@@ -1939,8 +1935,8 @@ fn execute_lottery() {
     // Get the number of shares that are dedicated to the lottery
     // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
     let aust_lottery_balance = aust_balance.multiply_ratio(
-        (pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
-        (pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
+        pool.lottery_shares + pool.sponsor_shares,
+        pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares,
     );
 
     // Get the pooled lottery_deposit
@@ -1951,8 +1947,7 @@ fn execute_lottery() {
         pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
 
     // Divide by the rate to get the number of shares to redeem
-    let aust_to_redeem: Uint128 =
-        ((amount_to_redeem / Decimal256::permille(RATE)) * Uint256::one()).into();
+    let aust_to_redeem: Uint128 = (amount_to_redeem / Decimal256::permille(RATE)).into();
 
     // Calculate amount to redeem for the lottery
     assert_eq!(
@@ -3350,10 +3345,7 @@ fn small_withdraw() {
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &(minted_shares * Uint256::one()).into(),
-        )],
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_shares.into())],
     )]);
 
     // Compare shares_supply with contract_a_balance -----------
@@ -3370,7 +3362,7 @@ fn small_withdraw() {
 
     // Shares supply should equal contract_a_balance
     println!("{}, {}", shares_supply, contract_a_balance);
-    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+    assert_eq!(shares_supply, contract_a_balance);
 
     // Check that the depositor info was updated correctly
     assert_eq!(
@@ -3460,7 +3452,7 @@ fn small_withdraw() {
     let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
 
     println!("{}, {}", shares_supply, contract_a_balance);
-    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+    assert_eq!(shares_supply, contract_a_balance);
 
     // Check that the depositor info was updated correctly
     assert_eq!(
@@ -3498,8 +3490,7 @@ fn small_withdraw() {
         }
     );
 
-    let withdraw_ratio =
-        Decimal256::from_ratio(Uint256::from(10u128), minted_shares_value * Uint256::one());
+    let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), minted_shares_value);
 
     let withdrawn_deposits = minted_shares_value * withdraw_ratio;
     let withdrawn_shares = minted_shares * withdraw_ratio;
@@ -3559,10 +3550,7 @@ fn small_withdraw_update_exchange_rate() {
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &(minted_shares * Uint256::one()).into(),
-        )],
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_shares.into())],
     )]);
 
     // Compare shares_supply with contract_a_balance -----------
@@ -3579,7 +3567,7 @@ fn small_withdraw_update_exchange_rate() {
 
     // Shares supply should equal contract_a_balance
     println!("{}, {}", shares_supply, contract_a_balance);
-    assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+    assert_eq!(shares_supply, contract_a_balance);
 
     // Increase anchor exchange rate in order to withdraw properly
 
@@ -3644,8 +3632,8 @@ fn calculate_total_prize(
 ) -> Uint256 {
     // get the aust lottery balance
     let aust_lottery_balance = aust_balance.multiply_ratio(
-        (lottery_shares + sponsor_shares) * Uint256::one(),
-        (deposit_shares + lottery_shares + sponsor_shares) * Uint256::one(),
+        lottery_shares + sponsor_shares,
+        deposit_shares + lottery_shares + sponsor_shares,
     );
 
     // get the value of the lottery balance

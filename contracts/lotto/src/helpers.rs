@@ -55,7 +55,7 @@ pub fn claim_deposits(
     let (_send, waiting): (Vec<_>, _) = depositor.unbonding_info.iter().cloned().partition(|c| {
         // if mature and we can pay fully, then include in _send
         if c.release_at.is_expired(block) {
-            let new_amount = c.amount * Uint256::one();
+            let new_amount = c.amount;
             if let Some(limit) = cap {
                 if to_send + Uint128::from(new_amount) > limit {
                     return false;
@@ -84,7 +84,7 @@ pub fn calculate_winner_prize(
         if lottery_winners[i] == 0 {
             continue;
         }
-        let ranked_price: Uint256 = (total_awarded * prize_dis[i]) * Uint256::one();
+        let ranked_price: Uint256 = total_awarded * prize_dis[i];
 
         let amount: Uint128 = ranked_price
             .multiply_ratio(address_rank[i], lottery_winners[i])

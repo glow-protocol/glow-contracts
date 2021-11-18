@@ -85,8 +85,8 @@ pub fn execute_lottery(
     // Get the number of shares that are dedicated to the lottery
     // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
-        (pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
-        (pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
+        pool.lottery_shares + pool.sponsor_shares,
+        pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares,
     );
 
     // Get the aust exchange rate

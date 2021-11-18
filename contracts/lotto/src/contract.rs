@@ -590,7 +590,7 @@ pub fn execute_sponsor_withdraw(
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
             contract: config.anchor_contract.to_string(),
-            amount: (aust_to_redeem * Uint256::one()).into(),
+            amount: aust_to_redeem.into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
         })?,
     });
@@ -599,10 +599,7 @@ pub fn execute_sponsor_withdraw(
     // Discount tx taxes from Anchor to Glow
     let coin_amount = deduct_tax(
         deps.as_ref(),
-        coin(
-            (sponsor_info.amount * Uint256::one()).into(),
-            config.clone().stable_denom,
-        ),
+        coin(sponsor_info.amount.into(), config.clone().stable_denom),
     )?
     .amount;
 
@@ -772,7 +769,7 @@ pub fn execute_withdraw(
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
             contract: config.anchor_contract.to_string(),
-            amount: (aust_to_redeem * Uint256::one()).into(),
+            amount: aust_to_redeem.into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
         })?,
     });
@@ -786,7 +783,7 @@ pub fn execute_withdraw(
         withdrawal_fee = return_amount * config.instant_withdrawal_fee;
         return_amount = return_amount.sub(withdrawal_fee);
 
-        // Discount tx taxes
+        // Get the amount of ust to return after tax
         let net_coin_amount = deduct_tax(
             deps.as_ref(),
             coin(return_amount.into(), config.stable_denom),
@@ -1020,7 +1017,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     .emission_rate;
 
     // Compute total_reserves to fund gov contract
-    let total_reserves = state.total_reserve * Uint256::one();
+    let total_reserves = state.total_reserve;
     let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
         vec![CosmosMsg::Bank(BankMsg::Send {
             to_address: config.gov_contract.to_string(),

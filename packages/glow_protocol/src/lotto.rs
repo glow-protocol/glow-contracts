@@ -150,7 +150,7 @@ pub struct StateResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
     pub total_user_deposits: Decimal256,
-    pub total_user_shares: Decimal256,
+    pub total_user_savings_shares: Decimal256,
     pub total_user_lottery_deposits: Decimal256,
     pub total_user_lottery_shares: Decimal256,
     pub total_sponsor_lotto_deposits: Decimal256,

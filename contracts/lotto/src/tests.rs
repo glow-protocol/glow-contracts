@@ -36,13 +36,12 @@ const GOV_ADDR: &str = "gov";
 const DISTRIBUTOR_ADDR: &str = "distributor";
 const ORACLE_ADDR: &str = "oracle";
 
+pub const RATE: u64 = 1023; // as a permille
 const TICKET_PRICE: u64 = 10_000_000; // 10 * 10^6
 const SPLIT_FACTOR: u64 = 75; // as a %
 const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
 const MAX_HOLDERS: u8 = 10;
-// const RATE: u64 = 1023; // as a permille
-pub const RATE: u64 = 1023; // as a permille
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
@@ -351,7 +350,7 @@ fn deposit() {
         "addr0000",
         &[Coin {
             denom: "ukrw".to_string(),
-            amount: (Uint256::from(TICKET_PRICE)).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -384,7 +383,7 @@ fn deposit() {
         "addr0000",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Uint256::from(2 * TICKET_PRICE)).into(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
@@ -421,6 +420,9 @@ fn deposit() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
+    let minted_shares = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+    let minted_shares_value = minted_shares * Decimal256::permille(RATE);
+
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
         query_ticket_info(deps.as_ref(), String::from("13579"))
@@ -442,18 +444,14 @@ fn deposit() {
             &deps.api.addr_validate("addr0000").unwrap()
         ),
         DepositorInfo {
-            deposit_amount: Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE)
-                * Decimal256::permille(RATE),
-            shares: Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE),
+            deposit_amount: minted_shares_value,
+            shares: minted_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![String::from("13579"), String::from("34567")],
             unbonding_info: vec![]
         }
     );
-
-    let minted_shares = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
-    let minted_shares_value = minted_shares * Decimal256::permille(RATE);
 
     assert_eq!(
         query_state(deps.as_ref(), mock_env(), None).unwrap(),
@@ -489,7 +487,7 @@ fn deposit() {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: String::from("uusd"),
-                amount: (Uint256::from(2 * TICKET_PRICE)).into(),
+                amount: Uint256::from(2 * TICKET_PRICE).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
         }))]
@@ -607,7 +605,7 @@ fn deposit() {
             address.as_str(),
             &[Coin {
                 denom: "uusd".to_string(),
-                amount: (Uint256::from(TICKET_PRICE)).into(),
+                amount: Uint256::from(TICKET_PRICE).into(),
             }],
         );
 
@@ -628,7 +626,7 @@ fn deposit() {
         "addr1111",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE)).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -709,7 +707,7 @@ fn gift_tickets() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(2 * TICKET_PRICE)).into(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -727,7 +725,7 @@ fn gift_tickets() {
         "addr0000",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: (Uint256::from(2 * TICKET_PRICE)).into(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -745,7 +743,7 @@ fn gift_tickets() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(2 * TICKET_PRICE)).into(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
@@ -841,7 +839,7 @@ fn gift_tickets() {
             contract_addr: ANCHOR.to_string(),
             funds: vec![Coin {
                 denom: DENOM.to_string(),
-                amount: (Uint256::from(2 * TICKET_PRICE)).into(),
+                amount: Uint256::from(2 * TICKET_PRICE).into(),
             }],
             msg: to_binary(&AnchorMsg::DepositStable {}).unwrap(),
         }))]
@@ -958,7 +956,7 @@ fn withdraw() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
-    let deposit_amount = (Uint256::from(TICKET_PRICE)).into();
+    let deposit_amount = Uint256::from(TICKET_PRICE).into();
 
     // Address buys one ticket
     let info = mock_info(
@@ -1019,7 +1017,7 @@ fn withdraw() {
         deps.as_ref(),
         Coin {
             denom: String::from("uusd"),
-            amount: (Uint256::from(TICKET_PRICE)).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         },
     )
     .unwrap()
@@ -1114,7 +1112,7 @@ fn withdraw() {
             "addr2222",
             &[Coin {
                 denom: "uusd".to_string(),
-                amount: (Uint256::from(TICKET_PRICE)).into(),
+                amount: Uint256::from(TICKET_PRICE).into(),
             }],
         );
 
@@ -1134,7 +1132,7 @@ fn withdraw() {
 
     // Withdraws half of its tickets
     let msg = ExecuteMsg::Withdraw {
-        amount: Some((Uint256::from(5 * TICKET_PRICE)).into()),
+        amount: Some(Uint256::from(5 * TICKET_PRICE).into()),
         instant: None,
     };
 
@@ -1242,7 +1240,7 @@ fn instant_withdraw() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
-    let deposit_amount = (Uint256::from(TICKET_PRICE)).into();
+    let deposit_amount = Uint256::from(TICKET_PRICE).into();
 
     // Address buys one ticket
     let info = mock_info(
@@ -1406,7 +1404,7 @@ fn claim() {
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE)).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -1561,7 +1559,7 @@ fn claim_lottery_single_winner() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE)).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 

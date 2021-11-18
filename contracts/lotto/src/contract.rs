@@ -661,19 +661,27 @@ pub fn execute_withdraw(
 
     // Calculate depositor current pooled deposits in uusd
     let depositor_ratio = Decimal256::from_ratio(depositor.shares, shares_supply);
+
+    // Get the contract balance
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
         env.clone().contract.address,
     )?;
-    let aust_amount = depositor_ratio * Decimal256::from_uint256(contract_a_balance);
+
+    // Get the amount of aust that belongs to the depositor
+    let aust_amount = depositor_ratio * Uint256::from(contract_a_balance);
+
+    // Get the aust exchange rate
     let rate = query_exchange_rate(
         deps.as_ref(),
         config.anchor_contract.to_string(),
         env.block.height,
     )?
     .exchange_rate;
-    let pooled_deposits = Uint256::one() * (aust_amount * rate);
+
+    // Get the value of the aust that belongs to the depositor
+    let pooled_deposits = aust_amount * rate;
 
     // Calculate ratio of deposits, shares and tickets to withdraw
     let mut withdraw_ratio = Decimal256::one();
@@ -684,9 +692,19 @@ pub fn execute_withdraw(
             withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), pooled_deposits);
         }
     }
+
+    // Get the amount of aust to redeem
     let aust_to_redeem = aust_amount * withdraw_ratio;
-    let redeemed_amount = pooled_deposits * withdraw_ratio;
-    // Discount tax Anchor -> Glow
+
+    // Get the value of the redeemed aust. aust_to_redeem * rate = pooled_deposits * withdraw_ratio
+    // rate * aust_to_redeem =
+    // rate * (aust_amount * withdraw_ratio) =
+    // rate * aust_amount * withdraw_ratio =
+    // (rate * aust_amount) * withdraw_ratio =
+    // pooled_deposits * withdraw_ratio
+    let redeemed_amount = aust_to_redeem * rate;
+
+    // Get the value of the returned amount after accounting for taxes
     let mut return_amount = Uint256::from(
         deduct_tax(
             deps.as_ref(),
@@ -767,6 +785,7 @@ pub fn execute_withdraw(
         // Apply instant withdrawal fee
         withdrawal_fee = return_amount * config.instant_withdrawal_fee;
         return_amount = return_amount.sub(withdrawal_fee);
+
         // Discount tx taxes
         let net_coin_amount = deduct_tax(
             deps.as_ref(),

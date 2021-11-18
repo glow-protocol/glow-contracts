@@ -85,8 +85,10 @@ pub fn execute_lottery(
     // Get the number of shares that are dedicated to the lottery
     // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
-        pool.lottery_shares + pool.sponsor_shares,
-        pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares,
+        pool.total_user_lottery_shares + pool.total_sponsor_lottery_shares,
+        pool.total_user_savings_shares
+            + pool.total_user_lottery_shares
+            + pool.total_sponsor_lottery_shares,
     );
 
     // Get the aust exchange rate
@@ -108,7 +110,9 @@ pub fn execute_lottery(
     // pooled_lottery_deposits gives the total ust value of the lottery pool according to the fraction of the aust owned by the contract.
 
     // pooled_lottery_deposits should always be greater than or equal to the pool.lottery_deposits + pool.total_sponsor_amount so this is more of a double check
-    if (pool.lottery_deposits + pool.total_sponsor_amount) >= pooled_lottery_deposits {
+    if (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+        >= pooled_lottery_deposits
+    {
         if state.award_available.is_zero() {
             // If lottery related shares have a smaller value than the amount of lottery deposits and award_available is zero
             // Return InsufficientLotteryFunds
@@ -117,8 +121,9 @@ pub fn execute_lottery(
     } else {
         // The value to redeem is the difference between the value of the appreciated lottery aust shares
         // and the total ust amount that has been deposited towards the lottery.
-        let amount_to_redeem =
-            pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
+        let amount_to_redeem = pooled_lottery_deposits
+            - pool.total_user_lottery_deposits
+            - pool.total_sponsor_lottery_deposits;
 
         // Divide by the rate to get the number of shares to redeem
         aust_to_redeem = amount_to_redeem / rate;

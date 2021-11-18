@@ -137,12 +137,12 @@ pub fn instantiate(
     POOL.save(
         deps.storage,
         &Pool {
-            total_deposits: Uint256::zero(),
-            total_sponsor_amount: Uint256::zero(),
-            lottery_deposits: Uint256::zero(),
-            deposit_shares: Uint256::zero(),
-            lottery_shares: Uint256::zero(),
-            sponsor_shares: Uint256::zero(),
+            total_user_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
+            total_user_lottery_deposits: Uint256::zero(),
+            total_user_savings_shares: Uint256::zero(),
+            total_user_lottery_shares: Uint256::zero(),
+            total_sponsor_lottery_shares: Uint256::zero(),
         },
     )?;
 
@@ -384,15 +384,17 @@ pub fn deposit(
 
     // Update global state and pool
     state.total_tickets = state.total_tickets.add(amount_tickets.into());
-    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
-    pool.deposit_shares = pool
-        .deposit_shares
+    pool.total_user_lottery_shares = pool
+        .total_user_lottery_shares
+        .add(minted_amount * config.split_factor);
+    pool.total_user_savings_shares = pool
+        .total_user_savings_shares
         .add(minted_amount - minted_amount * config.split_factor);
 
-    pool.total_deposits = pool.total_deposits.add(minted_amount_value);
+    pool.total_user_deposits = pool.total_user_deposits.add(minted_amount_value);
 
-    pool.lottery_deposits = pool
-        .lottery_deposits
+    pool.total_user_lottery_deposits = pool
+        .total_user_lottery_deposits
         .add(minted_amount_value * config.split_factor);
 
     // update depositor and state information
@@ -508,8 +510,9 @@ pub fn execute_sponsor(
         store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
 
         // update pool
-        pool.total_sponsor_amount = pool.total_sponsor_amount.add(minted_amount_value);
-        pool.sponsor_shares = pool.sponsor_shares.add(minted_amount);
+        pool.total_sponsor_lottery_deposits =
+            pool.total_sponsor_lottery_deposits.add(minted_amount_value);
+        pool.total_sponsor_lottery_shares = pool.total_sponsor_lottery_shares.add(minted_amount);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
@@ -541,7 +544,7 @@ pub fn execute_sponsor_withdraw(
 
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
-    if sponsor_info.amount.is_zero() || pool.sponsor_shares.is_zero() {
+    if sponsor_info.amount.is_zero() || pool.total_sponsor_lottery_shares.is_zero() {
         return Err(ContractError::NoSponsorSharesToWithdraw {});
     }
 
@@ -569,14 +572,16 @@ pub fn execute_sponsor_withdraw(
     let aust_to_redeem = sponsor_info.amount / rate;
 
     // Double-checking Lotto pool is solvent against sponsors
-    if Uint256::from(contract_a_balance) * rate < (pool.total_deposits + pool.total_sponsor_amount)
+    if Uint256::from(contract_a_balance) * rate
+        < (pool.total_user_deposits + pool.total_sponsor_lottery_deposits)
     {
         return Err(ContractError::InsufficientSponsorFunds {});
     }
 
     // Update global state
-    pool.total_sponsor_amount = pool.total_sponsor_amount.sub(sponsor_info.amount);
-    pool.sponsor_shares = pool.sponsor_shares.sub(sponsor_info.shares);
+    pool.total_sponsor_lottery_deposits =
+        pool.total_sponsor_lottery_deposits.sub(sponsor_info.amount);
+    pool.total_sponsor_lottery_shares = pool.total_sponsor_lottery_shares.sub(sponsor_info.shares);
 
     // Update sponsor info
     sponsor_info.amount = Uint256::zero();
@@ -634,7 +639,9 @@ pub fn execute_withdraw(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_lottery_shares
+        + pool.total_user_savings_shares
+        + pool.total_sponsor_lottery_shares;
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
@@ -711,7 +718,8 @@ pub fn execute_withdraw(
     );
 
     // Double-checking Lotto pool is solvent against deposits
-    if Uint256::from(contract_a_balance) * rate < (pool.total_deposits + pool.total_sponsor_amount)
+    if Uint256::from(contract_a_balance) * rate
+        < (pool.total_user_deposits + pool.total_sponsor_lottery_deposits)
     {
         return Err(ContractError::InsufficientPoolFunds {});
     }
@@ -754,12 +762,12 @@ pub fn execute_withdraw(
 
     // Update global state and pool
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
-    pool.total_deposits = pool.total_deposits.sub(withdrawn_deposits);
-    pool.lottery_deposits = pool
-        .lottery_deposits
+    pool.total_user_deposits = pool.total_user_deposits.sub(withdrawn_deposits);
+    pool.total_user_lottery_deposits = pool
+        .total_user_lottery_deposits
         .sub(withdrawn_deposits * config.split_factor);
-    pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
-    pool.deposit_shares = pool.deposit_shares.sub(withdrawn_deposit_shares);
+    pool.total_user_lottery_shares = pool.total_user_lottery_shares.sub(withdrawn_lottery_shares);
+    pool.total_user_savings_shares = pool.total_user_savings_shares.sub(withdrawn_deposit_shares);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -1314,12 +1322,12 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
     let pool = POOL.load(deps.storage)?;
 
     Ok(PoolResponse {
-        total_deposits: pool.total_deposits,
-        total_sponsor_amount: pool.total_sponsor_amount,
-        lottery_deposits: pool.lottery_deposits,
-        deposit_shares: pool.deposit_shares,
-        lottery_shares: pool.lottery_shares,
-        sponsor_shares: pool.sponsor_shares,
+        total_user_deposits: pool.total_user_deposits,
+        total_sponsor_lottery_deposits: pool.total_sponsor_lottery_deposits,
+        total_user_lottery_deposits: pool.total_user_lottery_deposits,
+        total_user_savings_shares: pool.total_user_savings_shares,
+        total_user_lottery_shares: pool.total_user_lottery_shares,
+        total_sponsor_lottery_shares: pool.total_sponsor_lottery_shares,
     })
 }
 

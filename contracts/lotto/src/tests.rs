@@ -921,7 +921,7 @@ fn sponsor() {
 
     // withdraw sponsor
     // adding 1 to account for rounding error
-    let app_shares = (net_amount) / Decimal256::permille(RATE);
+    let app_shares = net_amount / Decimal256::permille(RATE);
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -973,7 +973,6 @@ fn withdraw() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    // Add 1 to account for rounding error
     let shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
     let info = mock_info("addr0001", &[]);
@@ -1125,7 +1124,6 @@ fn withdraw() {
     );
 
     println!("depositor: {:?}", dep);
-    // Add 1 to account for rounding error
     let shares = Uint256::from(10 * TICKET_PRICE) / Decimal256::permille(RATE);
 
     let info = mock_info("addr2222", &[]);
@@ -1421,7 +1419,6 @@ fn claim() {
         instant: None,
     };
 
-    // Add one to account for rounding error
     let shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
     deps.querier.with_token_balances(&[(
@@ -1581,8 +1578,6 @@ fn claim_lottery_single_winner() {
         }
     );
 
-    // Check pool info updated correctly
-
     // Run lottery, one winner (5 hits) - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
 
@@ -1659,9 +1654,8 @@ fn claim_lottery_single_winner() {
         Uint256::from(20_000_000u128),
         pool.lottery_deposits,
     );
-    println!("{:?}", state);
-    println!("{:?}", pool);
-    println!("{:?}", total_prize);
+
+    assert_eq!(state.award_available, total_prize);
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -2208,7 +2202,7 @@ fn execute_prize_one_winner() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2339,7 +2333,7 @@ fn execute_prize_winners_diff_ranks() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2369,7 +2363,7 @@ fn execute_prize_winners_diff_ranks() {
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2532,7 +2526,7 @@ fn execute_prize_winners_same_rank() {
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
 
@@ -2977,7 +2971,7 @@ fn execute_prize_pagination() {
             address.as_str(),
             &[Coin {
                 denom: "uusd".to_string(),
-                amount: (Uint256::from(TICKET_PRICE) * Uint256::one()).into(),
+                amount: Uint256::from(TICKET_PRICE).into(),
             }],
         );
 
@@ -3091,7 +3085,7 @@ fn claim_rewards_one_depositor() {
         "addr0000",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: (Uint256::from(2 * TICKET_PRICE) * Uint256::one()).into(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
 
@@ -3197,10 +3191,11 @@ fn claim_rewards_multiple_depositors() {
 
     let info = mock_info("addr0000", &[]);
 
+    // calculate the value of each deposit accounting for rounding errors
     let each_deposit_amount =
         Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE) * Decimal256::permille(RATE);
 
-    // calculate the total_deposit_amount accounting for rounding errors
+    // calculate the total minted_amount_value
     let minted_amount_value = Uint256::from(2u128) * each_deposit_amount;
 
     // After 100 blocks
@@ -3337,39 +3332,6 @@ fn execute_epoch_operations() {
             next_epoch: HOUR.mul(3).after(&env.block)
         }
     );
-}
-
-fn calculate_total_prize(
-    deps: Deps,
-    lottery_shares: Uint256,
-    deposit_shares: Uint256,
-    sponsor_shares: Uint256,
-    initial_balance: Uint256,
-    aust_balance: Uint256,
-    lottery_deposits: Uint256,
-) -> Uint256 {
-    // get the aust lottery balance
-    let aust_lottery_balance = aust_balance.multiply_ratio(
-        (lottery_shares + sponsor_shares) * Uint256::one(),
-        (deposit_shares + lottery_shares + sponsor_shares) * Uint256::one(),
-    );
-
-    // get the value of the lottery balance
-    let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
-
-    let amount_to_redeem = pooled_lottery_deposits - lottery_deposits;
-
-    let aust_to_redeem = amount_to_redeem / Decimal256::permille(RATE);
-
-    let aust_to_redeem_value = aust_to_redeem * Decimal256::permille(RATE);
-    // get the post tax amount
-    let net_amount = Uint256::from(
-        deduct_tax(deps, coin((aust_to_redeem_value).into(), "uusd"))
-            .unwrap()
-            .amount,
-    );
-
-    initial_balance + net_amount
 }
 
 #[test]
@@ -3697,4 +3659,37 @@ fn small_withdraw_update_exchange_rate() {
     // why are these so different from one another????
     println!("{}, {}", shares_supply, contract_a_balance);
     // assert_eq!(shares_supply * Uint256::one(), contract_a_balance);
+}
+
+fn calculate_total_prize(
+    deps: Deps,
+    lottery_shares: Uint256,
+    deposit_shares: Uint256,
+    sponsor_shares: Uint256,
+    initial_balance: Uint256,
+    aust_balance: Uint256,
+    lottery_deposits: Uint256,
+) -> Uint256 {
+    // get the aust lottery balance
+    let aust_lottery_balance = aust_balance.multiply_ratio(
+        (lottery_shares + sponsor_shares) * Uint256::one(),
+        (deposit_shares + lottery_shares + sponsor_shares) * Uint256::one(),
+    );
+
+    // get the value of the lottery balance
+    let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
+
+    let amount_to_redeem = pooled_lottery_deposits - lottery_deposits;
+
+    let aust_to_redeem = amount_to_redeem / Decimal256::permille(RATE);
+
+    let aust_to_redeem_value = aust_to_redeem * Decimal256::permille(RATE);
+    // get the post tax amount
+    let net_amount = Uint256::from(
+        deduct_tax(deps, coin((aust_to_redeem_value).into(), "uusd"))
+            .unwrap()
+            .amount,
+    );
+
+    initial_balance + net_amount
 }

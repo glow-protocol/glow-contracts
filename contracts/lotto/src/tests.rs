@@ -1968,7 +1968,7 @@ fn execute_lottery() {
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     println!("state: {:?}", state);
 
-    // Advance two weeks in time
+    // Advance three weeks in time
     if let Duration::Time(time) = WEEK {
         env.block.time = env.block.time.plus_seconds(time * 3);
     }

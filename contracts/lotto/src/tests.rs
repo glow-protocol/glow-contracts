@@ -1847,17 +1847,9 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
-    );
-
-    // Directly check next_lottery_time has been set up for next week
-    let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
-        .unwrap()
-        .next_lottery_time;
-
-    assert_eq!(
-        next_lottery_time,
-        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
+        Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME))
+            .add(WEEK)
+            .unwrap()
     );
 
     // Directly check next_lottery_exec_time has been set up to Never
@@ -1889,7 +1881,7 @@ fn execute_lottery() {
 
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
-        env.block.time = env.block.time.plus_seconds(time * 2);
+        env.block.time = env.block.time.plus_seconds(time);
     }
 
     // Execute 2nd lottery
@@ -1957,7 +1949,7 @@ fn execute_lottery() {
     }
 
     // Execute prize
-    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg).unwrap();
+    let _res = execute(deps.as_mut(), env, info, execute_prize_msg).unwrap();
 
     // Directly check next_lottery_time has been set up for next week
     let next_lottery_time = query_state(deps.as_ref(), mock_env(), None)
@@ -1966,7 +1958,11 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(env.block.time).add(WEEK).unwrap()
+        Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME))
+            .add(WEEK)
+            .unwrap()
+            .add(WEEK)
+            .unwrap()
     );
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();

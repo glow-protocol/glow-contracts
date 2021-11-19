@@ -15,6 +15,8 @@ use glow_protocol::distributor::GlowEmissionRateResponse;
 use moneymarket::market::EpochStateResponse;
 use std::collections::HashMap;
 
+use crate::tests::RATE;
+
 use crate::oracle::OracleResponse;
 
 pub const MOCK_CONTRACT_ADDR: &str = "cosmos2contract";
@@ -49,8 +51,11 @@ pub enum QueryMsg {
 pub fn mock_dependencies(
     contract_balance: &[Coin],
 ) -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
-    let custom_querier: WasmMockQuerier =
+    let mut custom_querier: WasmMockQuerier =
         WasmMockQuerier::new(MockQuerier::new(&[(MOCK_CONTRACT_ADDR, contract_balance)]));
+
+    // Mock aUST-UST exchange rate
+    custom_querier.with_exchange_rate(Decimal256::permille(RATE));
 
     OwnedDeps {
         storage: MockStorage::default(),
@@ -218,7 +223,7 @@ impl WasmMockQuerier {
                     distributed_interest: _,
                 } => {
                     SystemResult::Ok(ContractResult::from(to_binary(&EpochStateResponse {
-                        exchange_rate: Decimal256::permille(1023), // Current anchor rate,
+                        exchange_rate: self.exchange_rate_querier.exchange_rate, // Current anchor rate,
                         aterra_supply: Uint256::one(),
                     })))
                 }

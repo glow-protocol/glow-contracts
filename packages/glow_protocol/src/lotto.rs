@@ -16,10 +16,10 @@ pub struct InstantiateMsg {
     pub epoch_interval: u64,                 // time between executing epoch operations
     pub block_time: u64, // number of blocks (or time) lottery is blocked while is executed
     pub round_delta: u64, // number of rounds of security to get oracle rand
-    pub ticket_price: Decimal256, // prize of a ticket in stable_denom
+    pub ticket_price: Uint256, // prize of a ticket in stable_denom
     pub max_holders: u8, // Max number of holders per ticket
     pub prize_distribution: [Decimal256; 6], // [0, 0, 0.05, 0.15, 0.3, 0.5]
-    pub target_award: Decimal256, // target award used in deposit rewards computation
+    pub target_award: Uint256, // target award used in deposit rewards computation
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
     pub instant_withdrawal_fee: Decimal256, // % to be deducted as a fee for instant withdrawals
@@ -51,7 +51,7 @@ pub enum ExecuteMsg {
     UpdateLotteryConfig {
         lottery_interval: Option<u64>,
         block_time: Option<u64>,
-        ticket_price: Option<Decimal256>,
+        ticket_price: Option<Uint256>,
         prize_distribution: Option<[Decimal256; 6]>,
         round_delta: Option<u64>,
     },
@@ -130,10 +130,10 @@ pub struct ConfigResponse {
     pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,
-    pub ticket_price: Decimal256,
+    pub ticket_price: Uint256,
     pub max_holders: u8,
     pub prize_distribution: [Decimal256; 6],
-    pub target_award: Decimal256,
+    pub target_award: Uint256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
     pub instant_withdrawal_fee: Decimal256,
@@ -144,8 +144,8 @@ pub struct ConfigResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StateResponse {
     pub total_tickets: Uint256,
-    pub total_reserve: Decimal256,
-    pub award_available: Decimal256,
+    pub total_reserve: Uint256,
+    pub award_available: Uint256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
@@ -158,12 +158,12 @@ pub struct StateResponse {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
-    pub total_deposits: Decimal256,
-    pub lottery_deposits: Decimal256,
-    pub total_sponsor_amount: Decimal256,
-    pub deposit_shares: Decimal256,
-    pub lottery_shares: Decimal256,
-    pub sponsor_shares: Decimal256,
+    pub total_deposits: Uint256,
+    pub lottery_deposits: Uint256,
+    pub total_sponsor_amount: Uint256,
+    pub deposit_shares: Uint256,
+    pub lottery_shares: Uint256,
+    pub sponsor_shares: Uint256,
 }
 
 // We define a custom struct for each query response
@@ -174,7 +174,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub total_prizes: Decimal256,
+    pub total_prizes: Uint256,
     pub number_winners: [u32; 6],
     pub page: String,
 }
@@ -183,8 +183,8 @@ pub struct LotteryInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfoResponse {
     pub depositor: String,
-    pub deposit_amount: Decimal256,
-    pub shares: Decimal256,
+    pub deposit_amount: Uint256,
+    pub shares: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
@@ -195,8 +195,8 @@ pub struct DepositorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfoResponse {
     pub sponsor: String,
-    pub amount: Decimal256,
-    pub shares: Decimal256,
+    pub amount: Uint256,
+    pub shares: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
 }
@@ -209,7 +209,7 @@ pub struct DepositorsInfoResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Claim {
-    pub amount: Decimal256,
+    pub amount: Uint256,
     pub release_at: Expiration,
 }
 

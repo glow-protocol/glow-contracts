@@ -36,8 +36,8 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
 pub fn query_glow_emission_rate(
     querier: &QuerierWrapper,
     distributor: Addr,
-    current_award: Decimal256,
-    target_award: Decimal256,
+    current_award: Uint256,
+    target_award: Uint256,
     current_emission_rate: Decimal256,
 ) -> StdResult<GlowEmissionRateResponse> {
     let glow_emission_rate: GlowEmissionRateResponse =

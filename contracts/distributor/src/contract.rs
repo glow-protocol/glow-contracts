@@ -1,9 +1,9 @@
 #[cfg(not(feature = "library"))]
+use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::entry_point;
 
 use crate::state::{read_config, store_config, Config};
 
-use cosmwasm_bignumber::Decimal256;
 use cosmwasm_std::{
     attr, to_binary, Binary, CanonicalAddr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
     StdError, StdResult, Uint128, WasmMsg,
@@ -297,8 +297,8 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 #[allow(clippy::comparison_chain)]
 fn query_glow_emission_rate(
     deps: Deps,
-    current_award: Decimal256,
-    target_award: Decimal256,
+    current_award: Uint256,
+    target_award: Uint256,
     current_emission_rate: Decimal256,
 ) -> StdResult<GlowEmissionRateResponse> {
     let config: Config = read_config(deps.storage)?;

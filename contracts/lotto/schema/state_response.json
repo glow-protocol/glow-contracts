@@ -16,7 +16,7 @@
   ],
   "properties": {
     "award_available": {
-      "$ref": "#/definitions/Decimal256"
+      "$ref": "#/definitions/Uint256"
     },
     "current_lottery": {
       "type": "integer",
@@ -44,7 +44,7 @@
       "$ref": "#/definitions/Expiration"
     },
     "total_reserve": {
-      "$ref": "#/definitions/Decimal256"
+      "$ref": "#/definitions/Uint256"
     },
     "total_tickets": {
       "$ref": "#/definitions/Uint256"

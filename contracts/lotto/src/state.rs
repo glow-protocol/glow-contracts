@@ -35,10 +35,10 @@ pub struct Config {
     pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,
-    pub ticket_price: Decimal256,
+    pub ticket_price: Uint256,
     pub max_holders: u8,
     pub prize_distribution: [Decimal256; 6],
-    pub target_award: Decimal256,
+    pub target_award: Uint256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
     pub instant_withdrawal_fee: Decimal256,
@@ -48,8 +48,8 @@ pub struct Config {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub total_tickets: Uint256,
-    pub total_reserve: Decimal256,
-    pub award_available: Decimal256,
+    pub total_reserve: Uint256,
+    pub award_available: Uint256,
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
@@ -61,18 +61,18 @@ pub struct State {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    pub total_deposits: Decimal256,
-    pub total_sponsor_amount: Decimal256,
-    pub lottery_deposits: Decimal256,
-    pub lottery_shares: Decimal256,
-    pub deposit_shares: Decimal256,
-    pub sponsor_shares: Decimal256,
+    pub total_deposits: Uint256,
+    pub total_sponsor_amount: Uint256,
+    pub lottery_deposits: Uint256,
+    pub lottery_shares: Uint256,
+    pub deposit_shares: Uint256,
+    pub sponsor_shares: Uint256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    pub deposit_amount: Decimal256,
-    pub shares: Decimal256,
+    pub deposit_amount: Uint256,
+    pub shares: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
@@ -81,8 +81,8 @@ pub struct DepositorInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfo {
-    pub amount: Decimal256,
-    pub shares: Decimal256,
+    pub amount: Uint256,
+    pub shares: Uint256,
     pub pending_rewards: Decimal256,
     pub reward_index: Decimal256,
 }
@@ -93,7 +93,7 @@ pub struct LotteryInfo {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub total_prizes: Decimal256,
+    pub total_prizes: Uint256,
     pub number_winners: [u32; 6],
     pub page: String,
 }
@@ -128,7 +128,7 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             sequence: "".to_string(),
             awarded: false,
             timestamp: 0,
-            total_prizes: Decimal256::zero(),
+            total_prizes: Uint256::zero(),
             number_winners: [0; 6],
             page: "".to_string(),
         },
@@ -147,8 +147,8 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
     match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
         _ => DepositorInfo {
-            deposit_amount: Decimal256::zero(),
-            shares: Decimal256::zero(),
+            deposit_amount: Uint256::zero(),
+            shares: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -169,8 +169,8 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
     match bucket_read(storage, PREFIX_SPONSOR).load(sponsor.as_bytes()) {
         Ok(v) => v,
         _ => SponsorInfo {
-            amount: Decimal256::zero(),
-            shares: Decimal256::zero(),
+            amount: Uint256::zero(),
+            shares: Uint256::zero(),
             pending_rewards: Decimal256::zero(),
             reward_index: Decimal256::zero(),
         },

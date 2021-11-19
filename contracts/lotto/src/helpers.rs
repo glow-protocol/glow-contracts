@@ -17,7 +17,7 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
 
     let total_deposited = pool.total_deposits + pool.total_sponsor_amount;
     if !reward_accrued.is_zero() && !total_deposited.is_zero() {
-        state.global_reward_index += reward_accrued / total_deposited;
+        state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
     }
 
     state.last_reward_updated = block_height;
@@ -25,14 +25,15 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
 
 /// Compute reward amount a depositor received
 pub fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
-    depositor.pending_rewards +=
-        depositor.deposit_amount * (state.global_reward_index - depositor.reward_index);
+    depositor.pending_rewards += Decimal256::from_uint256(depositor.deposit_amount)
+        * (state.global_reward_index - depositor.reward_index);
     depositor.reward_index = state.global_reward_index;
 }
 
 /// Compute reward amount a sponsor received
 pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
-    sponsor.pending_rewards += sponsor.amount * (state.global_reward_index - sponsor.reward_index);
+    sponsor.pending_rewards += Decimal256::from_uint256(sponsor.amount)
+        * (state.global_reward_index - sponsor.reward_index);
     sponsor.reward_index = state.global_reward_index;
 }
 
@@ -54,7 +55,7 @@ pub fn claim_deposits(
     let (_send, waiting): (Vec<_>, _) = depositor.unbonding_info.iter().cloned().partition(|c| {
         // if mature and we can pay fully, then include in _send
         if c.release_at.is_expired(block) {
-            let new_amount = c.amount * Uint256::one();
+            let new_amount = c.amount;
             if let Some(limit) = cap {
                 if to_send + Uint128::from(new_amount) > limit {
                     return false;
@@ -73,7 +74,7 @@ pub fn claim_deposits(
 }
 
 pub fn calculate_winner_prize(
-    total_awarded: Decimal256,
+    total_awarded: Uint256,
     address_rank: [u32; 6],
     lottery_winners: [u32; 6],
     prize_dis: [Decimal256; 6],
@@ -83,7 +84,7 @@ pub fn calculate_winner_prize(
         if lottery_winners[i] == 0 {
             continue;
         }
-        let ranked_price: Uint256 = (total_awarded * prize_dis[i]) * Uint256::one();
+        let ranked_price: Uint256 = total_awarded * prize_dis[i];
 
         let amount: Uint128 = ranked_price
             .multiply_ratio(address_rank[i], lottery_winners[i])

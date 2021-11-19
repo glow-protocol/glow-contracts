@@ -4,10 +4,10 @@ use crate::state::{
     read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
     TICKETS,
 };
-use cosmwasm_bignumber::{Decimal256, Uint256};
+use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
     attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
-    Uint128, WasmMsg,
+    WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
@@ -69,7 +69,7 @@ pub fn execute_lottery(
         sequence: "".to_string(),
         awarded: false,
         timestamp: env.block.height,
-        total_prizes: Decimal256::zero(),
+        total_prizes: Uint256::zero(),
         number_winners: [0; 6],
         page: "".to_string(),
     };
@@ -85,8 +85,8 @@ pub fn execute_lottery(
     // Get the number of shares that are dedicated to the lottery
     // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
     let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
-        (pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
-        (pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares) * Uint256::one(),
+        pool.lottery_shares + pool.sponsor_shares,
+        pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares,
     );
 
     // Get the aust exchange rate
@@ -98,17 +98,16 @@ pub fn execute_lottery(
     .exchange_rate;
 
     // Get the ust value of the aust going towards the lottery
-    let pooled_lottery_deposits = Decimal256::from_uint256(aust_lottery_balance) * rate;
+    let pooled_lottery_deposits = aust_lottery_balance * rate;
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
-    let mut aust_to_redeem = Uint128::zero();
+    let mut aust_to_redeem = Uint256::zero();
 
     // Lottery deposits plus sponsor amount gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
     // pooled_lottery_deposits gives the total ust value of the lottery pool according to the fraction of the aust owned by the contract.
 
     // pooled_lottery_deposits should always be greater than or equal to the pool.lottery_deposits + pool.total_sponsor_amount so this is more of a double check
-    // the only reason this might not hold is for a very small amount of time following the first deposits due to rounding errors
     if (pool.lottery_deposits + pool.total_sponsor_amount) >= pooled_lottery_deposits {
         if state.award_available.is_zero() {
             // If lottery related shares have a smaller value than the amount of lottery deposits and award_available is zero
@@ -122,15 +121,15 @@ pub fn execute_lottery(
             pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
 
         // Divide by the rate to get the number of shares to redeem
-        aust_to_redeem = ((amount_to_redeem / rate) * Uint256::one()).into();
+        aust_to_redeem = amount_to_redeem / rate;
+
+        // Get the value of the aust that will be redeemed
+        let aust_to_redeem_value = aust_to_redeem * rate;
 
         // Get the amount of ust that will be received after accounting for taxes
         let net_amount = deduct_tax(
             deps.as_ref(),
-            coin(
-                (amount_to_redeem * Uint256::one()).into(),
-                config.clone().stable_denom,
-            ),
+            coin(aust_to_redeem_value.into(), config.clone().stable_denom),
         )?
         .amount;
 
@@ -141,7 +140,7 @@ pub fn execute_lottery(
             }
         } else {
             // Add the net redeemed amount to the award available.
-            state.award_available += Decimal256::from_uint256(Uint256::from(net_amount));
+            state.award_available += Uint256::from(net_amount);
 
             // Message to redeem "aust_to_redeem" of aust from the Anchor contract
             let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -149,7 +148,7 @@ pub fn execute_lottery(
                 funds: vec![],
                 msg: to_binary(&Cw20Send {
                     contract: config.anchor_contract.to_string(),
-                    amount: aust_to_redeem,
+                    amount: aust_to_redeem.into(),
                     msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
                 })?,
             });
@@ -303,11 +302,12 @@ pub fn execute_prize(
     }
 
     // If all winners have been accounted, update lottery info and jump to next round
-    let mut total_awarded_prize = Decimal256::zero();
+    let mut total_awarded_prize = Uint256::zero();
     if lottery_info.awarded {
         // Calculate the total_awarded_prize from the number_winners array
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
+                // increase total_awarded_prize
                 total_awarded_prize += state.award_available * config.prize_distribution[index];
             }
         }

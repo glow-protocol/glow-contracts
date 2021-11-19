@@ -78,10 +78,10 @@
       "type": "string"
     },
     "target_award": {
-      "$ref": "#/definitions/Decimal256"
+      "$ref": "#/definitions/Uint256"
     },
     "ticket_price": {
-      "$ref": "#/definitions/Decimal256"
+      "$ref": "#/definitions/Uint256"
     },
     "unbonding_period": {
       "$ref": "#/definitions/Duration"
@@ -125,6 +125,9 @@
           "additionalProperties": false
         }
       ]
+    },
+    "Uint256": {
+      "type": "string"
     }
   }
 }

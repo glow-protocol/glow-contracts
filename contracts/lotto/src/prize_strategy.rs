@@ -9,7 +9,7 @@ use cosmwasm_std::{
     attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
     WasmMsg,
 };
-use cw0::Expiration;
+use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
 use terraswap::querier::query_token_balance;
@@ -317,9 +317,43 @@ pub fn execute_prize(
         // Increment the current_lottery_number
         state.current_lottery += 1;
 
-        // Set the next_lottery_time and next_lottery_exec_time
-        state.next_lottery_time =
-            Expiration::AtTime(env.block.time).add(config.lottery_interval)?;
+        // Set next_lottery_time to the current lottery time plus the lottery interval
+        // We want next_lottery_time to be a time in the future so pick the smallest x such that
+        // next_lottery_time = next_lottery_time + x * lottery_interval
+        // but next_lottery_time + x * lottery_interval > env.block_time
+
+        // Get the amount of time between now and the time at which the lottery
+        // became runnable
+        let time_since_next_lottery_time =
+            if let Expiration::AtTime(next_lottery_time) = state.next_lottery_time {
+                env.block.time.minus_seconds(next_lottery_time.seconds())
+            } else {
+                return Err(ContractError::InvalidLotteryNextTime {});
+            };
+
+        // Get the lottery interval in seconds
+        let lottery_interval_seconds = if let Duration::Time(time) = config.lottery_interval {
+            time
+        } else {
+            return Err(ContractError::InvalidLotteryInterval {});
+        };
+
+        // Get the number of lottery intervals that have passed
+        // since the lottery became runnable
+        // this should be 0 everytime
+        // unless somebody forgot to run the lottery for a week for example
+        let lottery_intervals_since_last_lottery =
+            time_since_next_lottery_time.seconds() / lottery_interval_seconds;
+
+        // Set the next_lottery_time to the closest time in the future that is
+        // the current value of next_lottery_time plus a multiple of lottery_interval
+        // normally this multiple will be 1 everytime
+        // but if somebody forgot to run the lottery for a week, it will be 2 for example
+        state.next_lottery_time = state
+            .next_lottery_time
+            .add(config.lottery_interval * (1 + lottery_intervals_since_last_lottery))?;
+
+        // Set next_lottery_exec_time to never
         state.next_lottery_exec_time = Expiration::Never {};
 
         // Subtract the awarded prize from the award_available to get the remaining award_available

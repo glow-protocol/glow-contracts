@@ -32,7 +32,7 @@ use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorM
 use std::ops::{Add, Sub};
 use terraswap::querier::query_token_balance;
 
-pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10;
+pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
 pub const PRIZE_DISTR_LEN: usize = 6;
 pub const MAX_CLAIMS: u8 = 15;

@@ -61,11 +61,23 @@ pub struct State {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
+    // Sum of all user deposits
     pub total_deposits: Uint256,
-    pub total_sponsor_amount: Uint256,
+    // Sum of all user deposits going towards the lottery.
+    // This is a subset of total_deposits, but is NOT necessarily
+    // equal to total_deposits * split_factor due to rounding
     pub lottery_deposits: Uint256,
-    pub lottery_shares: Uint256,
+    // Sum of all user shares going towards savings
     pub deposit_shares: Uint256,
+    // Sum of all user shares going towards the lottery
+    pub lottery_shares: Uint256,
+    // Sum of all sponsor deposits going towards the lottery.
+    // This is the same as the sum of all sponsor deposits
+    // because all sponsor deposits go entirely towards the lottery
+    pub total_sponsor_amount: Uint256,
+    // Sum of all sponsor shares going towards the lottery.
+    // This is the same as the sum of all sponsor shares
+    // because all sponsor shares go entirely towards the lottery
     pub sponsor_shares: Uint256,
 }
 

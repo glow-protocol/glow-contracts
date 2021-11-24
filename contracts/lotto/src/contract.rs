@@ -341,7 +341,7 @@ pub fn deposit(
         Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
 
     // Check if we need to round up number of combinations based on depositor post transaction total deposits
-    let mut new_combinations = combinations.clone();
+    let mut new_combinations = combinations;
     if depositor_info.deposit_amount
         >= (raw_post_transaction_num_depositor_tickets + Uint256::one()) * config.ticket_price
     {

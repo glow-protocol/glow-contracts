@@ -797,18 +797,13 @@ pub fn execute_withdraw(
             amount: vec![net_coin_amount],
         }));
     } else {
-        // Discount tx taxes
-        let net_coin_amount = deduct_tax(
-            deps.as_ref(),
-            coin(return_amount.into(), config.stable_denom),
-        )?;
         // Check max unbonding_info concurrent claims is not bypassed
         if depositor.unbonding_info.len() as u8 >= MAX_CLAIMS {
             return Err(ContractError::MaxUnbondingClaims {});
         }
         // Place amount in unbonding state as a claim
         depositor.unbonding_info.push(Claim {
-            amount: Uint256::from(net_coin_amount.amount),
+            amount: return_amount,
             release_at: config.unbonding_period.after(&env.block),
         });
     }

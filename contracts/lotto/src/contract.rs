@@ -330,16 +330,20 @@ pub fn deposit(
     // get the value of the minted shares of aUST after accounting for rounding errors
     let minted_amount_value = minted_amount * epoch_state.exchange_rate;
 
-    // Calculate what depositor_info.depositor_amount will equal following the successfully execution
-    // of this transaction
-    let post_transaction_deposit_amount = depositor_info.deposit_amount + minted_amount_value;
+    // Update deposit_info with the post tax deposit amount
+    depositor_info.deposit_amount = depositor_info.deposit_amount.add(minted_amount_value);
 
-    // Check if we need to round up number of combinations based on depositor total deposits
+    // Update depositor_info with the post tax shares amount
+    depositor_info.shares = depositor_info.shares.add(minted_amount);
+
+    // Get the number of tickets the user would have post transaction
+    let raw_post_transaction_num_depositor_tickets =
+        Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
+
+    // Check if we need to round up number of combinations based on depositor post transaction total deposits
     let mut new_combinations = combinations.clone();
-    if (Decimal256::from_ratio(post_transaction_deposit_amount, config.ticket_price))
-        >= (Decimal256::from_uint256(Uint256::from(
-            (depositor_info.tickets.len() + combinations.len()) as u128,
-        )) + Decimal256::one())
+    if depositor_info.deposit_amount
+        >= (raw_post_transaction_num_depositor_tickets + Uint256::one()) * config.ticket_price
     {
         let current_time = env.block.time.nanos();
         let sequence = pseudo_random_seq(
@@ -351,12 +355,6 @@ pub fn deposit(
         new_combinations.push(sequence);
         amount_tickets += 1;
     }
-
-    // store the post tax deposit amount
-    depositor_info.deposit_amount = depositor_info.deposit_amount.add(minted_amount_value);
-
-    // update the depositors shares (basically the amount of aUST the depositor is entitled to)
-    depositor_info.shares = depositor_info.shares.add(minted_amount);
 
     for combination in new_combinations {
         // check that the number of holders for any given ticket isn't too high
@@ -382,18 +380,29 @@ pub fn deposit(
         depositor_info.tickets.push(combination);
     }
 
-    // Update global state and pool
-    state.total_tickets = state.total_tickets.add(amount_tickets.into());
-    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
+    // Update pool
+
+    // Increase total_deposits by the value of the minted shares
+    pool.total_deposits = pool.total_deposits.add(minted_amount_value);
+
+    // Increase lottery_deposits by the value of the minted shares
+    // times the split factor
+    pool.lottery_deposits = pool
+        .lottery_deposits
+        .add(minted_amount_value * config.split_factor);
+
+    // Increase deposit_shares by the number of minted shares
+    // minus the number of minted shares times the split factor
     pool.deposit_shares = pool
         .deposit_shares
         .add(minted_amount - minted_amount * config.split_factor);
 
-    pool.total_deposits = pool.total_deposits.add(minted_amount_value);
+    // Increase the lottery_shares by the number of minted shares
+    // times the split factor
+    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
 
-    pool.lottery_deposits = pool
-        .lottery_deposits
-        .add(minted_amount_value * config.split_factor);
+    // Update the number of total_tickets
+    state.total_tickets = state.total_tickets.add(amount_tickets.into());
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, &depositor_info)?;
@@ -753,13 +762,30 @@ pub fn execute_withdraw(
     depositor.shares = depositor.shares.sub(withdrawn_shares);
 
     // Update global state and pool
-    state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
+
+    // Decrease the total_deposits by the deposits withdrawn
+    // from the depositor
     pool.total_deposits = pool.total_deposits.sub(withdrawn_deposits);
+
+    // Decrease lottery_deposits by the withdrawn_deposits times the split factor
+    // This will cause problems because you can withdraw more than you've added
+    // to lottery_deposits because of rounding
     pool.lottery_deposits = pool
         .lottery_deposits
         .sub(withdrawn_deposits * config.split_factor);
-    pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
+
+    // Decrease deposit_shares by the withdrawn_deposit_shares
+    // This will cause problems because you can withdrawn more than you've added
+    // to deposit_shares because of rounding
     pool.deposit_shares = pool.deposit_shares.sub(withdrawn_deposit_shares);
+
+    // Decrease lottery_shares  by the withdrawn_lottery_shares
+    // This will not zero out because you will be withdrawing less than you've added
+    // to lottery_shares because of rounding
+    pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
+
+    // Remove withdrawn_tickets from total_tickets
+    state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 

@@ -110,7 +110,7 @@ pub fn execute_lottery(
     // Lottery deposits plus sponsor amount gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
     // pooled_lottery_deposits gives the total ust value of the lottery pool according to the fraction of the aust owned by the contract.
 
-    // pooled_lottery_deposits should always be greater than or equal to the pool.lottery_deposits + pool.total_sponsor_amount so this is more of a double check
+    // pooled_lottery_deposits should always be greater than or equal to the total_user_lottery_deposits + pool.total_sponsor_deposits so this is more of a double check
     if (total_user_lottery_deposits + pool.total_sponsor_deposits) >= pooled_lottery_deposits {
         if state.award_available.is_zero() {
             // If lottery related shares have a smaller value than the amount of lottery deposits and award_available is zero

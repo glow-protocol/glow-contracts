@@ -37,7 +37,9 @@ const DISTRIBUTOR_ADDR: &str = "distributor";
 const ORACLE_ADDR: &str = "oracle";
 
 pub const RATE: u64 = 1023; // as a permille
+const SMALL_TICKET_PRICE: u64 = 9590;
 const TICKET_PRICE: u64 = 10_000_000; // 10 * 10^6
+
 const SPLIT_FACTOR: u64 = 75; // as a %
 const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
 const RESERVE_FACTOR: u64 = 5; // as a %
@@ -79,8 +81,53 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
     }
 }
 
+pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
+    InstantiateMsg {
+        owner: TEST_CREATOR.to_string(),
+        stable_denom: DENOM.to_string(),
+        anchor_contract: ANCHOR.to_string(),
+        aterra_contract: A_UST.to_string(),
+        oracle_contract: ORACLE_ADDR.to_string(),
+        lottery_interval: WEEK_TIME,
+        epoch_interval: 3 * HOUR_TIME,
+        block_time: HOUR_TIME,
+        round_delta: ROUND_DELTA,
+        ticket_price: Uint256::from(SMALL_TICKET_PRICE),
+        max_holders: MAX_HOLDERS,
+        prize_distribution: [
+            Decimal256::zero(),
+            Decimal256::zero(),
+            Decimal256::percent(5),
+            Decimal256::percent(15),
+            Decimal256::percent(30),
+            Decimal256::percent(50),
+        ],
+        target_award: Uint256::zero(),
+        reserve_factor: Decimal256::percent(RESERVE_FACTOR),
+        split_factor: Decimal256::percent(SPLIT_FACTOR),
+        instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
+        unbonding_period: WEEK_TIME,
+        initial_emission_rate: Decimal256::zero(),
+        initial_lottery_execution: FIRST_LOTTO_TIME,
+    }
+}
+
 fn mock_instantiate(deps: DepsMut) -> Response {
     let msg = instantiate_msg();
+
+    let info = mock_info(
+        TEST_CREATOR,
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
+    instantiate(deps, mock_env(), info, msg).expect("contract successfully executes InstantiateMsg")
+}
+
+fn mock_instantiate_small_ticket_price(deps: DepsMut) -> Response {
+    let msg = instantiate_msg_small_ticket_price();
 
     let info = mock_info(
         TEST_CREATOR,
@@ -3790,6 +3837,66 @@ fn small_withdraw_update_exchange_rate() {
     let shares_supply = pool.total_user_shares + pool.total_sponsor_shares;
 
     assert_eq!(shares_supply, contract_a_balance);
+}
+
+#[test]
+pub fn rounded_lottery_deposits() {
+    let small_ticket_price = 9590u128;
+
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
+    // get env
+    let env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate_small_ticket_price(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    // User deposits and buys one ticket -------------------
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(small_ticket_price).into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("23456")],
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // User deposits and buys one ticket again-------------------
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(small_ticket_price).into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("23456")],
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // Add AUST to the contract
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &(10_000_000u128).into())],
+    )]);
+
+    // Address withdraws all their money ----------------
+
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        amount: None,
+        instant: Some(true),
+    };
+    let _res = execute(deps.as_mut(), env, info, msg).unwrap();
 }
 
 fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {

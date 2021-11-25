@@ -3890,6 +3890,8 @@ pub fn rounded_lottery_deposits() {
     )]);
 
     // Address withdraws all their money ----------------
+    // this would fail with an underflow error
+    // with the previous implementation
 
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Withdraw {

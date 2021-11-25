@@ -198,11 +198,9 @@ fn proper_initialization() {
         pool,
         PoolResponse {
             total_deposits: Uint256::zero(),
-            lottery_deposits: Uint256::zero(),
+            total_user_shares: Uint256::zero(),
             total_sponsor_amount: Uint256::zero(),
-            lottery_shares: Uint256::zero(),
             sponsor_shares: Uint256::zero(),
-            deposit_shares: Uint256::zero(),
         }
     );
 
@@ -473,10 +471,8 @@ fn deposit() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: minted_shares_value,
-            lottery_deposits: minted_shares_value * Decimal256::percent(SPLIT_FACTOR),
+            total_user_shares: minted_shares,
             total_sponsor_amount: Uint256::zero(),
-            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
-            deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             sponsor_shares: Uint256::zero(),
         }
     );
@@ -824,10 +820,8 @@ fn gift_tickets() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: minted_shares_value,
-            lottery_deposits: minted_shares_value * Decimal256::percent(SPLIT_FACTOR),
+            total_user_shares: minted_shares,
             total_sponsor_amount: Uint256::zero(),
-            lottery_shares: minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
-            deposit_shares: minted_shares - minted_shares.mul(Decimal256::percent(SPLIT_FACTOR)),
             sponsor_shares: Uint256::zero(),
         }
     );
@@ -1060,10 +1054,8 @@ fn withdraw() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: Uint256::zero(),
-            lottery_deposits: Uint256::zero(),
+            total_user_shares: Uint256::zero(),
             total_sponsor_amount: Uint256::zero(),
-            lottery_shares: Uint256::zero(),
-            deposit_shares: Uint256::zero(),
             sponsor_shares: Uint256::zero(),
         }
     );
@@ -1322,10 +1314,8 @@ fn instant_withdraw() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: Uint256::zero(),
-            lottery_deposits: Uint256::zero(),
+            total_user_shares: Uint256::zero(),
             total_sponsor_amount: Uint256::zero(),
-            lottery_shares: Uint256::zero(),
-            deposit_shares: Uint256::zero(),
             sponsor_shares: Uint256::zero(),
         }
     );
@@ -1903,11 +1893,14 @@ fn execute_lottery() {
 
     println!("{:?}", pool);
 
+    let total_user_lottery_shares = pool.total_user_shares * Decimal256::percent(SPLIT_FACTOR);
+    let total_user_lottery_deposits = pool.total_deposits * Decimal256::percent(SPLIT_FACTOR);
+
     // Get the number of shares that are dedicated to the lottery
     // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
     let aust_lottery_balance = aust_balance.multiply_ratio(
-        pool.lottery_shares + pool.sponsor_shares,
-        pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares,
+        total_user_lottery_shares + pool.sponsor_shares,
+        pool.total_user_shares + pool.sponsor_shares,
     );
 
     // Get the pooled lottery_deposit
@@ -1915,7 +1908,7 @@ fn execute_lottery() {
 
     // Get the amount to redeem
     let amount_to_redeem =
-        pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
+        pooled_lottery_deposits - total_user_lottery_deposits - pool.total_sponsor_amount;
 
     // Divide by the rate to get the number of shares to redeem
     let aust_to_redeem: Uint128 = (amount_to_redeem / Decimal256::permille(RATE)).into();
@@ -3551,7 +3544,7 @@ fn small_withdraw() {
     )
     .unwrap();
 
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_shares + pool.sponsor_shares;
 
     // Shares supply should equal contract_a_balance because no lottery has been executed yet
     assert_eq!(shares_supply, contract_a_balance);
@@ -3592,10 +3585,8 @@ fn small_withdraw() {
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: minted_shares_value,
-            lottery_deposits: minted_shares_value * Decimal256::percent(SPLIT_FACTOR),
+            total_user_shares: minted_shares,
             total_sponsor_amount: Uint256::zero(),
-            lottery_shares: minted_shares * Decimal256::percent(SPLIT_FACTOR),
-            deposit_shares: minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR),
             sponsor_shares: Uint256::zero(),
         }
     );
@@ -3641,7 +3632,7 @@ fn small_withdraw() {
         Addr::unchecked(MOCK_CONTRACT_ADDR),
     )
     .unwrap();
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_shares + pool.sponsor_shares;
 
     println!("{}, {}", shares_supply, contract_a_balance);
     assert_eq!(shares_supply, contract_a_balance);
@@ -3686,22 +3677,13 @@ fn small_withdraw() {
 
     let withdrawn_deposits = minted_shares_value * withdraw_ratio;
     let withdrawn_shares = minted_shares * withdraw_ratio;
-    let withdrawn_lottery_shares = withdrawn_shares * Decimal256::percent(SPLIT_FACTOR);
-    let withdrawn_deposit_shares =
-        withdrawn_shares - withdrawn_shares * Decimal256::percent(SPLIT_FACTOR);
-
-    let lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
-    let deposit_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
             total_deposits: minted_shares_value - withdrawn_deposits,
-            lottery_deposits: minted_shares_value * Decimal256::percent(SPLIT_FACTOR)
-                - withdrawn_deposits * Decimal256::percent(SPLIT_FACTOR),
             total_sponsor_amount: Uint256::zero(),
-            lottery_shares: lottery_shares - withdrawn_lottery_shares,
-            deposit_shares: deposit_shares - withdrawn_deposit_shares,
+            total_user_shares: minted_shares - withdrawn_shares,
             sponsor_shares: Uint256::zero(),
         }
     );
@@ -3755,7 +3737,7 @@ fn small_withdraw_update_exchange_rate() {
     )
     .unwrap();
 
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_shares + pool.sponsor_shares;
 
     // Shares supply should equal contract_a_balance because no lottery has been executed yet
     assert_eq!(shares_supply, contract_a_balance);
@@ -3805,7 +3787,7 @@ fn small_withdraw_update_exchange_rate() {
         Addr::unchecked(MOCK_CONTRACT_ADDR),
     )
     .unwrap();
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_shares + pool.sponsor_shares;
 
     assert_eq!(shares_supply, contract_a_balance);
 }
@@ -3820,10 +3802,13 @@ fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
     )
     .unwrap();
 
+    let total_user_lottery_shares = pool.total_user_shares * Decimal256::percent(SPLIT_FACTOR);
+    let total_user_lottery_deposits = pool.total_deposits * Decimal256::percent(SPLIT_FACTOR);
+
     // Get the aust lottery balance
     let aust_lottery_balance = contract_a_balance.multiply_ratio(
-        pool.lottery_shares + pool.sponsor_shares,
-        pool.deposit_shares + pool.lottery_shares + pool.sponsor_shares,
+        total_user_lottery_shares + pool.sponsor_shares,
+        pool.total_user_shares + pool.sponsor_shares,
     );
 
     // Get the value of the lottery balance
@@ -3831,7 +3816,7 @@ fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
 
     // Calculate the amount of ust to be redeemed for the lottery
     let amount_to_redeem =
-        pooled_lottery_deposits - pool.lottery_deposits - pool.total_sponsor_amount;
+        pooled_lottery_deposits - total_user_lottery_deposits - pool.total_sponsor_amount;
 
     // Calculate the corresponding amount of aust to redeem
     let aust_to_redeem = amount_to_redeem / Decimal256::permille(RATE);

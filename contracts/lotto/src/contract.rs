@@ -138,10 +138,8 @@ pub fn instantiate(
         deps.storage,
         &Pool {
             total_deposits: Uint256::zero(),
+            total_user_shares: Uint256::zero(),
             total_sponsor_amount: Uint256::zero(),
-            lottery_deposits: Uint256::zero(),
-            deposit_shares: Uint256::zero(),
-            lottery_shares: Uint256::zero(),
             sponsor_shares: Uint256::zero(),
         },
     )?;
@@ -385,21 +383,8 @@ pub fn deposit(
     // Increase total_deposits by the value of the minted shares
     pool.total_deposits = pool.total_deposits.add(minted_amount_value);
 
-    // Increase lottery_deposits by the value of the minted shares
-    // times the split factor
-    pool.lottery_deposits = pool
-        .lottery_deposits
-        .add(minted_amount_value * config.split_factor);
-
-    // Increase deposit_shares by the number of minted shares
-    // minus the number of minted shares times the split factor
-    pool.deposit_shares = pool
-        .deposit_shares
-        .add(minted_amount - minted_amount * config.split_factor);
-
-    // Increase the lottery_shares by the number of minted shares
-    // times the split factor
-    pool.lottery_shares = pool.lottery_shares.add(minted_amount * config.split_factor);
+    // Increase total_user_shares by the number of minted shares
+    pool.total_user_shares = pool.total_user_shares.add(minted_amount);
 
     // Update the number of total_tickets
     state.total_tickets = state.total_tickets.add(amount_tickets.into());
@@ -643,7 +628,7 @@ pub fn execute_withdraw(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    let shares_supply = pool.lottery_shares + pool.deposit_shares + pool.sponsor_shares;
+    let shares_supply = pool.total_user_shares + pool.sponsor_shares;
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
@@ -767,22 +752,8 @@ pub fn execute_withdraw(
     // from the depositor
     pool.total_deposits = pool.total_deposits.sub(withdrawn_deposits);
 
-    // Decrease lottery_deposits by the withdrawn_deposits times the split factor
-    // This will cause problems because you can withdraw more than you've added
-    // to lottery_deposits because of rounding
-    pool.lottery_deposits = pool
-        .lottery_deposits
-        .sub(withdrawn_deposits * config.split_factor);
-
-    // Decrease deposit_shares by the withdrawn_deposit_shares
-    // This will cause problems because you can withdrawn more than you've added
-    // to deposit_shares because of rounding
-    pool.deposit_shares = pool.deposit_shares.sub(withdrawn_deposit_shares);
-
-    // Decrease lottery_shares  by the withdrawn_lottery_shares
-    // This will not zero out because you will be withdrawing less than you've added
-    // to lottery_shares because of rounding
-    pool.lottery_shares = pool.lottery_shares.sub(withdrawn_lottery_shares);
+    // Decrease total_user_shares by the withdrawn_shares
+    pool.total_user_shares = pool.total_user_shares.sub(withdrawn_shares);
 
     // Remove withdrawn_tickets from total_tickets
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
@@ -1336,10 +1307,8 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
 
     Ok(PoolResponse {
         total_deposits: pool.total_deposits,
+        total_user_shares: pool.total_user_shares,
         total_sponsor_amount: pool.total_sponsor_amount,
-        lottery_deposits: pool.lottery_deposits,
-        deposit_shares: pool.deposit_shares,
-        lottery_shares: pool.lottery_shares,
         sponsor_shares: pool.sponsor_shares,
     })
 }

@@ -66,22 +66,11 @@ pub struct Pool {
     // - checking for pool solvency
     // - calculating the global reward index
     pub total_deposits: Uint256,
-    // Sum of all user deposits going towards the lottery.
-    // This is a subset of total_deposits, but is NOT necessarily
-    // equal to total_deposits * split_factor due to rounding
-    // This is used for:
-    // - calculating the amount_to_redeem when executing a lottery
-    pub lottery_deposits: Uint256,
-    // Sum of all user shares going towards savings
+    // Sum of all user shares
     // This is used for:
     // - calculating shares_supply to be used for getting depositor_ratio
     // - calculating the percentage of aust going towards the lottery
-    pub deposit_shares: Uint256,
-    // Sum of all user shares going towards the lottery
-    // This is used for:
-    // - calculating shares_supply to be used for getting depositor_ratio
-    // - calculating the percentage of aust going towards the lottery
-    pub lottery_shares: Uint256,
+    pub total_user_shares: Uint256,
     // Sum of all sponsor deposits going towards the lottery.
     // This is the same as the sum of all sponsor deposits
     // because all sponsor deposits go entirely towards the lottery

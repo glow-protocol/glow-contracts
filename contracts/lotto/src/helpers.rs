@@ -15,7 +15,7 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    let total_deposited = pool.total_deposits + pool.total_sponsor_amount;
+    let total_deposited = pool.total_user_deposits + pool.total_sponsor_deposits;
     if !reward_accrued.is_zero() && !total_deposited.is_zero() {
         state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
     }

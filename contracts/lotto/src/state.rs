@@ -65,7 +65,7 @@ pub struct Pool {
     // This is used for
     // - checking for pool solvency
     // - calculating the global reward index
-    pub total_deposits: Uint256,
+    pub total_user_deposits: Uint256,
     // Sum of all user shares
     // This is used for:
     // - calculating shares_supply to be used for getting depositor_ratio
@@ -78,14 +78,14 @@ pub struct Pool {
     // - checking for pool solvency
     // - calculating the global reward index
     // - calculating the amount to redeem when executing a lottery
-    pub total_sponsor_amount: Uint256,
+    pub total_sponsor_deposits: Uint256,
     // Sum of all sponsor shares going towards the lottery.
     // This is the same as the sum of all sponsor shares
     // because all sponsor shares go entirely towards the lottery
     // This is used for:
     // - calculating shares_supply to be used for getting depositor_ratio
     // - calculating the percentage of aust going towards the lottery
-    pub sponsor_shares: Uint256,
+    pub total_sponsor_shares: Uint256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -26,6 +26,7 @@ use cw0::{Duration, Expiration, HOUR, WEEK};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Mul, Sub};
+use std::str::FromStr;
 
 const TEST_CREATOR: &str = "creator";
 const ANCHOR: &str = "anchor";
@@ -36,7 +37,7 @@ const DISTRIBUTOR_ADDR: &str = "distributor";
 const ORACLE_ADDR: &str = "oracle";
 
 pub const RATE: u64 = 1023; // as a permille
-const SMALL_TICKET_PRICE: u64 = 9590;
+const SMALL_TICKET_PRICE: u64 = 10;
 const TICKET_PRICE: u64 = 10_000; // 10 * 10^6
 
 const SPLIT_FACTOR: u64 = 75; // as a %
@@ -3909,14 +3910,16 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
+    let special_rate = Decimal256::from_str(".05234").unwrap();
+
     // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+    deps.querier.with_exchange_rate(special_rate);
 
     // get env
     let env = mock_env();
 
     // mock instantiate the contracts
-    mock_instantiate(deps.as_mut());
+    mock_instantiate_small_ticket_price(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
     // User deposits and buys one ticket -------------------
@@ -3924,7 +3927,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint256::from(TICKET_PRICE).into(),
+            amount: Uint256::from(SMALL_TICKET_PRICE).into(),
         }],
     );
     let msg = ExecuteMsg::Deposit {
@@ -3935,9 +3938,9 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     // Add the funds to the contract address -------------------
 
     // Calculate the number of minted_shares
-    let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
+    let minted_shares = Uint256::from(SMALL_TICKET_PRICE) / special_rate;
 
-    let minted_shares_value = minted_shares * Decimal256::permille(RATE);
+    let minted_shares_value = minted_shares * special_rate;
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -4001,11 +4004,11 @@ pub fn anchor_pool_smaller_than_total_deposits() {
         }
     );
 
-    // Address withdraws a small amount of money ----------------
+    // Address withdraws a quarter of their money ----------------
 
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Withdraw {
-        amount: Some(10u128.into()),
+        amount: Some((SMALL_TICKET_PRICE / 4).into()),
         instant: None,
     };
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
@@ -4033,6 +4036,8 @@ pub fn anchor_pool_smaller_than_total_deposits() {
         )],
     )]);
 
+    // Verify that Anchor Pool is solvent
+
     // Compare shares_supply with contract_a_balance
     let pool = query_pool(deps.as_ref()).unwrap();
 
@@ -4042,61 +4047,12 @@ pub fn anchor_pool_smaller_than_total_deposits() {
         Addr::unchecked(MOCK_CONTRACT_ADDR),
     )
     .unwrap();
-    let shares_supply = pool.total_user_shares + pool.total_sponsor_shares;
 
-    println!("{}, {}", shares_supply, contract_a_balance);
-    assert_eq!(shares_supply, contract_a_balance);
-
-    // Check that the depositor info was updated correctly
-    assert_eq!(
-        read_depositor_info(
-            deps.as_ref().storage,
-            &deps.api.addr_validate("addr0001").unwrap()
-        ),
-        DepositorInfo {
-            deposit_amount: minted_shares_value
-                - Uint256::from(sent_amount) * Decimal256::permille(RATE),
-            shares: minted_shares - Uint256::from(sent_amount),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
-            tickets: vec![],
-            unbonding_info: vec![Claim {
-                amount: Uint256::from(sent_amount) * Decimal256::permille(RATE),
-                release_at: WEEK.after(&env.block),
-            }]
-        }
-    );
-
-    assert_eq!(
-        query_state(deps.as_ref(), mock_env(), None).unwrap(),
-        StateResponse {
-            total_tickets: Uint256::from(0u64),
-            total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
-            current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
-            next_lottery_exec_time: Expiration::Never {},
-            next_epoch: HOUR.mul(3).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
-        }
-    );
-
-    let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), minted_shares_value);
-
-    let withdrawn_deposits = minted_shares_value * withdraw_ratio;
-    let withdrawn_shares = minted_shares * withdraw_ratio;
-
-    assert_eq!(
-        query_pool(deps.as_ref()).unwrap(),
-        PoolResponse {
-            total_user_deposits: minted_shares_value - withdrawn_deposits,
-            total_sponsor_deposits: Uint256::zero(),
-            total_user_shares: minted_shares - withdrawn_shares,
-            total_sponsor_shares: Uint256::zero(),
-        }
-    );
+    // Assert that Lotto pool is solvent
+    assert!(
+        Uint256::from(contract_a_balance) * special_rate
+            >= pool.total_user_deposits + pool.total_sponsor_deposits
+    )
 }
 
 fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {

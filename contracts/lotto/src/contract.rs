@@ -4,7 +4,7 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
-    compute_sponsor_reward, is_valid_sequence, pseudo_random_seq,
+    compute_sponsor_reward, is_valid_sequence, pseudo_random_seq, uint_times_decimal_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -714,14 +714,9 @@ pub fn execute_withdraw(
 
     let tickets_amount = depositor.tickets.len() as u128;
 
-    // Check for rounding error
-    let rounded_tickets = Uint256::from(tickets_amount) * withdraw_ratio;
-    let decimal_tickets = Decimal256::from_uint256(Uint256::from(tickets_amount)) * withdraw_ratio;
-
-    let mut withdrawn_tickets: u128 = rounded_tickets.into();
-    if decimal_tickets != Decimal256::from_uint256(rounded_tickets) {
-        withdrawn_tickets += 1u128;
-    }
+    // Get ceiling of withdrawn tickets
+    let withdrawn_tickets: u128 =
+        uint_times_decimal_ceil(Uint256::from(tickets_amount), withdraw_ratio).into();
 
     if withdrawn_tickets > tickets_amount {
         return Err(ContractError::WithdrawingTooManyTickets {});
@@ -739,8 +734,8 @@ pub fn execute_withdraw(
         })?;
     }
 
-    let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
-    let withdrawn_shares = depositor.shares * withdraw_ratio;
+    let withdrawn_deposits = uint_times_decimal_ceil(depositor.deposit_amount, withdraw_ratio);
+    let withdrawn_shares = uint_times_decimal_ceil(depositor.shares, withdraw_ratio);
 
     // Update depositor info
     depositor.deposit_amount = depositor.deposit_amount.sub(withdrawn_deposits);

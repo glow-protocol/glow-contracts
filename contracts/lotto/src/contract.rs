@@ -739,8 +739,6 @@ pub fn execute_withdraw(
 
     let withdrawn_deposits = depositor.deposit_amount * withdraw_ratio;
     let withdrawn_shares = depositor.shares * withdraw_ratio;
-    let withdrawn_lottery_shares = withdrawn_shares * config.split_factor;
-    let withdrawn_deposit_shares = withdrawn_shares - withdrawn_shares * config.split_factor;
 
     // Update depositor info
     depositor.deposit_amount = depositor.deposit_amount.sub(withdrawn_deposits);

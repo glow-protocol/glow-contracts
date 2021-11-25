@@ -3477,7 +3477,7 @@ fn execute_epoch_operations() {
             to_address: GOV_ADDR.to_string(),
             amount: vec![Coin {
                 denom: DENOM.to_string(),
-                amount: Uint128::from(496u128), // 1% tax
+                amount: Uint128::from(495u128), // 1% tax
             }],
         }))]
     );

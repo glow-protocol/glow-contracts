@@ -734,6 +734,8 @@ pub fn execute_withdraw(
         })?;
     }
 
+    // Take the ceil when calculating withdrawn_deposits and withdrawn_shares
+    // because we will be subtracting with this value and don't want to under subtract
     let withdrawn_deposits = uint_times_decimal_ceil(depositor.deposit_amount, withdraw_ratio);
     let withdrawn_shares = uint_times_decimal_ceil(depositor.shares, withdraw_ratio);
 

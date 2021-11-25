@@ -61,12 +61,31 @@ pub struct State {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    pub total_deposits: Uint256,
-    pub total_sponsor_amount: Uint256,
-    pub lottery_deposits: Uint256,
-    pub lottery_shares: Uint256,
-    pub deposit_shares: Uint256,
-    pub sponsor_shares: Uint256,
+    // Sum of all user deposits
+    // This is used for
+    // - checking for pool solvency
+    // - calculating the global reward index
+    pub total_user_deposits: Uint256,
+    // Sum of all user shares
+    // This is used for:
+    // - calculating shares_supply to be used for getting depositor_ratio
+    // - calculating the percentage of aust going towards the lottery
+    pub total_user_shares: Uint256,
+    // Sum of all sponsor deposits going towards the lottery.
+    // This is the same as the sum of all sponsor deposits
+    // because all sponsor deposits go entirely towards the lottery
+    // This is used for:
+    // - checking for pool solvency
+    // - calculating the global reward index
+    // - calculating the amount to redeem when executing a lottery
+    pub total_sponsor_deposits: Uint256,
+    // Sum of all sponsor shares going towards the lottery.
+    // This is the same as the sum of all sponsor shares
+    // because all sponsor shares go entirely towards the lottery
+    // This is used for:
+    // - calculating shares_supply to be used for getting depositor_ratio
+    // - calculating the percentage of aust going towards the lottery
+    pub total_sponsor_shares: Uint256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -4011,7 +4011,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
         amount: Some((SMALL_TICKET_PRICE / 4).into()),
         instant: None,
     };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Message for redeem amount operation of aUST
 
@@ -4050,8 +4050,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
 
     // Assert that Lotto pool is solvent
     assert!(
-        Uint256::from(contract_a_balance) * special_rate
-            >= pool.total_user_deposits + pool.total_sponsor_deposits
+        contract_a_balance * special_rate >= pool.total_user_deposits + pool.total_sponsor_deposits
     )
 }
 

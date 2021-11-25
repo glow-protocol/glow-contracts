@@ -25,8 +25,7 @@ use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use std::ops::{Add, Mul};
-use std::str::FromStr;
+use std::ops::{Add, Mul, Sub};
 
 const TEST_CREATOR: &str = "creator";
 const ANCHOR: &str = "anchor";
@@ -1074,7 +1073,7 @@ fn withdraw() {
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
-                amount: Uint256::from(10000000u128) / Decimal256::permille(RATE)
+                amount: Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
                     * Decimal256::permille(RATE),
                 release_at: WEEK.after(&mock_env().block),
             }]
@@ -1130,7 +1129,7 @@ fn withdraw() {
             attr("redeem_amount_anchor", shares.to_string()),
             attr(
                 "redeem_stable_amount",
-                (Uint256::from(10000000u128) / Decimal256::permille(RATE)
+                (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
                     * Decimal256::permille(RATE))
                 .to_string()
             ),
@@ -1318,6 +1317,13 @@ fn instant_withdraw() {
     // Correct withdraw, user has 1 ticket to be withdrawn
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
+    let aust_to_redeem = minted_shares;
+
+    let mut return_amount = aust_to_redeem * Decimal256::permille(RATE);
+
+    let withdrawal_fee = return_amount * Decimal256::percent(INSTANT_WITHDRAWAL_FEE);
+    return_amount = return_amount.sub(withdrawal_fee);
+
     let empty_addr: Vec<Addr> = vec![];
 
     // Check address of sender was removed correctly in the sequence bucket
@@ -1384,7 +1390,7 @@ fn instant_withdraw() {
                 to_address: info.sender.to_string(),
                 amount: vec![Coin {
                     denom: "uusd".to_string(),
-                    amount: Uint128::from(9000000u128)
+                    amount: return_amount.into()
                 }],
             }))
         ]
@@ -1397,10 +1403,7 @@ fn instant_withdraw() {
             attr("depositor", "addr0001"),
             attr("tickets_amount", 1u64.to_string()),
             attr("redeem_amount_anchor", minted_shares.to_string()),
-            attr(
-                "redeem_stable_amount",
-                Decimal256::from_str("9000000").unwrap().to_string()
-            ),
+            attr("redeem_stable_amount", return_amount.to_string()),
             attr(
                 "instant_withdrawal_fee",
                 (minted_shares_value * Decimal256::percent(INSTANT_WITHDRAWAL_FEE)).to_string()
@@ -1543,7 +1546,7 @@ fn claim() {
             attr("depositor", "addr0001"),
             attr(
                 "redeemed_amount",
-                (Uint256::from(10_000_000u128) / Decimal256::permille(RATE)
+                (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
                     * Decimal256::permille(RATE))
                 .to_string()
             ),

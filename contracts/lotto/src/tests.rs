@@ -2,7 +2,7 @@ use crate::contract::{
     execute, instantiate, query, query_config, query_pool, query_state, query_ticket_info,
     INITIAL_DEPOSIT_AMOUNT,
 };
-use crate::helpers::calculate_winner_prize;
+use crate::helpers::{calculate_winner_prize, uint256_times_decimal256_ceil};
 use crate::mock_querier::{mock_dependencies, mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, DepositorInfo,
@@ -38,7 +38,7 @@ const ORACLE_ADDR: &str = "oracle";
 
 pub const RATE: u64 = 1023; // as a permille
 const SMALL_TICKET_PRICE: u64 = 10;
-const TICKET_PRICE: u64 = 10_000; // 10 * 10^6
+const TICKET_PRICE: u64 = 10_000_000; // 10 * 10^6
 
 const SPLIT_FACTOR: u64 = 75; // as a %
 const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
@@ -3215,8 +3215,8 @@ fn claim_rewards_multiple_depositors() {
     let each_deposit_amount =
         Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE) * Decimal256::permille(RATE);
 
-    // calculate the total minted_amount_value
-    let minted_amount_value = Uint256::from(2u128) * each_deposit_amount;
+    // calculate the total minted_shares_value
+    let minted_shares_value = Uint256::from(2u128) * each_deposit_amount;
 
     // After 100 blocks
     env.block.height += 100;
@@ -3264,7 +3264,7 @@ fn claim_rewards_multiple_depositors() {
     assert_eq!(
         res.reward_index,
         Decimal256::from_uint256(Uint256::from(100u128))
-            / Decimal256::from_uint256(minted_amount_value)
+            / Decimal256::from_uint256(minted_shares_value)
     );
 
     // Checking USER 1 state is correct
@@ -3686,7 +3686,7 @@ fn small_withdraw() {
     let shares_supply = pool.total_user_shares + pool.total_sponsor_shares;
 
     println!("{}, {}", shares_supply, contract_a_balance);
-    assert_eq!(shares_supply, contract_a_balance);
+    assert_eq!(shares_supply, contract_a_balance - Uint256::one());
 
     // Check that the depositor info was updated correctly
     assert_eq!(
@@ -3696,8 +3696,11 @@ fn small_withdraw() {
         ),
         DepositorInfo {
             deposit_amount: minted_shares_value
-                - Uint256::from(sent_amount) * Decimal256::permille(RATE),
-            shares: minted_shares - Uint256::from(sent_amount),
+                - uint256_times_decimal256_ceil(
+                    Uint256::from(sent_amount),
+                    Decimal256::permille(RATE)
+                ),
+            shares: minted_shares - Uint256::from(sent_amount) - Uint256::one(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -3726,8 +3729,8 @@ fn small_withdraw() {
 
     let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), minted_shares_value);
 
-    let withdrawn_deposits = minted_shares_value * withdraw_ratio;
-    let withdrawn_shares = minted_shares * withdraw_ratio;
+    let withdrawn_deposits = uint256_times_decimal256_ceil(minted_shares_value, withdraw_ratio);
+    let withdrawn_shares = uint256_times_decimal256_ceil(minted_shares, withdraw_ratio);
 
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
@@ -3840,7 +3843,7 @@ fn small_withdraw_update_exchange_rate() {
     .unwrap();
     let shares_supply = pool.total_user_shares + pool.total_sponsor_shares;
 
-    assert_eq!(shares_supply, contract_a_balance);
+    assert_eq!(shares_supply, contract_a_balance - Uint256::one());
 }
 
 #[test]

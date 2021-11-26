@@ -775,7 +775,7 @@ pub fn execute_withdraw(
     // Decrease the total_deposits by the deposits withdrawn
     // and total_user_shares by the shares withdrawn
     // By over subtracting from total_user_deposits and total_user_shares (but never enough to underflow),
-    // we are making sure that the total_user_deposits + total_user_shares holds <= contract_a_balance * rate condition
+    // we are making sure that the total_user_deposits + total_user_shares holds <= floor(contract_a_balance * rate) condition
     // is preserved
 
     // Proof assuming that total_user_deposits = deposit_amount (so depositor_ratio = 1) and that total_sponsor_deposits is 0:

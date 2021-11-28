@@ -323,8 +323,6 @@ pub fn deposit(
     let post_tax_deposit_amount = Uint256::from(net_coin_amount.amount);
 
     // Get the amount of aUST entitled to the user from the deposit
-    // Because of flooring the value of these minted_shares may be less than the post_tax_deposit_amount
-    // which is why we calculate minted_shares_value and use that for further calculations
     let minted_shares = post_tax_deposit_amount / epoch_state.exchange_rate;
 
     // Get the value of the minted shares of aUST after accounting for rounding errors
@@ -664,8 +662,6 @@ pub fn execute_withdraw(
     )?;
 
     // Get the amount of aust that belongs to the depositor
-    // Because of flooring, this value may be less than the depositor is entitled to
-    // but that is ok.
     let aust_amount = depositor_ratio * Uint256::from(contract_a_balance);
 
     // Get the aust exchange rate
@@ -677,8 +673,6 @@ pub fn execute_withdraw(
     .exchange_rate;
 
     // Get the value of the aust that belongs to the depositor
-    // Because of flooring, this value may be less than the depositor is entitled to
-    // but that is ok.
     let pooled_deposits = aust_amount * rate;
 
     // Calculate ratio of deposits, shares and tickets to withdraw
@@ -692,14 +686,9 @@ pub fn execute_withdraw(
     }
 
     // Get the amount of aust to redeem
-    // Because of flooring, this amount of aust may be worth less than
-    // the desired withdraw amount but that is ok.
     let aust_to_redeem = aust_amount * withdraw_ratio;
 
     // Get the value of the redeemed aust. aust_to_redeem * rate = pooled_deposits * withdraw_ratio
-    // Because of flooring, this amount may be less than the raw value of the aust_to_redeem.
-    // This means that redeemed_amount / pooled_deposits may be less than the withdraw_ratio
-    // but that is ok.
     let redeemed_amount = aust_to_redeem * rate;
 
     // Get the value of the returned amount after accounting for taxes.

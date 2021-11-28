@@ -376,27 +376,13 @@ pub fn deposit(
         depositor_info.tickets.push(combination);
     }
 
-    // Preserved conditions:
-    // total_user_deposits + total_sponsor_deposits <= floor(contract_a_balance * rate)
-    // deposit_amount <= floor(total_user_deposits * depositor_ratio)
-
-    // Update depositor_info
-
     // Increase deposit_amount by the value of the minted_shares
-    // Because of flooring, this increases deposit_amount by the value of the minted shares
-    // but may cause deposit_amount to become less than contract_a_balance * depositor_ratio * rate
-    // if a user does two deposits back to back. This is OK, but something to keep in mind.
     depositor_info.deposit_amount = depositor_info.deposit_amount.add(minted_shares_value);
 
-    // Update depositor_info with the post tax shares amount
+    // Update depositor_info by the number of minted shares
     depositor_info.shares = depositor_info.shares.add(minted_shares);
 
-    // Update pool
-
     // Increase total_deposits by the value of the minted shares
-    // Because of flooring, this increases total_user_deposits by the value of the minted shares
-    // but may cause total_user_deposits to become less than contract_a_balance * rate
-    // if a user does two deposits back to back. This is OK, but something to keep in mind.
     pool.total_user_deposits = pool.total_user_deposits.add(minted_shares_value);
 
     // Increase total_user_shares by the number of minted shares
@@ -711,11 +697,6 @@ pub fn execute_withdraw(
     let aust_to_redeem = aust_amount * withdraw_ratio;
 
     // Get the value of the redeemed aust. aust_to_redeem * rate = pooled_deposits * withdraw_ratio
-    // rate * aust_to_redeem =
-    // rate * (aust_amount * withdraw_ratio) =
-    // rate * aust_amount * withdraw_ratio =
-    // (rate * aust_amount) * withdraw_ratio =
-    // pooled_deposits * withdraw_ratio
     // Because of flooring, this amount may be less than the raw value of the aust_to_redeem.
     // This means that redeemed_amount / pooled_deposits may be less than the withdraw_ratio
     // but that is ok.
@@ -767,27 +748,11 @@ pub fn execute_withdraw(
     let withdrawn_shares = uint256_times_decimal256_ceil(depositor.shares, withdraw_ratio);
 
     // Update depositor info
+
     depositor.deposit_amount = depositor.deposit_amount.sub(withdrawn_deposits);
     depositor.shares = depositor.shares.sub(withdrawn_shares);
 
     // Update pool
-
-    // Decrease the total_deposits by the deposits withdrawn
-    // and total_user_shares by the shares withdrawn
-    // By over subtracting from total_user_deposits and total_user_shares (but never enough to underflow),
-    // we are making sure that the total_user_deposits + total_user_shares holds <= floor(contract_a_balance * rate) condition
-    // is preserved
-
-    // Proof assuming that total_user_deposits = deposit_amount (so depositor_ratio = 1) and that total_sponsor_deposits is 0:
-    // total_user_deposits - withdrawn_deposits <= floor((contract_a_balance - aust_to_redeem) * rate)
-    // iff total_user_deposits - ceil(deposit_amount * withdraw_ratio) <= floor((contract_a_balance - floor(floor(contract_a_balance * depositor_ratio) * withdraw_ratio)) * rate)
-    // iff total_user_deposits - ceil(total_user_deposits * withdraw_ratio) <= floor((contract_a_balance - floor(contract_a_balance * withdraw_ratio)) * rate)
-    // if total_user_deposits - ceil(total_user_deposits * withdraw_ratio) <= (contract_a_balance - floor(contract_a_balance * withdraw_ratio)) * rate
-    // if total_user_deposits - total_user_deposits * withdraw_ratio <= contract_a_balance * rate - floor(contract_a_balance * withdraw_ratio) * rate
-    // if total_user_deposits - total_user_deposits * withdraw_ratio <= contract_a_balance * rate - contract_a_balance * withdraw_ratio * rate
-    // if total_user_deposits * (1 - withdraw_ratio) <= (contract_a_balance * rate) * (1 - rate)
-    // if total_user_deposits <= contract_a_balance  * rate
-    // if total_user_deposits <= floor(contract_a_balance  * rate)
 
     pool.total_user_deposits = pool.total_user_deposits.sub(withdrawn_deposits);
     pool.total_user_shares = pool.total_user_shares.sub(withdrawn_shares);

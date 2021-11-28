@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LotteryInfoResponse",
+  "type": "object",
+  "required": [
+    "awarded",
+    "lottery_id",
+    "number_winners",
+    "page",
+    "rand_round",
+    "sequence",
+    "timestamp",
+    "total_prizes"
+  ],
+  "properties": {
+    "awarded": {
+      "type": "boolean"
+    },
+    "lottery_id": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "number_winners": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0.0
+      },
+      "maxItems": 6,
+      "minItems": 6
+    },
+    "page": {
+      "type": "string"
+    },
+    "rand_round": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "sequence": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "total_prizes": {
+      "$ref": "#/definitions/Uint256"
+    }
+  },
+  "definitions": {
+    "Uint256": {
+      "type": "string"
+    }
+  }
+}

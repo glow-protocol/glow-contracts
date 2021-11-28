@@ -711,7 +711,7 @@ pub fn execute_withdraw(
         .amount,
     );
 
-    // Validate that value of the contracts aust is always at least the
+    // Validate that value of the contract's aust is always at least the
     // sum of the user and sponsor deposits.
     if Uint256::from(contract_a_balance) * rate
         < (pool.total_user_deposits + pool.total_sponsor_deposits)

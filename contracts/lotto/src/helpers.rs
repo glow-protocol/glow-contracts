@@ -129,3 +129,15 @@ pub fn count_seq_matches(a: &str, b: &str) -> u8 {
     }
     count
 }
+
+pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
+    // Check for rounding error
+    let rounded_output = a * b;
+    let decimal_output = Decimal256::from_uint256(a) * b;
+
+    if decimal_output != Decimal256::from_uint256(rounded_output) {
+        rounded_output + Uint256::one()
+    } else {
+        rounded_output
+    }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PoolResponse",
+  "type": "object",
+  "required": [
+    "total_sponsor_deposits",
+    "total_sponsor_shares",
+    "total_user_deposits",
+    "total_user_shares"
+  ],
+  "properties": {
+    "total_sponsor_deposits": {
+      "$ref": "#/definitions/Uint256"
+    },
+    "total_sponsor_shares": {
+      "$ref": "#/definitions/Uint256"
+    },
+    "total_user_deposits": {
+      "$ref": "#/definitions/Uint256"
+    },
+    "total_user_shares": {
+      "$ref": "#/definitions/Uint256"
+    }
+  },
+  "definitions": {
+    "Uint256": {
+      "type": "string"
+    }
+  }
+}

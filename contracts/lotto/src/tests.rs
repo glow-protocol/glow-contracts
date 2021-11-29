@@ -4057,6 +4057,185 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     )
 }
 
+#[test]
+pub fn validate_split_factor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    let special_rate = Decimal256::from_str("1").unwrap();
+    let decimal_split_factor = Decimal256::percent(SPLIT_FACTOR);
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(special_rate);
+
+    // get env
+    let mut env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate_small_ticket_price(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    // Advance one week in time
+    if let Duration::Time(time) = WEEK {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
+    // User deposits and buys one ticket -------------------
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(TICKET_PRICE).into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![String::from("23456")],
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // Add the funds to the contract address -------------------
+
+    // Calculate the number of minted_shares
+    let minted_shares = Uint256::from(TICKET_PRICE) / special_rate;
+
+    let minted_shares_value = minted_shares * special_rate;
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_shares.into())],
+    )]);
+
+    // Double the anchor rate
+    let special_rate = Decimal256::from_str("2").unwrap();
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(special_rate);
+
+    // Execute the lottery
+
+    // Execute lottery, now with tickets
+    let lottery_msg = ExecuteMsg::ExecuteLottery {};
+    let info = mock_info("addr0001", &[]);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
+
+    // Check how much aust was redeemed
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
+        } else {
+            panic!("DO NOT ENTER HERE")
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
+
+    // Verify that the value of the redeemed aust equals SPLIT_FACTOR times the appreciation of the shares
+    assert_eq!(
+        Uint256::from(sent_amount) * special_rate,
+        minted_shares_value * decimal_split_factor
+    );
+
+    // Get the contract_a_balance
+
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    // Update contract_balance
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(contract_a_balance - sent_amount.into()).into(),
+        )],
+    )]);
+
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
+    // Execute prize
+    let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
+    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg.clone()).unwrap();
+
+    // Now again
+
+    // Calculate the number of minted_shares
+    let minted_shares = minted_shares * decimal_split_factor;
+
+    let minted_shares_value = minted_shares_value * decimal_split_factor;
+
+    // Advance one week in time
+    if let Duration::Time(time) = WEEK {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
+    // Double the anchor rate
+    let special_rate = Decimal256::from_str("4").unwrap();
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(special_rate);
+
+    // Execute the lottery
+
+    // Execute lottery, now with tickets
+    let lottery_msg = ExecuteMsg::ExecuteLottery {};
+    let info = mock_info("addr0001", &[]);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
+
+    // Check how much aust was redeemed
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
+        } else {
+            panic!("DO NOT ENTER HERE")
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
+
+    // Verify that the value of the redeemed aust equals SPLIT_FACTOR times the appreciation of the shares
+    assert_eq!(
+        Uint256::from(sent_amount) * special_rate,
+        minted_shares_value * decimal_split_factor
+    );
+
+    // Get the contract_a_balance
+
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    // Update contract_balance
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(contract_a_balance - sent_amount.into()).into(),
+        )],
+    )]);
+
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
+    // Execute prize
+    let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
+    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg.clone()).unwrap();
+}
+
 fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
     let pool = query_pool(deps).unwrap();
 

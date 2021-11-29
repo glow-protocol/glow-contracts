@@ -4091,7 +4091,7 @@ pub fn validate_split_factor() {
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("23456")],
     };
-    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Add the funds to the contract address -------------------
 
@@ -4162,12 +4162,12 @@ pub fn validate_split_factor() {
 
     // Execute prize
     let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
-    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg.clone()).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg).unwrap();
 
     // Now again
 
     // Calculate the number of minted_shares
-    let minted_shares = minted_shares * decimal_split_factor;
+    let _minted_shares = minted_shares * decimal_split_factor;
 
     let minted_shares_value = minted_shares_value * decimal_split_factor;
 
@@ -4233,7 +4233,7 @@ pub fn validate_split_factor() {
 
     // Execute prize
     let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
-    let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg.clone()).unwrap();
+    let _res = execute(deps.as_mut(), env, info, execute_prize_msg).unwrap();
 }
 
 fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {

@@ -1122,7 +1122,7 @@ fn withdraw() {
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: ANCHOR.to_string(),
-                amount: sent_amount.into(),
+                amount: sent_amount,
                 msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
             })
             .unwrap(),
@@ -1996,7 +1996,7 @@ fn execute_lottery() {
     println!("{:?}", pool);
 
     // Lottery balance equals aust_balance - savings_shares
-    let aust_lottery_balance = Uint256::from(aust_balance) - pool.total_user_savings_shares;
+    let aust_lottery_balance = aust_balance - pool.total_user_savings_shares;
 
     // Get the pooled lottery_deposit
     let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
@@ -3838,7 +3838,7 @@ fn small_withdraw() {
         ),
         DepositorInfo {
             lotto_deposit: minted_lotto_shares_value - withdrawn_lotto_deposits,
-            savings_shares: minted_savings_shares - Uint256::from(withdrawn_savings_shares),
+            savings_shares: minted_savings_shares - withdrawn_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -4378,7 +4378,7 @@ fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
     .unwrap();
 
     // Lottery balance equals aust_balance - savings_shares
-    let aust_lottery_balance = Uint256::from(contract_a_balance) - pool.total_user_savings_shares;
+    let aust_lottery_balance = contract_a_balance - pool.total_user_savings_shares;
 
     // Get the value of the lottery balance
     let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);

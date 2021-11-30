@@ -65,7 +65,7 @@ pub struct Pool {
     // This is used for
     // - checking for pool solvency
     // - calculating the global reward index
-    pub total_user_lotto_deposits: Uint256,
+    pub total_user_lottery_deposits: Uint256,
     // Sum of all user shares
     // This is used for:
     // - calculating shares_supply to be used for getting depositor_ratio
@@ -78,12 +78,12 @@ pub struct Pool {
     // - checking for pool solvency
     // - calculating the global reward index
     // - calculating the amount to redeem when executing a lottery
-    pub total_sponsor_deposits: Uint256,
+    pub total_sponsor_lottery_deposits: Uint256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    pub lotto_deposit: Uint256,
+    pub lottery_deposit: Uint256,
     pub savings_shares: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
@@ -93,7 +93,7 @@ pub struct DepositorInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfo {
-    pub lotto_deposit: Uint256,
+    pub lottery_deposit: Uint256,
     pub pending_rewards: Decimal256,
     pub reward_index: Decimal256,
 }
@@ -158,7 +158,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
     match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
         _ => DepositorInfo {
-            lotto_deposit: Uint256::zero(),
+            lottery_deposit: Uint256::zero(),
             savings_shares: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -180,7 +180,7 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
     match bucket_read(storage, PREFIX_SPONSOR).load(sponsor.as_bytes()) {
         Ok(v) => v,
         _ => SponsorInfo {
-            lotto_deposit: Uint256::zero(),
+            lottery_deposit: Uint256::zero(),
             pending_rewards: Decimal256::zero(),
             reward_index: Decimal256::zero(),
         },
@@ -205,8 +205,8 @@ pub fn read_depositors(
             let depositor = String::from_utf8(k).unwrap();
             Ok(DepositorInfoResponse {
                 depositor,
-                deposit_amount: v.lotto_deposit,
-                shares: v.savings_shares,
+                lottery_deposit: v.lottery_deposit,
+                savings_shares: v.savings_shares,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
                 tickets: v.tickets,

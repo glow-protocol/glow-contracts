@@ -244,9 +244,9 @@ fn proper_initialization() {
     assert_eq!(
         pool,
         PoolResponse {
-            total_user_lotto_deposits: Uint256::zero(),
+            total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_shares: Uint256::zero(),
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         }
     );
 
@@ -471,10 +471,10 @@ fn deposit() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
@@ -497,7 +497,7 @@ fn deposit() {
             &deps.api.addr_validate("addr0000").unwrap()
         ),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -525,9 +525,9 @@ fn deposit() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lotto_deposits: minted_lotto_shares_value,
+            total_user_lottery_deposits: minted_lottery_shares_value,
             total_user_savings_shares: minted_savings_shares,
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         }
     );
 
@@ -828,10 +828,10 @@ fn gift_tickets() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Check address of sender was stored correctly in both sequence buckets
     assert_eq!(
@@ -854,7 +854,7 @@ fn gift_tickets() {
             &deps.api.addr_validate("addr1111").unwrap()
         ),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -882,9 +882,9 @@ fn gift_tickets() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lotto_deposits: minted_lotto_shares_value,
+            total_user_lottery_deposits: minted_lottery_shares_value,
             total_user_savings_shares: minted_savings_shares,
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         }
     );
 
@@ -968,9 +968,9 @@ fn sponsor() {
 
     let minted_shares_value = minted_shares * Decimal256::permille(RATE);
 
-    assert_eq!(sponsor_info.lotto_deposit, minted_shares_value);
+    assert_eq!(sponsor_info.lottery_deposit, minted_shares_value);
 
-    assert_eq!(pool.total_sponsor_deposits, minted_shares_value);
+    assert_eq!(pool.total_sponsor_lottery_deposits, minted_shares_value);
 
     // withdraw sponsor
     let app_shares = net_amount / Decimal256::permille(RATE);
@@ -991,8 +991,8 @@ fn sponsor() {
 
     let pool = query_pool(deps.as_ref()).unwrap();
 
-    assert_eq!(sponsor_info.lotto_deposit, Uint256::zero());
-    assert_eq!(pool.total_sponsor_deposits, Uint256::zero());
+    assert_eq!(sponsor_info.lottery_deposit, Uint256::zero());
+    assert_eq!(pool.total_sponsor_lottery_deposits, Uint256::zero());
 }
 
 #[test]
@@ -1078,7 +1078,7 @@ fn withdraw() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            lotto_deposit: Uint256::zero(),
+            lottery_deposit: Uint256::zero(),
             savings_shares: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -1109,9 +1109,9 @@ fn withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lotto_deposits: Uint256::zero(),
+            total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_shares: Uint256::zero(),
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         }
     );
 
@@ -1325,10 +1325,10 @@ fn instant_withdraw() {
     let _minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let _minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let _minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Get the amount to be withdrawn
     let depositor =
@@ -1336,7 +1336,7 @@ fn instant_withdraw() {
 
     // Calculate the depositor's balance
     let depositor_balance =
-        depositor.savings_shares * Decimal256::permille(RATE) + depositor.lotto_deposit;
+        depositor.savings_shares * Decimal256::permille(RATE) + depositor.lottery_deposit;
 
     let aust_to_redeem = depositor_balance / Decimal256::permille(RATE);
     let mut return_amount = aust_to_redeem * Decimal256::permille(RATE);
@@ -1366,7 +1366,7 @@ fn instant_withdraw() {
     assert_eq!(
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),
         DepositorInfo {
-            lotto_deposit: Uint256::zero(),
+            lottery_deposit: Uint256::zero(),
             savings_shares: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -1394,9 +1394,9 @@ fn instant_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lotto_deposits: Uint256::zero(),
+            total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_shares: Uint256::zero(),
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         }
     );
 
@@ -1482,7 +1482,7 @@ fn claim() {
     let pool = query_pool(deps.as_ref()).unwrap();
     println!("shares: {}", shares);
     println!("pooled_deposits: {}", shares * Decimal256::permille(RATE));
-    println!("total deposits: {}", pool.total_user_lotto_deposits);
+    println!("total deposits: {}", pool.total_user_lottery_deposits);
 
     // Get the number of minted shares
     let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
@@ -1491,10 +1491,10 @@ fn claim() {
     let _minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let _minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let _minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Get the amount to be withdrawn
     let depositor =
@@ -1502,7 +1502,7 @@ fn claim() {
 
     // Calculate the depositor's balance
     let depositor_balance =
-        depositor.savings_shares * Decimal256::permille(RATE) + depositor.lotto_deposit;
+        depositor.savings_shares * Decimal256::permille(RATE) + depositor.lottery_deposit;
 
     let redeemed_amount =
         depositor_balance / Decimal256::permille(RATE) * Decimal256::permille(RATE);
@@ -1565,7 +1565,7 @@ fn claim() {
     assert_eq!(
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap()),
         DepositorInfo {
-            lotto_deposit: Uint256::zero(),
+            lottery_deposit: Uint256::zero(),
             savings_shares: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -1635,16 +1635,16 @@ fn claim_lottery_single_winner() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -2002,8 +2002,9 @@ fn execute_lottery() {
     let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
 
     // Get the amount to redeem
-    let amount_to_redeem =
-        pooled_lottery_deposits - pool.total_user_lotto_deposits - pool.total_sponsor_deposits;
+    let amount_to_redeem = pooled_lottery_deposits
+        - pool.total_user_lottery_deposits
+        - pool.total_sponsor_lottery_deposits;
 
     // Divide by the rate to get the number of shares to redeem
     let aust_to_redeem: Uint128 = (amount_to_redeem / Decimal256::permille(RATE)).into();
@@ -2217,16 +2218,16 @@ fn execute_prize_no_winners() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -2344,16 +2345,16 @@ fn execute_prize_one_winner() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -2476,16 +2477,16 @@ fn execute_prize_winners_diff_ranks() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw_0),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -2514,7 +2515,7 @@ fn execute_prize_winners_diff_ranks() {
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw_1),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -2640,16 +2641,16 @@ fn execute_prize_winners_same_rank() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw_0),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -2678,7 +2679,7 @@ fn execute_prize_winners_same_rank() {
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw_1),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -2810,7 +2811,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     let address_raw = deps.api.addr_validate("addr0000").unwrap();
 
     // calculate the value of each deposit accounting for rounding errors
-    let each_lotto_deposit_amount = (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
+    let each_lottery_deposit_amount = (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
         * Decimal256::percent(SPLIT_FACTOR))
         * Decimal256::permille(RATE);
 
@@ -2819,13 +2820,13 @@ fn execute_prize_one_winner_multiple_ranks() {
             * (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE));
 
     // calculate the total minted_shares_value
-    let total_lotto_deposit_amount = Uint256::from(5u128) * each_lotto_deposit_amount;
+    let total_lottery_deposit_amount = Uint256::from(5u128) * each_lottery_deposit_amount;
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw),
         DepositorInfo {
-            lotto_deposit: total_lotto_deposit_amount,
+            lottery_deposit: total_lottery_deposit_amount,
             savings_shares: Uint256::from(5u128) * (each_savings_shares_amount),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -3224,10 +3225,10 @@ fn claim_rewards_one_depositor() {
     let _minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     assert_eq!(
         res.messages,
@@ -3237,8 +3238,8 @@ fn claim_rewards_one_depositor() {
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
                 amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(minted_lotto_shares_value)
-                    * Decimal256::from_uint256(minted_lotto_shares_value)
+                    / Decimal256::from_uint256(minted_lottery_shares_value)
+                    * Decimal256::from_uint256(minted_lottery_shares_value)
                     * Uint256::one())
                 .into(),
             })
@@ -3261,7 +3262,7 @@ fn claim_rewards_one_depositor() {
     assert_eq!(
         res.reward_index,
         (Decimal256::from_str("100").unwrap()
-            / Decimal256::from_uint256(minted_lotto_shares_value))
+            / Decimal256::from_uint256(minted_lottery_shares_value))
     );
 }
 
@@ -3317,12 +3318,13 @@ fn claim_rewards_multiple_depositors() {
     let info = mock_info("addr0000", &[]);
 
     // calculate the value of each deposit accounting for rounding errors
-    let each_lotto_deposit_amount = (Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE)
+    let each_lottery_deposit_amount = (Uint256::from(2 * TICKET_PRICE)
+        / Decimal256::permille(RATE)
         * Decimal256::percent(SPLIT_FACTOR))
         * Decimal256::permille(RATE);
 
     // calculate the total minted_shares_value
-    let total_lotto_deposit_amount = Uint256::from(2u128) * each_lotto_deposit_amount;
+    let total_lottery_deposit_amount = Uint256::from(2u128) * each_lottery_deposit_amount;
 
     // After 100 blocks
     env.block.height += 100;
@@ -3337,12 +3339,12 @@ fn claim_rewards_multiple_depositors() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     println!("{:?}", res.attributes);
-    println!("Total deposits test: {}", total_lotto_deposit_amount);
+    println!("Total deposits test: {}", total_lottery_deposit_amount);
     println!(
         "{}",
         (Decimal256::from_str("100").unwrap()
-            / Decimal256::from_uint256(total_lotto_deposit_amount)
-            * each_lotto_deposit_amount)
+            / Decimal256::from_uint256(total_lottery_deposit_amount)
+            * each_lottery_deposit_amount)
     );
     assert_eq!(
         res.messages,
@@ -3352,8 +3354,8 @@ fn claim_rewards_multiple_depositors() {
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
                 amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lotto_deposit_amount)
-                    * each_lotto_deposit_amount)
+                    / Decimal256::from_uint256(total_lottery_deposit_amount)
+                    * each_lottery_deposit_amount)
                     .into(),
             })
             .unwrap(),
@@ -3378,7 +3380,7 @@ fn claim_rewards_multiple_depositors() {
     assert_eq!(
         res.reward_index,
         Decimal256::from_uint256(Uint256::from(100u128))
-            / Decimal256::from_uint256(total_lotto_deposit_amount)
+            / Decimal256::from_uint256(total_lottery_deposit_amount)
     );
 
     // Checking USER 1 state is correct
@@ -3396,7 +3398,7 @@ fn claim_rewards_multiple_depositors() {
 
     assert_eq!(
         res.pending_rewards,
-        Decimal256::from_uint256(each_lotto_deposit_amount) * state.global_reward_index
+        Decimal256::from_uint256(each_lottery_deposit_amount) * state.global_reward_index
     );
     assert_eq!(res.reward_index, state.global_reward_index);
 
@@ -3452,15 +3454,16 @@ fn claim_rewards_depositor_and_sponsor() {
     // Calculations
 
     // calculate the value of each deposit accounting for rounding errors
-    let user_lotto_deposit_amount = (Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE)
+    let user_lottery_deposit_amount = (Uint256::from(2 * TICKET_PRICE)
+        / Decimal256::permille(RATE)
         * Decimal256::percent(SPLIT_FACTOR))
         * Decimal256::permille(RATE);
 
-    let sponsor_lotto_deposit_amount =
+    let sponsor_lottery_deposit_amount =
         Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE) * Decimal256::permille(RATE);
 
     // calculate the total minted_shares_value
-    let total_lotto_deposit_amount = user_lotto_deposit_amount + sponsor_lotto_deposit_amount;
+    let total_lottery_deposit_amount = user_lottery_deposit_amount + sponsor_lottery_deposit_amount;
 
     // Move forward 100 blocks ------------------------------------
     env.block.height += 100;
@@ -3486,8 +3489,8 @@ fn claim_rewards_depositor_and_sponsor() {
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
                 amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lotto_deposit_amount)
-                    * user_lotto_deposit_amount)
+                    / Decimal256::from_uint256(total_lottery_deposit_amount)
+                    * user_lottery_deposit_amount)
                     .into(),
             })
             .unwrap(),
@@ -3527,7 +3530,7 @@ fn claim_rewards_depositor_and_sponsor() {
     // assert that the sponsor has 50 GLOW pending rewards
     assert_eq!(
         res.pending_rewards,
-        Decimal256::from_uint256(sponsor_lotto_deposit_amount) * state.global_reward_index
+        Decimal256::from_uint256(sponsor_lottery_deposit_amount) * state.global_reward_index
     );
 
     // assert that the user reward index equals the global_reward_index
@@ -3553,8 +3556,8 @@ fn claim_rewards_depositor_and_sponsor() {
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
                 amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lotto_deposit_amount)
-                    * user_lotto_deposit_amount)
+                    / Decimal256::from_uint256(total_lottery_deposit_amount)
+                    * user_lottery_deposit_amount)
                     .into(),
             })
             .unwrap(),
@@ -3596,7 +3599,7 @@ fn claim_rewards_depositor_and_sponsor() {
     // assert the sponsors pending rewards
     assert_eq!(
         res.pending_rewards,
-        Decimal256::from_uint256(sponsor_lotto_deposit_amount) * state.global_reward_index
+        Decimal256::from_uint256(sponsor_lottery_deposit_amount) * state.global_reward_index
     );
 
     // assert that the user reward index equals the global_reward_index
@@ -3705,10 +3708,10 @@ fn small_withdraw() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * Decimal256::permille(RATE);
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -3740,7 +3743,7 @@ fn small_withdraw() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -3768,9 +3771,9 @@ fn small_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lotto_deposits: minted_lotto_shares_value,
+            total_user_lottery_deposits: minted_lottery_shares_value,
             total_user_savings_shares: minted_savings_shares,
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         }
     );
 
@@ -3789,7 +3792,7 @@ fn small_withdraw() {
 
     // Calculate the depositor's balance
     let depositor_balance =
-        depositor.savings_shares * Decimal256::permille(RATE) + depositor.lotto_deposit;
+        depositor.savings_shares * Decimal256::permille(RATE) + depositor.lottery_deposit;
 
     let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), depositor_balance);
 
@@ -3802,8 +3805,8 @@ fn small_withdraw() {
     // Get the value of the redeemed aust. aust_to_redeem * rate = pooled_deposits * withdraw_ratio
     let _redeemed_amount = aust_to_redeem * Decimal256::permille(RATE);
 
-    let withdrawn_lotto_deposits =
-        uint256_times_decimal256_ceil(depositor.lotto_deposit, withdraw_ratio);
+    let withdrawn_lottery_deposits =
+        uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
     let withdrawn_savings_shares =
         uint256_times_decimal256_ceil(depositor.savings_shares, withdraw_ratio);
 
@@ -3837,7 +3840,7 @@ fn small_withdraw() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value - withdrawn_lotto_deposits,
+            lottery_deposit: minted_lottery_shares_value - withdrawn_lottery_deposits,
             savings_shares: minted_savings_shares - withdrawn_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -3868,8 +3871,8 @@ fn small_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lotto_deposits: minted_lotto_shares_value - withdrawn_lotto_deposits,
-            total_sponsor_deposits: Uint256::zero(),
+            total_user_lottery_deposits: minted_lottery_shares_value - withdrawn_lottery_deposits,
+            total_sponsor_lottery_deposits: Uint256::zero(),
             total_user_savings_shares: minted_savings_shares - withdrawn_savings_shares,
         }
     );
@@ -4069,10 +4072,10 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * special_rate;
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * special_rate;
 
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
@@ -4105,7 +4108,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            lotto_deposit: minted_lotto_shares_value,
+            lottery_deposit: minted_lottery_shares_value,
             savings_shares: minted_savings_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -4133,9 +4136,9 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lotto_deposits: minted_lotto_shares_value,
+            total_user_lottery_deposits: minted_lottery_shares_value,
             total_user_savings_shares: minted_savings_shares,
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         }
     );
 
@@ -4186,7 +4189,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     // Assert that Lotto pool is solvent
     assert!(
         contract_a_balance * special_rate
-            >= pool.total_user_lotto_deposits + pool.total_sponsor_deposits
+            >= pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits
     )
 }
 
@@ -4384,8 +4387,9 @@ fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
     let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
 
     // Calculate the amount of ust to be redeemed for the lottery
-    let amount_to_redeem =
-        pooled_lottery_deposits - pool.total_user_lotto_deposits - pool.total_sponsor_deposits;
+    let amount_to_redeem = pooled_lottery_deposits
+        - pool.total_user_lottery_deposits
+        - pool.total_sponsor_lottery_deposits;
 
     // Calculate the corresponding amount of aust to redeem
     let aust_to_redeem = amount_to_redeem / Decimal256::permille(RATE);

@@ -137,9 +137,9 @@ pub fn instantiate(
     POOL.save(
         deps.storage,
         &Pool {
-            total_user_lotto_deposits: Uint256::zero(),
+            total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_shares: Uint256::zero(),
-            total_sponsor_deposits: Uint256::zero(),
+            total_sponsor_lottery_deposits: Uint256::zero(),
         },
     )?;
 
@@ -328,16 +328,17 @@ pub fn deposit(
     let minted_savings_shares = minted_shares - minted_shares * config.split_factor;
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares * config.split_factor;
+    let minted_lottery_shares = minted_shares * config.split_factor;
 
-    // Get the value of the minted lotto shares of aUST after accounting for rounding errors
-    let minted_lotto_shares_value = minted_lotto_shares * epoch_state.exchange_rate;
+    // Get the value of the minted lottery shares of aUST after accounting for rounding errors
+    let minted_lottery_shares_value = minted_lottery_shares * epoch_state.exchange_rate;
 
     // Get the number of tickets the user would have post transaction
     let raw_post_transaction_num_depositor_tickets =
         Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
 
-    let post_transaction_deposit_amount = depositor_info.lotto_deposit + minted_lotto_shares_value;
+    let post_transaction_deposit_amount =
+        depositor_info.lottery_deposit + minted_lottery_shares_value;
 
     // Check if we need to round up number of combinations based on depositor post transaction total deposits
     let mut new_combinations = combinations;
@@ -382,15 +383,17 @@ pub fn deposit(
     }
 
     // Increase deposit_amount by the value of the minted_shares
-    depositor_info.lotto_deposit = depositor_info.lotto_deposit.add(minted_lotto_shares_value);
+    depositor_info.lottery_deposit = depositor_info
+        .lottery_deposit
+        .add(minted_lottery_shares_value);
 
     // Update depositor_info by the number of minted shares
     depositor_info.savings_shares = depositor_info.savings_shares.add(minted_savings_shares);
 
     // Increase total_deposits by the value of the minted shares
-    pool.total_user_lotto_deposits = pool
-        .total_user_lotto_deposits
-        .add(minted_lotto_shares_value);
+    pool.total_user_lottery_deposits = pool
+        .total_user_lottery_deposits
+        .add(minted_lottery_shares_value);
 
     // Increase total_user_shares by the number of minted shares
     pool.total_user_savings_shares = pool.total_user_savings_shares.add(minted_savings_shares);
@@ -506,11 +509,12 @@ pub fn execute_sponsor(
         compute_sponsor_reward(&state, &mut sponsor_info);
 
         // add sponsor_amount to depositor
-        sponsor_info.lotto_deposit = sponsor_info.lotto_deposit.add(minted_shares_value);
+        sponsor_info.lottery_deposit = sponsor_info.lottery_deposit.add(minted_shares_value);
         store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
 
         // update pool
-        pool.total_sponsor_deposits = pool.total_sponsor_deposits.add(minted_shares_value);
+        pool.total_sponsor_lottery_deposits =
+            pool.total_sponsor_lottery_deposits.add(minted_shares_value);
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {
@@ -542,7 +546,7 @@ pub fn execute_sponsor_withdraw(
 
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
-    if sponsor_info.lotto_deposit.is_zero() {
+    if sponsor_info.lottery_deposit.is_zero() {
         return Err(ContractError::NoSponsorSharesToWithdraw {});
     }
 
@@ -567,20 +571,22 @@ pub fn execute_sponsor_withdraw(
         env.block.height,
     )?
     .exchange_rate;
-    let aust_to_redeem = sponsor_info.lotto_deposit / rate;
+    let aust_to_redeem = sponsor_info.lottery_deposit / rate;
 
     // Double-checking Lotto pool is solvent against sponsors
     if Uint256::from(contract_a_balance) * rate
-        < (pool.total_user_lotto_deposits + pool.total_sponsor_deposits)
+        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
         return Err(ContractError::InsufficientSponsorFunds {});
     }
 
     // Update global state
-    pool.total_sponsor_deposits = pool.total_sponsor_deposits.sub(sponsor_info.lotto_deposit);
+    pool.total_sponsor_lottery_deposits = pool
+        .total_sponsor_lottery_deposits
+        .sub(sponsor_info.lottery_deposit);
 
     // Update sponsor info
-    sponsor_info.lotto_deposit = Uint256::zero();
+    sponsor_info.lottery_deposit = Uint256::zero();
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -600,7 +606,7 @@ pub fn execute_sponsor_withdraw(
     let coin_amount = deduct_tax(
         deps.as_ref(),
         coin(
-            sponsor_info.lotto_deposit.into(),
+            sponsor_info.lottery_deposit.into(),
             config.clone().stable_denom,
         ),
     )?
@@ -624,7 +630,7 @@ pub fn execute_sponsor_withdraw(
         attr("redeem_amount_anchor", aust_to_redeem.to_string()),
         attr(
             "redeem_stable_amount",
-            sponsor_info.lotto_deposit.to_string(),
+            sponsor_info.lottery_deposit.to_string(),
         ),
     ]))
 }
@@ -678,7 +684,7 @@ pub fn execute_withdraw(
     .exchange_rate;
 
     // Calculate the depositor's balance
-    let depositor_balance = depositor.savings_shares * rate + depositor.lotto_deposit;
+    let depositor_balance = depositor.savings_shares * rate + depositor.lottery_deposit;
 
     // Calculate ratio of deposits, shares and tickets to withdraw
     let mut withdraw_ratio = Decimal256::one();
@@ -711,7 +717,7 @@ pub fn execute_withdraw(
     // Validate that value of the contract's aust is always at least the
     // sum of the user and sponsor deposits.
     if Uint256::from(contract_a_balance) * rate
-        < (pool.total_user_lotto_deposits + pool.total_sponsor_deposits)
+        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
         return Err(ContractError::InsufficientPoolFunds {});
     }
@@ -740,19 +746,21 @@ pub fn execute_withdraw(
 
     // Take the ceil when calculating withdrawn_deposits and withdrawn_shares
     // because we will be subtracting with this value and don't want to under subtract
-    let withdrawn_lotto_deposits =
-        uint256_times_decimal256_ceil(depositor.lotto_deposit, withdraw_ratio);
+    let withdrawn_lottery_deposits =
+        uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
     let withdrawn_savings_shares =
         uint256_times_decimal256_ceil(depositor.savings_shares, withdraw_ratio);
 
     // Update depositor info
 
-    depositor.lotto_deposit = depositor.lotto_deposit.sub(withdrawn_lotto_deposits);
+    depositor.lottery_deposit = depositor.lottery_deposit.sub(withdrawn_lottery_deposits);
     depositor.savings_shares = depositor.savings_shares.sub(withdrawn_savings_shares);
 
     // Update pool
 
-    pool.total_user_lotto_deposits = pool.total_user_lotto_deposits.sub(withdrawn_lotto_deposits);
+    pool.total_user_lottery_deposits = pool
+        .total_user_lottery_deposits
+        .sub(withdrawn_lottery_deposits);
     pool.total_user_savings_shares = pool.total_user_savings_shares.sub(withdrawn_savings_shares);
 
     // Update state
@@ -1308,9 +1316,9 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
     let pool = POOL.load(deps.storage)?;
 
     Ok(PoolResponse {
-        total_user_lotto_deposits: pool.total_user_lotto_deposits,
+        total_user_lottery_deposits: pool.total_user_lottery_deposits,
         total_user_savings_shares: pool.total_user_savings_shares,
-        total_sponsor_deposits: pool.total_sponsor_deposits,
+        total_sponsor_lottery_deposits: pool.total_sponsor_lottery_deposits,
     })
 }
 
@@ -1360,8 +1368,8 @@ pub fn query_depositor(deps: Deps, env: Env, addr: String) -> StdResult<Deposito
 
     Ok(DepositorInfoResponse {
         depositor: addr,
-        deposit_amount: depositor.lotto_deposit,
-        shares: depositor.savings_shares,
+        lottery_deposit: depositor.lottery_deposit,
+        savings_shares: depositor.savings_shares,
         reward_index: depositor.reward_index,
         pending_rewards: depositor.pending_rewards,
         tickets: depositor.tickets,
@@ -1382,7 +1390,7 @@ pub fn query_sponsor(deps: Deps, env: Env, addr: String) -> StdResult<SponsorInf
 
     Ok(SponsorInfoResponse {
         sponsor: addr,
-        lotto_deposit: sponsor.lotto_deposit,
+        lottery_deposit: sponsor.lottery_deposit,
         reward_index: sponsor.reward_index,
         pending_rewards: sponsor.pending_rewards,
     })

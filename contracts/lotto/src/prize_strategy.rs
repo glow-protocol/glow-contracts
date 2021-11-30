@@ -104,7 +104,9 @@ pub fn execute_lottery(
     // pooled_lottery_deposits gives the total ust value of the lottery pool according to the fraction of the aust owned by the contract.
 
     // pooled_lottery_deposits should always be greater than or equal to the total_user_lottery_deposits + pool.total_sponsor_deposits so this is more of a double check
-    if (pool.total_user_lotto_deposits + pool.total_sponsor_deposits) >= pooled_lottery_deposits {
+    if (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+        >= pooled_lottery_deposits
+    {
         if state.award_available.is_zero() {
             // If lottery related shares have a smaller value than the amount of lottery deposits and award_available is zero
             // Return InsufficientLotteryFunds
@@ -113,8 +115,9 @@ pub fn execute_lottery(
     } else {
         // The value to redeem is the difference between the value of the appreciated lottery aust shares
         // and the total ust amount that has been deposited towards the lottery.
-        let amount_to_redeem =
-            pooled_lottery_deposits - pool.total_user_lotto_deposits - pool.total_sponsor_deposits;
+        let amount_to_redeem = pooled_lottery_deposits
+            - pool.total_user_lottery_deposits
+            - pool.total_sponsor_lottery_deposits;
 
         // Divide by the rate to get the number of shares to redeem
         aust_to_redeem = amount_to_redeem / rate;

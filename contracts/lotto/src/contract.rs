@@ -325,10 +325,10 @@ pub fn deposit(
     let minted_shares = post_tax_deposit_amount / epoch_state.exchange_rate;
 
     // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares * config.split_factor;
+    let minted_savings_shares = minted_shares - minted_shares * config.split_factor;
 
     // Get the amount of shares that will go towards the lottery
-    let minted_lotto_shares = minted_shares - minted_shares * config.split_factor;
+    let minted_lotto_shares = minted_shares * config.split_factor;
 
     // Get the value of the minted lotto shares of aUST after accounting for rounding errors
     let minted_lotto_shares_value = minted_lotto_shares * epoch_state.exchange_rate;

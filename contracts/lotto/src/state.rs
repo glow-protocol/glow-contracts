@@ -65,12 +65,12 @@ pub struct Pool {
     // This is used for
     // - checking for pool solvency
     // - calculating the global reward index
-    pub total_user_deposits: Uint256,
+    pub total_user_lotto_deposits: Uint256,
     // Sum of all user shares
     // This is used for:
     // - calculating shares_supply to be used for getting depositor_ratio
     // - calculating the percentage of aust going towards the lottery
-    pub total_user_shares: Uint256,
+    pub total_user_savings_shares: Uint256,
     // Sum of all sponsor deposits going towards the lottery.
     // This is the same as the sum of all sponsor deposits
     // because all sponsor deposits go entirely towards the lottery
@@ -79,19 +79,12 @@ pub struct Pool {
     // - calculating the global reward index
     // - calculating the amount to redeem when executing a lottery
     pub total_sponsor_deposits: Uint256,
-    // Sum of all sponsor shares going towards the lottery.
-    // This is the same as the sum of all sponsor shares
-    // because all sponsor shares go entirely towards the lottery
-    // This is used for:
-    // - calculating shares_supply to be used for getting depositor_ratio
-    // - calculating the percentage of aust going towards the lottery
-    pub total_sponsor_shares: Uint256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    pub deposit_amount: Uint256,
-    pub shares: Uint256,
+    pub lotto_deposit: Uint256,
+    pub savings_shares: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
@@ -100,8 +93,7 @@ pub struct DepositorInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfo {
-    pub amount: Uint256,
-    pub shares: Uint256,
+    pub lotto_deposit: Uint256,
     pub pending_rewards: Decimal256,
     pub reward_index: Decimal256,
 }
@@ -166,8 +158,8 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
     match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
         _ => DepositorInfo {
-            deposit_amount: Uint256::zero(),
-            shares: Uint256::zero(),
+            lotto_deposit: Uint256::zero(),
+            savings_shares: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -188,8 +180,7 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
     match bucket_read(storage, PREFIX_SPONSOR).load(sponsor.as_bytes()) {
         Ok(v) => v,
         _ => SponsorInfo {
-            amount: Uint256::zero(),
-            shares: Uint256::zero(),
+            lotto_deposit: Uint256::zero(),
             pending_rewards: Decimal256::zero(),
             reward_index: Decimal256::zero(),
         },
@@ -214,8 +205,8 @@ pub fn read_depositors(
             let depositor = String::from_utf8(k).unwrap();
             Ok(DepositorInfoResponse {
                 depositor,
-                deposit_amount: v.deposit_amount,
-                shares: v.shares,
+                deposit_amount: v.lotto_deposit,
+                shares: v.savings_shares,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
                 tickets: v.tickets,

@@ -390,12 +390,12 @@ pub fn deposit(
     // Update depositor_info by the number of minted shares
     depositor_info.savings_shares = depositor_info.savings_shares.add(minted_savings_shares);
 
-    // Increase total_deposits by the value of the minted shares
+    // Increase total_user_lottery_deposits by the value of the minted shares
     pool.total_user_lottery_deposits = pool
         .total_user_lottery_deposits
         .add(minted_lottery_shares_value);
 
-    // Increase total_user_shares by the number of minted shares
+    // Increase total_user_savings_shares by the number of minted shares
     pool.total_user_savings_shares = pool.total_user_savings_shares.add(minted_savings_shares);
 
     // Update the number of total_tickets
@@ -684,6 +684,7 @@ pub fn execute_withdraw(
     .exchange_rate;
 
     // Calculate the depositor's balance
+    // It's equal to the value of their savings shares plus their lottery deposit
     let depositor_balance = depositor.savings_shares * rate + depositor.lottery_deposit;
 
     // Calculate ratio of deposits, shares and tickets to withdraw
@@ -697,12 +698,13 @@ pub fn execute_withdraw(
     }
 
     // Get the amount to redeem
+    // this should equal amount
     let withdraw_value = depositor_balance * withdraw_ratio;
 
     // Get the amount of aust to redeem
     let aust_to_redeem = withdraw_value / rate;
 
-    // Get the value of the redeemed aust. aust_to_redeem * rate = pooled_deposits * withdraw_ratio
+    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
     let redeemed_amount = aust_to_redeem * rate;
 
     // Get the value of the returned amount after accounting for taxes.
@@ -746,6 +748,7 @@ pub fn execute_withdraw(
 
     // Take the ceil when calculating withdrawn_deposits and withdrawn_shares
     // because we will be subtracting with this value and don't want to under subtract
+    // TODO does withdrawn_lottery_deposits + withdrawn_savings_shares * rate = redeemed_amount?
     let withdrawn_lottery_deposits =
         uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
     let withdrawn_savings_shares =

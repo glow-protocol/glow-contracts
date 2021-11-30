@@ -61,15 +61,18 @@ pub struct State {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    // Sum of all user deposits
+    // Sum of all user lottery deposits
     // This is used for
     // - checking for pool solvency
     // - calculating the global reward index
+    // - calculating the amount to redeem when executing a lottery
     pub total_user_lottery_deposits: Uint256,
-    // Sum of all user shares
+    // Sum of all user savings shares
+    // total_user_savings_shares equals the amount of aust reserved
+    // for user savings
     // This is used for:
     // - calculating shares_supply to be used for getting depositor_ratio
-    // - calculating the percentage of aust going towards the lottery
+    // - tracking the amount of aust reserved for savings
     pub total_user_savings_shares: Uint256,
     // Sum of all sponsor deposits going towards the lottery.
     // This is the same as the sum of all sponsor deposits
@@ -83,18 +86,37 @@ pub struct Pool {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
+    // Cumulative value of the depositor's deposits going towards the lottery.
+    // The sums of all depositor deposit amounts equals total_user_lottery_deposits
+    // This is used for:
+    // - calculating how many tickets the user should have access to.
+    // - computing the depositor's deposit reward.
+    // - calculating the depositor's balance (how much they can withdraw)
     pub lottery_deposit: Uint256,
+    // Amount of aust in the users savings account
+    // This is used for:
+    // - calculating the depositor's balance (how much they can withdraw)
     pub savings_shares: Uint256,
+    // Reward index is used for tracking and calculating the depositor's rewards
     pub reward_index: Decimal256,
+    // Stores the amount rewards that are available for the user to claim.
     pub pending_rewards: Decimal256,
+    // The number of tickets the user owns.
     pub tickets: Vec<String>,
+    // Stores information on the user's unbonding claims.
     pub unbonding_info: Vec<Claim>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfo {
+    // Cumulative value of the sponsor's deposits.
+    // The sums of all sponsor amounts equals total_sponsor_deposits
+    // This is used for:
+    // - calculating the sponsor's balance (how much they can withdraw)
     pub lottery_deposit: Uint256,
+    // Reward index is used for tracking and calculating the sponsor's rewards
     pub pending_rewards: Decimal256,
+    // Stores the amount rewards that are available for the sponsor to claim.
     pub reward_index: Decimal256,
 }
 

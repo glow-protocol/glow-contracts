@@ -29,9 +29,8 @@ use glow_protocol::lotto::{
     SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::querier::deduct_tax;
-use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
+use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
-use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
@@ -574,12 +573,6 @@ pub fn execute_sponsor_withdraw(
     compute_reward(&mut state, &pool, env.block.height, exchange_rate);
     compute_sponsor_reward(&state, &mut sponsor_info);
 
-    // Calculate aust amount to redeem based on depositor amount
-    let contract_a_balance = query_token_balance(
-        &deps.querier,
-        config.a_terra_contract.clone(),
-        env.clone().contract.address,
-    )?;
     let aust_to_redeem = sponsor_info.lottery_deposit / exchange_rate;
 
     // // Double-checking Lotto pool is solvent against sponsors
@@ -682,13 +675,6 @@ pub fn execute_withdraw(
     // Compute GLOW reward
     compute_reward(&mut state, &pool, env.block.height, exchange_rate);
     compute_depositor_reward(&state, &mut depositor, &pool, exchange_rate);
-
-    // Get the contract balance
-    let contract_a_balance = query_token_balance(
-        &deps.querier,
-        config.a_terra_contract.clone(),
-        env.clone().contract.address,
-    )?;
 
     // Calculate the depositor's aust balance
     // It's equal to the value of their savings shares plus their lottery deposit
@@ -1338,6 +1324,7 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
         last_reward_updated: state.last_reward_updated,
         global_reward_index: state.global_reward_index,
         glow_emission_rate: state.glow_emission_rate,
+        last_lottery_exchange_rate: state.last_lottery_exchange_rate,
     })
 }
 

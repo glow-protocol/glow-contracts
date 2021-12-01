@@ -153,6 +153,7 @@ pub struct StateResponse {
     pub last_reward_updated: u64,
     pub global_reward_index: Decimal256,
     pub glow_emission_rate: Decimal256,
+    pub last_lottery_exchange_rate: Decimal256,
 }
 
 // We define a custom struct for each query response

@@ -29,10 +29,16 @@ pub fn execute_lottery(
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
+    let mut pool = POOL.load(deps.storage)?;
+    let exchange_rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
 
     // Compute global Glow rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_reward(&mut state, &pool, env.block.height, exchange_rate);
 
     // Validate that no funds are sent when executing the lottery
     if !info.funds.is_empty() {
@@ -76,19 +82,11 @@ pub fn execute_lottery(
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
     // Get this contracts aust balance
-    let aust_balance = query_token_balance(
+    let contract_a_balance = query_token_balance(
         &deps.querier,
         deps.api.addr_validate(config.a_terra_contract.as_str())?,
         env.clone().contract.address,
     )?;
-
-    // Get the aust exchange rate
-    let rate = query_exchange_rate(
-        deps.as_ref(),
-        config.anchor_contract.to_string(),
-        env.block.height,
-    )?
-    .exchange_rate;
 
     // Calculate the amount of aust to redeem from the users ----------------------
 
@@ -97,32 +95,30 @@ pub fn execute_lottery(
 
     // Get the amount to take from the users
     // Split factor percent of the appreciation since the last lottery
-    let user_amount_to_redeem =
-        aust_user_balance * (rate - state.last_lottery_exchange_rate) * config.split_factor;
+    let user_amount_to_redeem = aust_user_balance
+        * (exchange_rate - state.last_lottery_exchange_rate)
+        * config.split_factor;
 
     // Get the user_aust_to_redeem
-    let user_aust_to_redeem = user_amount_to_redeem / rate;
-
-    // Update the user shares
-    pool.total_user_aust = pool.total_user_aust.sub(user_aust_to_redeem);
+    let user_aust_to_redeem = user_amount_to_redeem / exchange_rate;
 
     // Calculate the amount of aust to redeem from the sponsors --------------------
 
-    // Lottery balance equals aust_balance - savings_shares
-    let aust_sponsor_balance = Uint256::from(aust_balance) - pool.total_user_aust;
+    // Sponsor balance equals aust_balance - total_user_aust
+    let aust_sponsor_balance = Uint256::from(contract_a_balance) - pool.total_user_aust;
 
     // This should equal aust_sponsor_balance * (rate - state.last_lottery_exchange_rate) * config.split_factor;
     let sponsor_amount_to_redeem =
-        aust_sponsor_balance * rate - pool.total_sponsor_lottery_deposits;
+        aust_sponsor_balance * exchange_rate - pool.total_sponsor_lottery_deposits;
 
-    let sponsor_aust_to_redeem = sponsor_amount_to_redeem / rate;
+    let sponsor_aust_to_redeem = sponsor_amount_to_redeem / exchange_rate;
 
     // Calculate the total amount of aust to redeem ---------------
 
-    let aust_to_redeem = user_aust_to_redeem + sponsor_amount_to_redeem;
+    let aust_to_redeem = user_aust_to_redeem + sponsor_aust_to_redeem;
 
     // Get the value of the aust that will be redeemed
-    let aust_to_redeem_value = aust_to_redeem * rate;
+    let aust_to_redeem_value = aust_to_redeem * exchange_rate;
 
     // Get the amount of ust that will be received after accounting for taxes
     let net_amount = deduct_tax(
@@ -157,6 +153,9 @@ pub fn execute_lottery(
         msgs.push(redeem_msg);
     }
 
+    // Update the user shares
+    pool.total_user_aust = pool.total_user_aust.sub(user_aust_to_redeem);
+
     // Update the storage
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
@@ -184,12 +183,18 @@ pub fn execute_prize(
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
     let pool = POOL.load(deps.storage)?;
+    let exchange_rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
 
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
     let current_lottery = state.current_lottery;
 
     // Compute global Glow rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_reward(&mut state, &pool, env.block.height, exchange_rate);
 
     // Validate that no funds are sent when executing the prize distribution
     if !info.funds.is_empty() {

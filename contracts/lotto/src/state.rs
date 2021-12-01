@@ -57,23 +57,25 @@ pub struct State {
     pub last_reward_updated: u64,
     pub global_reward_index: Decimal256,
     pub glow_emission_rate: Decimal256,
+    pub last_lottery_exchange_rate: Decimal256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    // Sum of all user lottery deposits
-    // This is used for
-    // - checking for pool solvency
-    // - calculating the global reward index
-    // - calculating the amount to redeem when executing a lottery
-    pub total_user_lottery_deposits: Uint256,
+    // // Sum of all user lottery deposits
+    // // This is used for
+    // // - checking for pool solvency
+    // // - calculating the global reward index
+    // // - calculating the amount to redeem when executing a lottery
+    // pub total_user_lottery_deposits: Uint256,
+    pub total_user_aust: Uint256,
     // Sum of all user savings shares
     // total_user_savings_shares equals the amount of aust reserved
     // for user savings
     // This is used for:
     // - calculating shares_supply to be used for getting depositor_ratio
     // - tracking the amount of aust reserved for savings
-    pub total_user_savings_shares: Uint256,
+    pub total_user_shares: Decimal256,
     // Sum of all sponsor deposits going towards the lottery.
     // This is the same as the sum of all sponsor deposits
     // because all sponsor deposits go entirely towards the lottery
@@ -86,17 +88,18 @@ pub struct Pool {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    // Cumulative value of the depositor's deposits going towards the lottery.
-    // The sums of all depositor deposit amounts equals total_user_lottery_deposits
-    // This is used for:
-    // - calculating how many tickets the user should have access to.
-    // - computing the depositor's deposit reward.
-    // - calculating the depositor's balance (how much they can withdraw)
-    pub lottery_deposit: Uint256,
+    // // Cumulative value of the depositor's deposits going towards the lottery.
+    // // The sums of all depositor deposit amounts equals total_user_lottery_deposits
+    // // This is used for:
+    // // - calculating how many tickets the user should have access to.
+    // // - computing the depositor's deposit reward.
+    // // - calculating the depositor's balance (how much they can withdraw)
+    // pub lottery_deposit: Uint256,
+
     // Amount of aust in the users savings account
     // This is used for:
     // - calculating the depositor's balance (how much they can withdraw)
-    pub savings_shares: Uint256,
+    pub shares: Decimal256,
     // Reward index is used for tracking and calculating the depositor's rewards
     pub reward_index: Decimal256,
     // Stores the amount rewards that are available for the user to claim.
@@ -180,8 +183,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
     match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
         _ => DepositorInfo {
-            lottery_deposit: Uint256::zero(),
-            savings_shares: Uint256::zero(),
+            shares: Decimal256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -227,8 +229,7 @@ pub fn read_depositors(
             let depositor = String::from_utf8(k).unwrap();
             Ok(DepositorInfoResponse {
                 depositor,
-                lottery_deposit: v.lottery_deposit,
-                savings_shares: v.savings_shares,
+                shares: v.shares,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
                 tickets: v.tickets,

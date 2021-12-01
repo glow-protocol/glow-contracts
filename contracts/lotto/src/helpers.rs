@@ -6,8 +6,14 @@ use crate::state::{
     read_depositor_info, store_depositor_info, DepositorInfo, Pool, SponsorInfo, State,
 };
 
+// pass exchange rate as a parameter
 /// Compute distributed reward and update global reward index
-pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
+pub fn compute_reward(
+    state: &mut State,
+    pool: &Pool,
+    block_height: u64,
+    exchange_rate: Decimal256,
+) {
     if state.last_reward_updated >= block_height {
         return;
     }
@@ -15,7 +21,8 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    let total_deposited = pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits;
+    let total_deposited =
+        pool.total_user_aust * exchange_rate + pool.total_sponsor_lottery_deposits;
     if !reward_accrued.is_zero() && !total_deposited.is_zero() {
         state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
     }
@@ -24,8 +31,20 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
 }
 
 /// Compute reward amount a depositor received
-pub fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
-    depositor.pending_rewards += Decimal256::from_uint256(depositor.lottery_deposit)
+pub fn compute_depositor_reward(
+    state: &State,
+    depositor: &mut DepositorInfo,
+    pool: &Pool,
+    exchange_rate: Decimal256,
+) {
+    let user_aust = decimal_times_decimal_ratio(
+        depositor.shares,
+        Decimal256::from_uint256(pool.total_user_aust),
+        pool.total_user_shares,
+    ) * Uint256::one();
+
+    let user_balance = user_aust * exchange_rate;
+    depositor.pending_rewards += Decimal256::from_uint256(user_balance)
         * (state.global_reward_index - depositor.reward_index);
     depositor.reward_index = state.global_reward_index;
 }
@@ -139,5 +158,13 @@ pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
         rounded_output + Uint256::one()
     } else {
         rounded_output
+    }
+}
+
+pub fn decimal_times_decimal_ratio(a: Decimal256, b: Decimal256, c: Decimal256) -> Decimal256 {
+    if b == Decimal256::zero() && c == Decimal256::zero() {
+        a
+    } else {
+        a / c * b
     }
 }

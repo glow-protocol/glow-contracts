@@ -153,6 +153,9 @@ pub fn execute_lottery(
         msgs.push(redeem_msg);
     }
 
+    // Update last_lottery_exchange_rate
+    state.last_lottery_exchange_rate = exchange_rate;
+
     // Update the user shares
     pool.total_user_aust = pool.total_user_aust.sub(user_aust_to_redeem);
 

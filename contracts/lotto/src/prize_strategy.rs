@@ -85,7 +85,7 @@ pub fn execute_lottery(
     let contract_a_balance = query_token_balance(
         &deps.querier,
         deps.api.addr_validate(config.a_terra_contract.as_str())?,
-        env.clone().contract.address,
+        env.contract.address,
     )?;
 
     // Calculate the amount of aust to redeem from the users ----------------------

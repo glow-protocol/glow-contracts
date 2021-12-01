@@ -1982,7 +1982,7 @@ fn execute_lottery() {
     // Calculate the amount of aust to redeem from the sponsors --------------------
 
     // Sponsor balance equals aust_balance - total_user_aust
-    let aust_sponsor_balance = Uint256::from(contract_a_balance) - pool.total_user_aust;
+    let aust_sponsor_balance = contract_a_balance - pool.total_user_aust;
 
     // This should equal aust_sponsor_balance * (rate - state.last_lottery_exchange_rate) * config.split_factor;
     let sponsor_amount_to_redeem =
@@ -2790,7 +2790,7 @@ fn execute_prize_one_winner_multiple_ranks() {
                 total_minted_shares,
                 Decimal256::from_uint256(total_minted_aust),
             );
-        total_minted_aust = total_minted_aust + each_minted_aust;
+        total_minted_aust += each_minted_aust;
     }
 
     // Check depositor info was updated correctly
@@ -3204,7 +3204,7 @@ fn claim_rewards_one_depositor() {
 
     let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
     // Get the number of minted shares
-    let minted_shares = Decimal256::from_uint256(minted_aust);
+    let _minted_shares = Decimal256::from_uint256(minted_aust);
 
     // value refers to the value of the aust,
     // even if you couldn't actually redeem it for that much because of rounding
@@ -3298,7 +3298,7 @@ fn claim_rewards_multiple_depositors() {
 
     let each_minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
     // Get the number of minted shares
-    let each_minted_shares = Decimal256::from_uint256(each_minted_aust);
+    let _each_minted_shares = Decimal256::from_uint256(each_minted_aust);
 
     // calculate the total minted_shares_value
     let total_owned_value =
@@ -3435,7 +3435,7 @@ fn claim_rewards_depositor_and_sponsor() {
     // Calculate the value of each deposit accounting for rounding errors
     let user_minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
     // Get the number of minted shares
-    let user_minted_shares = Decimal256::from_uint256(user_minted_aust);
+    let _user_minted_shares = Decimal256::from_uint256(user_minted_aust);
 
     let sponsor_lottery_deposit_amount =
         Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE) * Decimal256::permille(RATE);
@@ -4353,7 +4353,7 @@ fn calculate_award_available(
     // Calculate the amount of aust to redeem from the sponsors --------------------
 
     // Sponsor balance equals aust_balance - total_user_aust
-    let aust_sponsor_balance = Uint256::from(contract_a_balance) - pool.total_user_aust;
+    let aust_sponsor_balance = contract_a_balance - pool.total_user_aust;
 
     // This should equal aust_sponsor_balance * (rate - state.last_lottery_exchange_rate) * config.split_factor;
     let sponsor_amount_to_redeem =

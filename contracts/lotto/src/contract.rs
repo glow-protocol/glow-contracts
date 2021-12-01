@@ -356,7 +356,8 @@ pub fn deposit(
         post_transaction_shares_amount,
         Decimal256::from_uint256(pool.total_user_aust),
         pool.total_user_shares,
-    ) * Uint256::one();
+    ) * Uint256::one()
+        * exchange_rate;
 
     // Check if we need to round up number of combinations based on depositor post transaction total deposits
     let mut new_combinations = combinations;
@@ -678,7 +679,11 @@ pub fn execute_withdraw(
 
     // Calculate the depositor's aust balance
     // It's equal to the value of their savings shares plus their lottery deposit
-    let depositor_aust_balance = depositor.shares * pool.total_user_aust / pool.total_user_shares;
+    let depositor_aust_balance = decimal_times_decimal_ratio(
+        depositor.shares,
+        Decimal256::from_uint256(pool.total_user_aust),
+        pool.total_user_shares,
+    ) * Uint256::one();
 
     let depositor_balance = depositor_aust_balance * exchange_rate;
 

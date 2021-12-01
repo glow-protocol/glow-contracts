@@ -21,10 +21,10 @@ pub fn compute_reward(
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    let total_deposited =
-        pool.total_user_aust * exchange_rate + pool.total_sponsor_lottery_deposits;
-    if !reward_accrued.is_zero() && !total_deposited.is_zero() {
-        state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
+    let total_owned_value = Decimal256::from_uint256(pool.total_user_aust) * exchange_rate
+        + Decimal256::from_uint256(pool.total_sponsor_lottery_deposits);
+    if !reward_accrued.is_zero() && !total_owned_value.is_zero() {
+        state.global_reward_index += reward_accrued / total_owned_value;
     }
 
     state.last_reward_updated = block_height;
@@ -43,9 +43,9 @@ pub fn compute_depositor_reward(
         pool.total_user_shares,
     ) * Uint256::one();
 
-    let user_balance = user_aust * exchange_rate;
-    depositor.pending_rewards += Decimal256::from_uint256(user_balance)
-        * (state.global_reward_index - depositor.reward_index);
+    let user_aust_value = Decimal256::from_uint256(user_aust) * exchange_rate;
+    depositor.pending_rewards +=
+        user_aust_value * (state.global_reward_index - depositor.reward_index);
     depositor.reward_index = state.global_reward_index;
 }
 

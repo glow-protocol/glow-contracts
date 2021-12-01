@@ -1313,13 +1313,15 @@ fn instant_withdraw() {
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
     let pool = query_pool(deps.as_ref()).unwrap();
 
-    let depositor_balance = decimal_times_decimal_ratio(
+    let depositor_aust_balance = decimal_times_decimal_ratio(
         depositor.shares,
         Decimal256::from_uint256(pool.total_user_aust),
         pool.total_user_shares,
     ) * Uint256::one();
 
-    let aust_to_redeem = depositor_balance / Decimal256::permille(RATE);
+    let _depositor_balance = depositor_aust_balance * Decimal256::permille(RATE);
+
+    let aust_to_redeem = depositor_aust_balance;
     let mut return_amount = aust_to_redeem * Decimal256::permille(RATE);
 
     let withdrawal_fee = return_amount * Decimal256::percent(INSTANT_WITHDRAWAL_FEE);
@@ -1382,6 +1384,18 @@ fn instant_withdraw() {
     );
 
     assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "withdraw_ticket"),
+            attr("depositor", "addr0001"),
+            attr("tickets_amount", 1u64.to_string()),
+            attr("redeem_amount_anchor", aust_to_redeem.to_string()),
+            attr("redeem_stable_amount", return_amount.to_string()),
+            attr("instant_withdrawal_fee", withdrawal_fee.to_string())
+        ]
+    );
+
+    assert_eq!(
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -1403,18 +1417,6 @@ fn instant_withdraw() {
             }))
         ]
     );
-
-    assert_eq!(
-        res.attributes,
-        vec![
-            attr("action", "withdraw_ticket"),
-            attr("depositor", "addr0001"),
-            attr("tickets_amount", 1u64.to_string()),
-            attr("redeem_amount_anchor", aust_to_redeem.to_string()),
-            attr("redeem_stable_amount", return_amount.to_string()),
-            attr("instant_withdrawal_fee", withdrawal_fee.to_string())
-        ]
-    )
 }
 
 #[test]
@@ -1460,7 +1462,9 @@ fn claim() {
         Addr::unchecked(MOCK_CONTRACT_ADDR),
     )
     .unwrap();
+
     let pool = query_pool(deps.as_ref()).unwrap();
+
     println!("shares: {}", shares);
     println!("pooled_deposits: {}", shares * Decimal256::permille(RATE));
     println!("total user aust: {}", pool.total_user_aust);
@@ -1476,14 +1480,15 @@ fn claim() {
     // Calculate the depositor's balance
     let pool = query_pool(deps.as_ref()).unwrap();
 
-    let depositor_balance = decimal_times_decimal_ratio(
+    let depositor_aust_balance = decimal_times_decimal_ratio(
         depositor.shares,
         Decimal256::from_uint256(pool.total_user_aust),
         pool.total_user_shares,
     ) * Uint256::one();
 
-    let redeemed_amount =
-        depositor_balance / Decimal256::permille(RATE) * Decimal256::permille(RATE);
+    let _depositor_balance = depositor_aust_balance * Decimal256::permille(RATE);
+
+    let redeemed_amount = depositor_aust_balance * Decimal256::permille(RATE);
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -2774,14 +2779,25 @@ fn execute_prize_one_winner_multiple_ranks() {
     let address_raw = deps.api.addr_validate("addr0000").unwrap();
 
     let each_minted_aust = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
-    // Get the number of minted shares
-    let each_minted_shares = Decimal256::from_uint256(each_minted_aust);
+
+    let mut total_minted_shares = Decimal256::zero();
+    let mut total_minted_aust = Uint256::zero();
+
+    for _ in 0..5 {
+        total_minted_shares = total_minted_shares
+            + decimal_times_decimal_ratio(
+                Decimal256::from_uint256(each_minted_aust),
+                total_minted_shares,
+                Decimal256::from_uint256(total_minted_aust),
+            );
+        total_minted_aust = total_minted_aust + each_minted_aust;
+    }
 
     // Check depositor info was updated correctly
     assert_eq!(
         read_depositor_info(deps.as_ref().storage, &address_raw),
         DepositorInfo {
-            shares: Decimal256::from_str("5").unwrap() * (each_minted_shares),
+            shares: total_minted_shares,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![
@@ -2818,14 +2834,6 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    // Advance block_time in time
-    if let Duration::Time(time) = HOUR {
-        env.block.time = env.block.time.plus_seconds(time);
-    }
-
-    let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
-
     // Get total prize
     let award_available = calculate_award_available(
         deps.as_ref(),
@@ -2834,7 +2842,21 @@ fn execute_prize_one_winner_multiple_ranks() {
         Decimal256::permille(RATE),
     );
 
-    let awarded_prize = award_available * Decimal256::percent(50 + 30);
+    println!("award test {}", award_available);
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.award_available, award_available);
+
+    // Advance block_time in time
+    if let Duration::Time(time) = HOUR {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+
+    let msg = ExecuteMsg::ExecutePrize { limit: None };
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+
+    let awarded_prize =
+        award_available * Decimal256::percent(50) + award_available * Decimal256::percent(30);
 
     println!(
         "lottery_info: {:x?}",
@@ -3184,7 +3206,9 @@ fn claim_rewards_one_depositor() {
     // Get the number of minted shares
     let minted_shares = Decimal256::from_uint256(minted_aust);
 
-    let minted_shares_value = minted_shares * Decimal256::permille(RATE);
+    // value refers to the value of the aust,
+    // even if you couldn't actually redeem it for that much because of rounding
+    let minted_aust_value = Decimal256::from_uint256(minted_aust) * Decimal256::permille(RATE);
 
     assert_eq!(
         res.messages,
@@ -3193,8 +3217,8 @@ fn claim_rewards_one_depositor() {
             funds: vec![],
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
-                amount: (Decimal256::from_str("100").unwrap() / minted_shares_value
-                    * minted_shares_value
+                amount: (Decimal256::from_str("100").unwrap() / minted_aust_value
+                    * minted_aust_value
                     * Uint256::one())
                 .into(),
             })
@@ -3217,7 +3241,7 @@ fn claim_rewards_one_depositor() {
     assert_eq!(res.pending_rewards, Decimal256::zero());
     assert_eq!(
         res.reward_index,
-        (Decimal256::from_str("100").unwrap() / minted_shares_value)
+        (Decimal256::from_str("100").unwrap() / minted_aust_value)
     );
 }
 
@@ -3272,14 +3296,14 @@ fn claim_rewards_multiple_depositors() {
 
     let info = mock_info("addr0000", &[]);
 
-    // calculate the value of each deposit accounting for rounding errors
-    let each_lottery_deposit_amount = (Uint256::from(2 * TICKET_PRICE)
-        / Decimal256::permille(RATE)
-        * Decimal256::percent(SPLIT_FACTOR))
-        * Decimal256::permille(RATE);
+    let each_minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+    // Get the number of minted shares
+    let each_minted_shares = Decimal256::from_uint256(each_minted_aust);
 
     // calculate the total minted_shares_value
-    let total_lottery_deposit_amount = Uint256::from(2u128) * each_lottery_deposit_amount;
+    let total_owned_value =
+        Decimal256::from_uint256(Uint256::from(2u128) * Decimal256::from_uint256(each_minted_aust))
+            * Decimal256::permille(RATE);
 
     // After 100 blocks
     env.block.height += 100;
@@ -3294,12 +3318,11 @@ fn claim_rewards_multiple_depositors() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     println!("{:?}", res.attributes);
-    println!("Total deposits test: {}", total_lottery_deposit_amount);
+    println!("Total owned value: {}", total_owned_value);
     println!(
         "{}",
-        (Decimal256::from_str("100").unwrap()
-            / Decimal256::from_uint256(total_lottery_deposit_amount)
-            * each_lottery_deposit_amount)
+        (Decimal256::from_str("100").unwrap() / total_owned_value
+            * (Decimal256::from_uint256(each_minted_aust) * Decimal256::permille(RATE)))
     );
     assert_eq!(
         res.messages,
@@ -3308,10 +3331,10 @@ fn claim_rewards_multiple_depositors() {
             funds: vec![],
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
-                amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lottery_deposit_amount)
-                    * each_lottery_deposit_amount)
-                    .into(),
+                amount: (Decimal256::from_str("100").unwrap() / total_owned_value
+                    * (Decimal256::from_uint256(each_minted_aust) * Decimal256::permille(RATE))
+                    * Uint256::one())
+                .into()
             })
             .unwrap(),
         }))]
@@ -3334,8 +3357,7 @@ fn claim_rewards_multiple_depositors() {
     assert_eq!(res.reward_index, state.global_reward_index);
     assert_eq!(
         res.reward_index,
-        Decimal256::from_uint256(Uint256::from(100u128))
-            / Decimal256::from_uint256(total_lottery_deposit_amount)
+        Decimal256::from_uint256(Uint256::from(100u128)) / total_owned_value
     );
 
     // Checking USER 1 state is correct
@@ -3353,7 +3375,9 @@ fn claim_rewards_multiple_depositors() {
 
     assert_eq!(
         res.pending_rewards,
-        Decimal256::from_uint256(each_lottery_deposit_amount) * state.global_reward_index
+        Decimal256::from_uint256(each_minted_aust)
+            * Decimal256::permille(RATE)
+            * state.global_reward_index
     );
     assert_eq!(res.reward_index, state.global_reward_index);
 
@@ -3408,17 +3432,17 @@ fn claim_rewards_depositor_and_sponsor() {
 
     // Calculations
 
-    // calculate the value of each deposit accounting for rounding errors
-    let user_lottery_deposit_amount = (Uint256::from(2 * TICKET_PRICE)
-        / Decimal256::permille(RATE)
-        * Decimal256::percent(SPLIT_FACTOR))
-        * Decimal256::permille(RATE);
+    // Calculate the value of each deposit accounting for rounding errors
+    let user_minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+    // Get the number of minted shares
+    let user_minted_shares = Decimal256::from_uint256(user_minted_aust);
 
     let sponsor_lottery_deposit_amount =
         Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE) * Decimal256::permille(RATE);
 
-    // calculate the total minted_shares_value
-    let total_lottery_deposit_amount = user_lottery_deposit_amount + sponsor_lottery_deposit_amount;
+    // Calculate the total minted_shares_value
+    let total_owned_value = Decimal256::from_uint256(user_minted_aust) * Decimal256::permille(RATE)
+        + Decimal256::from_uint256(sponsor_lottery_deposit_amount);
 
     // Move forward 100 blocks ------------------------------------
     env.block.height += 100;
@@ -3434,6 +3458,13 @@ fn claim_rewards_depositor_and_sponsor() {
     let msg = ExecuteMsg::ClaimRewards {};
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
+    println!(
+        "TesTClaim: {}",
+        (Decimal256::from_str("100").unwrap() / total_owned_value
+            * (Decimal256::from_uint256(user_minted_aust) * Decimal256::permille(RATE)))
+            * Uint256::one()
+    );
+
     // assert that res has a message to send 50 GLOW (half of the total emission of 100)
     // from the distributor to addr0000
     assert_eq!(
@@ -3443,10 +3474,10 @@ fn claim_rewards_depositor_and_sponsor() {
             funds: vec![],
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
-                amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lottery_deposit_amount)
-                    * user_lottery_deposit_amount)
-                    .into(),
+                amount: ((Decimal256::from_str("100").unwrap() / total_owned_value
+                    * (Decimal256::from_uint256(user_minted_aust) * Decimal256::permille(RATE)))
+                    * Uint256::one())
+                .into(),
             })
             .unwrap(),
         }))]
@@ -3510,10 +3541,10 @@ fn claim_rewards_depositor_and_sponsor() {
             funds: vec![],
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "addr0000".to_string(),
-                amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lottery_deposit_amount)
-                    * user_lottery_deposit_amount)
-                    .into(),
+                amount: ((Decimal256::from_str("100").unwrap() / total_owned_value
+                    * (Decimal256::from_uint256(user_minted_aust) * Decimal256::permille(RATE)))
+                    * Uint256::one())
+                .into(),
             })
             .unwrap(),
         }))]
@@ -3722,28 +3753,30 @@ fn small_withdraw() {
 
     // Address withdraws a small amount of money ----------------
 
-    let info = mock_info("addr0001", &[]);
-    let msg = ExecuteMsg::Withdraw {
-        amount: Some(10u128.into()),
-        instant: None,
-    };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
-
     // Get the amount to be withdrawn
     let depositor =
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
 
     let pool = query_pool(deps.as_ref()).unwrap();
 
-    let depositor_balance = decimal_times_decimal_ratio(
+    let depositor_aust_balance = decimal_times_decimal_ratio(
         depositor.shares,
         Decimal256::from_uint256(pool.total_user_aust),
         pool.total_user_shares,
     ) * Uint256::one();
 
+    let depositor_balance = depositor_aust_balance * Decimal256::permille(RATE);
+
     let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), depositor_balance);
 
     let withdrawn_shares = depositor.shares * withdraw_ratio;
+
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        amount: Some(10u128.into()),
+        instant: None,
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Message for redeem amount operation of aUST
 
@@ -3996,7 +4029,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
 
     // Add the funds to the contract address -------------------
 
-    let minted_aust = Uint256::from(SMALL_TICKET_PRICE) / Decimal256::permille(RATE);
+    let minted_aust = Uint256::from(SMALL_TICKET_PRICE) / special_rate;
     // Get the number of minted shares
     let minted_shares = Decimal256::from_uint256(minted_aust);
 
@@ -4014,6 +4047,8 @@ pub fn anchor_pool_smaller_than_total_deposits() {
         Addr::unchecked(MOCK_CONTRACT_ADDR),
     )
     .unwrap();
+
+    println!("hi: {}, {}", minted_aust, pool.total_user_aust);
 
     // user_aust should equal contract_a_balance
     assert_eq!(pool.total_user_aust, contract_a_balance);
@@ -4046,7 +4081,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: Decimal256::zero(),
-            last_lottery_exchange_rate: Decimal256::permille(RATE)
+            last_lottery_exchange_rate: special_rate
         }
     );
 
@@ -4220,6 +4255,8 @@ pub fn validate_split_factor() {
 
     // Now again
 
+    let previous_value = (contract_a_balance - sent_amount.into()) * special_rate;
+
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
         env.block.time = env.block.time.plus_seconds(time);
@@ -4252,11 +4289,9 @@ pub fn validate_split_factor() {
 
     // Verify that the value of the redeemed aust equals the appreciation
     // of the lottery shares
-    // Which should be the same as the previous lottery
     assert_eq!(
         Uint256::from(sent_amount) * special_rate,
-        // minted_shares is the value from the initial deposit
-        minted_shares_value * decimal_split_factor
+        previous_value * decimal_split_factor
     );
 
     // Get the contract_a_balance

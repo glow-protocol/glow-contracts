@@ -249,7 +249,15 @@ pub fn deposit(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    // get the amount of funds sent in the base stable denom
+    // Get the aust exchange rate
+    let rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
+    // Get the amount of funds sent in the base stable denom
     let deposit_amount = info
         .funds
         .iter()
@@ -257,62 +265,55 @@ pub fn deposit(
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
 
-    // validate that the deposit amount is non zero
-    if deposit_amount.is_zero() {
-        return if let Some(_recipient) = recipient {
-            Err(ContractError::InvalidGiftAmount {})
-        } else {
-            Err(ContractError::InvalidDepositAmount {})
-        };
-    }
-
-    // validate that all sequence combinations are valid
-    for combination in combinations.clone() {
-        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
-            return Err(ContractError::InvalidSequence {});
-        }
-    }
-
-    // validate that the lottery has not already started
-    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if current_lottery.rand_round != 0 {
-        return Err(ContractError::LotteryAlreadyStarted {});
-    }
-
-    // get the amount of requested tickets
-    let mut amount_tickets = combinations.len() as u64;
-
-    // validate that the deposit size is greater than or equal to the corresponding cost of the requested number of tickets
-    let required_amount = config.ticket_price * Uint256::from(amount_tickets);
-    if deposit_amount < required_amount {
-        return if let Some(_recipient) = recipient {
-            Err(ContractError::InsufficientGiftDepositAmount(amount_tickets))
-        } else {
-            Err(ContractError::InsufficientDepositAmount(amount_tickets))
-        };
-    }
-
-    // get the depositor info
+    // Get the depositor info
     // depositor being either the message sender
     // or the recipient that will be reciving the deposited funds if specified
-    let depositor = if let Some(recipient) = recipient {
+    let depositor = if let Some(recipient) = recipient.clone() {
         deps.api.addr_validate(recipient.as_str())?
     } else {
         info.sender.clone()
     };
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
+    // Get the amount of requested tickets
+    let mut amount_tickets = combinations.len() as u64;
+
+    // Validate that the deposit amount is non zero
+    if deposit_amount.is_zero() {
+        return if recipient.is_some() {
+            Err(ContractError::InvalidGiftAmount {})
+        } else {
+            Err(ContractError::InvalidDepositAmount {})
+        };
+    }
+
+    // Validate that all sequence combinations are valid
+    for combination in combinations.clone() {
+        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
+            return Err(ContractError::InvalidSequence {});
+        }
+    }
+
+    // Validate that the lottery has not already started
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
+    // Validate that the deposit size is greater than or equal to the corresponding cost of the requested number of tickets
+    let required_amount = config.ticket_price * Uint256::from(amount_tickets);
+    if deposit_amount < required_amount {
+        return if recipient.is_some() {
+            Err(ContractError::InsufficientGiftDepositAmount(amount_tickets))
+        } else {
+            Err(ContractError::InsufficientDepositAmount(amount_tickets))
+        };
+    }
+
     // update the glow deposit reward index
     compute_reward(&mut state, &pool, env.block.height);
     // update the glow depositor reward for the depositor
     compute_depositor_reward(&state, &mut depositor_info);
-
-    // query exchange_rate from anchor money market
-    let epoch_state: EpochStateResponse = query_exchange_rate(
-        deps.as_ref(),
-        config.anchor_contract.to_string(),
-        env.block.height,
-    )?;
 
     // deduct tx taxes when calculating the net deposited amount in anchor
     let net_coin_amount = deduct_tax(
@@ -322,7 +323,7 @@ pub fn deposit(
     let post_tax_deposit_amount = Uint256::from(net_coin_amount.amount);
 
     // Get the number of minted aust
-    let minted_aust = post_tax_deposit_amount / epoch_state.exchange_rate;
+    let minted_aust = post_tax_deposit_amount / rate;
 
     // Get the number of minted aust that will go towards the lottery
     let minted_lottery_aust = minted_aust * config.split_factor;
@@ -331,18 +332,18 @@ pub fn deposit(
     let minted_savings_aust = minted_aust - minted_lottery_aust;
 
     // Get the value of minted aust going towards the lottery
-    let minted_lottery_aust_value = minted_lottery_aust * epoch_state.exchange_rate;
+    let minted_lottery_aust_value = minted_lottery_aust * rate;
 
     // Get the number of tickets the user would have post transaction
     let raw_post_transaction_num_depositor_tickets =
         Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
 
-    let post_transaction_deposit_amount =
+    let post_transaction_lottery_deposit =
         depositor_info.lottery_deposit + minted_lottery_aust_value;
 
-    // Check if we need to round up number of combinations based on depositor post transaction total deposits
+    // Check if we need to round up number of combinations based on depositor post transaction lottery deposit
     let mut new_combinations = combinations;
-    if post_transaction_deposit_amount
+    if post_transaction_lottery_deposit
         >= (raw_post_transaction_num_depositor_tickets + Uint256::one())
             * config.ticket_price
             * config.split_factor

@@ -98,7 +98,7 @@ pub enum QueryMsg {
     Config {},
     /// Current state. If block_height is provided, return current depositor rewards
     State { block_height: Option<u64> },
-    /// Lotto pool current state. Savings aust and deposits.
+    /// Lotto pool current state. Savings aust and lottery deposits.
     Pool {},
     /// Lottery information by lottery id
     LotteryInfo { lottery_id: Option<u64> },

@@ -76,8 +76,8 @@ pub struct Pool {
     // - checking for pool solvency
     // - tracking the amount of aust reserved for savings
     pub total_user_savings_aust: Uint256,
-    // Sum of all sponsor deposits going towards the lottery.
-    // This is the same as the sum of all sponsor deposits
+    // Sum of all sponsor lottery deposits
+    // which equals the sum of sponsor deposits
     // because all sponsor deposits go entirely towards the lottery
     // This is used for:
     // - checking for pool solvency
@@ -88,11 +88,11 @@ pub struct Pool {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    // Cumulative value of the depositor's deposits going towards the lottery.
+    // Cumulative value of the depositor's lottery deposits
     // The sums of all depositor deposit amounts equals total_user_lottery_deposits
     // This is used for:
-    // - calculating how many tickets the user should have access to.
-    // - computing the depositor's deposit reward.
+    // - calculating how many tickets the user should have access to
+    // - computing the depositor's deposit reward
     // - calculating the depositor's balance (how much they can withdraw)
     pub lottery_deposit: Uint256,
     // Amount of aust in the users savings account

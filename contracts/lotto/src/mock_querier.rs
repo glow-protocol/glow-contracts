@@ -159,6 +159,7 @@ impl ExchangeRateQuerier {
 }
 
 #[derive(Clone, Default)]
+#[allow(dead_code)] // TODO: use this fn in tests
 pub struct EmissionRateQuerier {
     emission_rate: Decimal256,
 }

@@ -218,7 +218,7 @@ impl WasmMockQuerier {
                     distributed_interest: _,
                 } => {
                     SystemResult::Ok(ContractResult::from(to_binary(&EpochStateResponse {
-                        exchange_rate: Decimal256::permille(1023), // Current anchor rate,
+                        exchange_rate: self.exchange_rate_querier.exchange_rate, // Current anchor rate,
                         aterra_supply: Uint256::one(),
                     })))
                 }

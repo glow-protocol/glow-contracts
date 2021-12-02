@@ -3,14 +3,13 @@
   "title": "SponsorInfoResponse",
   "type": "object",
   "required": [
-    "amount",
+    "lottery_deposit",
     "pending_rewards",
     "reward_index",
-    "shares",
     "sponsor"
   ],
   "properties": {
-    "amount": {
+    "lottery_deposit": {
       "$ref": "#/definitions/Uint256"
     },
     "pending_rewards": {
@@ -18,9 +17,6 @@
     },
     "reward_index": {
       "$ref": "#/definitions/Decimal256"
-    },
-    "shares": {
-      "$ref": "#/definitions/Uint256"
     },
     "sponsor": {
       "type": "string"

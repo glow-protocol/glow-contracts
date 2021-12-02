@@ -129,18 +129,10 @@ pub struct LotteryInfo {
     pub page: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PrizeInfo {
     pub claimed: bool,
     pub matches: [u32; 6],
-}
-impl Default for PrizeInfo {
-    fn default() -> Self {
-        PrizeInfo {
-            claimed: false,
-            matches: [0; 6],
-        }
-    }
 }
 
 pub fn store_lottery_info(

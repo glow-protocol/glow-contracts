@@ -467,11 +467,11 @@ fn deposit() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -824,11 +824,11 @@ fn gift_tickets() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -1631,11 +1631,11 @@ fn claim_lottery_single_winner() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -2214,11 +2214,11 @@ fn execute_prize_no_winners() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -2341,11 +2341,11 @@ fn execute_prize_one_winner() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -2473,11 +2473,11 @@ fn execute_prize_winners_diff_ranks() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -2637,11 +2637,11 @@ fn execute_prize_winners_same_rank() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -3704,11 +3704,11 @@ fn small_withdraw() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * Decimal256::permille(RATE);
@@ -4068,11 +4068,11 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     // Get the number of minted shares
     let minted_shares = Uint256::from(SMALL_TICKET_PRICE) / special_rate;
 
-    // Get the amount of shares that will go towards savings
-    let minted_savings_shares = minted_shares - minted_shares * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the amount of shares that will go towards the lottery
     let minted_lottery_shares = minted_shares * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the amount of shares that will go towards savings
+    let minted_savings_shares = minted_shares - minted_lottery_shares;
 
     // Get the value of the minted lottery shares of aUST after accounting for rounding errors
     let minted_lottery_shares_value = minted_lottery_shares * special_rate;

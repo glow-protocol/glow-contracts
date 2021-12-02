@@ -3346,7 +3346,8 @@ pub fn validate_split_factor() {
 
         if i % 5 == 0 {
             println!(
-                "Percent appreciation towards lottery: {}",
+                "Percent appreciation towards lottery after week {}: {}",
+                i,
                 Decimal256::from_uint256(Uint256::from(sent_amount)) * exchange_rate
                     / Decimal256::from_uint256(pool_size_appreciation)
             );

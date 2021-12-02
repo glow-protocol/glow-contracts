@@ -544,42 +544,49 @@ pub fn execute_sponsor_withdraw(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
-
-    if sponsor_info.lottery_deposit.is_zero() {
-        return Err(ContractError::NoSponsorLotteryDeposit {});
-    }
-
-    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if current_lottery.rand_round != 0 {
-        return Err(ContractError::LotteryAlreadyStarted {});
-    }
-
-    // Compute Glow depositor rewards
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_sponsor_reward(&state, &mut sponsor_info);
-
-    // Calculate aust amount to redeem based on depositor amount
+    // Get the contract's aust balance
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
         env.clone().contract.address,
     )?;
+
+    // Get the aust exchange rate
     let rate = query_exchange_rate(
         deps.as_ref(),
         config.anchor_contract.to_string(),
         env.block.height,
     )?
     .exchange_rate;
-    let aust_to_redeem = sponsor_info.lottery_deposit / rate;
 
-    // Double-checking that the lotto pool is solvent against sponsors
-    // Need to be careful about rounding errors or this will cause problems
-    if Uint256::from(contract_a_balance) * rate
+    let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
+
+    // Validate that the sponsor has a lottery deposit
+    if sponsor_info.lottery_deposit.is_zero() {
+        return Err(ContractError::NoSponsorLotteryDeposit {});
+    }
+
+    // Validate that there isn't a lottery in progress
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
+    // Validate that value of the contract's aust is always at least the
+    // sum of the value of the user savings aust and lottery deposits.
+    // This check should never fail but is in place as an extra safety measure.
+    // TODO Prove that rounding errors won't cause problems here
+    if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
         < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
-        return Err(ContractError::InsufficientSponsorFunds {});
+        return Err(ContractError::InsufficientPoolFunds {});
     }
+
+    // Compute Glow depositor rewards
+    compute_reward(&mut state, &pool, env.block.height);
+    compute_sponsor_reward(&state, &mut sponsor_info);
+
+    let aust_to_redeem = sponsor_info.lottery_deposit / rate;
 
     // Update global state
     pool.total_sponsor_lottery_deposits = pool
@@ -649,25 +656,7 @@ pub fn execute_withdraw(
 
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
-    // Validate that the user has savings aust to withdraw
-    if depositor.savings_aust.is_zero() || pool.total_user_savings_aust.is_zero() {
-        return Err(ContractError::NoDepositorSavingsAustToWithdraw {});
-    }
-
-    // Validate that the user is withdrawing a non zero amount
-    if (amount.is_some()) && (amount.unwrap().is_zero()) {
-        return Err(ContractError::SpecifiedWithdrawAmountTooSmall {});
-    }
-
-    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if current_lottery.rand_round != 0 {
-        return Err(ContractError::LotteryAlreadyStarted {});
-    }
-    // Compute GLOW reward
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
-
-    // Get the contract balance
+    // Get the contract's aust balance
     let contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
@@ -681,6 +670,36 @@ pub fn execute_withdraw(
         env.block.height,
     )?
     .exchange_rate;
+
+    // Validate that the user has savings aust to withdraw
+    if depositor.savings_aust.is_zero() || pool.total_user_savings_aust.is_zero() {
+        return Err(ContractError::NoDepositorSavingsAustToWithdraw {});
+    }
+
+    // Validate that the user is withdrawing a non zero amount
+    if (amount.is_some()) && (amount.unwrap().is_zero()) {
+        return Err(ContractError::SpecifiedWithdrawAmountTooSmall {});
+    }
+
+    // Validate that there isn't a lottery in progress already
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
+    // Validate that value of the contract's aust is always at least the
+    // sum of the value of the user savings aust and lottery deposits.
+    // This check should never fail but is in place as an extra safety measure.
+    // TODO Prove that rounding errors won't cause problems here
+    if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
+        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    {
+        return Err(ContractError::InsufficientPoolFunds {});
+    }
+
+    // Compute GLOW reward
+    compute_reward(&mut state, &pool, env.block.height);
+    compute_depositor_reward(&state, &mut depositor);
 
     // Calculate the depositor's balance
     // It's equal to the value of their savings aust plus their lottery deposit
@@ -714,14 +733,6 @@ pub fn execute_withdraw(
         )?
         .amount,
     );
-
-    // Validate that value of the contract's aust is always at least the
-    // sum of the user and sponsor deposits.
-    if Uint256::from(contract_a_balance) * rate
-        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-    {
-        return Err(ContractError::InsufficientPoolFunds {});
-    }
 
     let tickets_amount = depositor.tickets.len() as u128;
 

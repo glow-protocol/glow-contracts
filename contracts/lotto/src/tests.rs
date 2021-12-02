@@ -1830,6 +1830,12 @@ fn execute_lottery() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
+    //Add aterra balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
+    )]);
+
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -2150,6 +2156,12 @@ fn execute_lottery_no_tickets() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
+    //Add aterra balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
+    )]);
+
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -2165,6 +2177,7 @@ fn execute_lottery_no_tickets() {
     let msg = ExecuteMsg::ExecuteLottery {};
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
+    println!("res: {:?}", res);
     match res {
         Err(ContractError::InvalidLotteryExecutionTickets {}) => {}
         _ => panic!("DO NOT ENTER HERE"),

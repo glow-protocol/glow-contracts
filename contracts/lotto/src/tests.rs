@@ -1736,6 +1736,9 @@ fn execute_lottery() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -2984,6 +2987,9 @@ fn claim_rewards_one_depositor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
+
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -3065,6 +3071,9 @@ fn claim_rewards_one_depositor() {
 fn claim_rewards_multiple_depositors() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
@@ -3341,8 +3350,7 @@ pub fn validate_split_factor() {
         let execute_prize_msg = ExecuteMsg::ExecutePrize { limit: None };
         let _res = execute(deps.as_mut(), env.clone(), info, execute_prize_msg).unwrap();
 
-        amount_distributed_through_lottery =
-            amount_distributed_through_lottery + Uint256::from(sent_amount) * exchange_rate;
+        amount_distributed_through_lottery += Uint256::from(sent_amount) * exchange_rate;
 
         if i % 5 == 0 {
             println!(

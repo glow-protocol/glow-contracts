@@ -3249,7 +3249,7 @@ fn execute_epoch_operations() {
 }
 
 #[test]
-pub fn validate_split_factor() {
+pub fn simulate_many_lotteries() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
@@ -3276,7 +3276,7 @@ pub fn validate_split_factor() {
         "addr0001",
         &[Coin {
             denom: "uusd".to_string(),
-            amount: Uint256::from(TICKET_PRICE).into(),
+            amount: Uint256::from(TICKET_PRICE / 100).into(),
         }],
     );
     let msg = ExecuteMsg::Deposit {
@@ -3285,7 +3285,7 @@ pub fn validate_split_factor() {
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Calculate the number of minted_shares
-    let minted_shares = Uint256::from(TICKET_PRICE) / exchange_rate;
+    let minted_shares = Uint256::from(TICKET_PRICE / 100) / exchange_rate;
 
     let mut contract_balance = minted_shares;
 

@@ -59,6 +59,10 @@ pub struct State {
     pub glow_emission_rate: Decimal256,
 }
 
+// Note: total_user_lottery_deposits and total_sponsor_lottery_deposits
+// could be merged into total_lottery_deposits without changing the functionality of the code
+// but keeping them separate allows for a better understanding of the deposit to sponsor distribution
+// as well as makes the code more flexible for future changes.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
     // Sum of all user lottery deposits

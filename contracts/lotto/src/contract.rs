@@ -341,7 +341,7 @@ pub fn deposit(
     let post_transaction_lottery_deposit =
         depositor_info.lottery_deposit + minted_lottery_aust_value;
 
-    // Check if we need to round up number of combinations based on depositor post transaction lottery deposit
+    // Check if we need to round up the number of combinations based on the depositor's post transaction lottery deposit
     let mut new_combinations = combinations;
     if post_transaction_lottery_deposit
         >= (raw_post_transaction_num_depositor_tickets + Uint256::one())
@@ -588,8 +588,12 @@ pub fn execute_sponsor_withdraw(
     compute_sponsor_reward(&state, &mut sponsor_info);
 
     let aust_to_redeem = sponsor_info.lottery_deposit / rate;
+    let aust_to_redeem_value = aust_to_redeem * rate;
 
     // Update global state
+    // TODO will this cause problems with the pool solvency calculation?
+    // because the value of the aust you are redeeming is greater than the lottery_deposit
+    // no that shouldn't be the case
     pool.total_sponsor_lottery_deposits = pool
         .total_sponsor_lottery_deposits
         .sub(sponsor_info.lottery_deposit);
@@ -614,10 +618,7 @@ pub fn execute_sponsor_withdraw(
     // Discount tx taxes from Anchor to Glow
     let coin_amount = deduct_tax(
         deps.as_ref(),
-        coin(
-            sponsor_info.lottery_deposit.into(),
-            config.clone().stable_denom,
-        ),
+        coin(aust_to_redeem_value.into(), config.clone().stable_denom),
     )?
     .amount;
 
@@ -716,24 +717,11 @@ pub fn execute_withdraw(
         }
     }
 
-    // Get the amount to redeem
-    // this should equal amount
-    let withdraw_value = depositor_balance * withdraw_ratio;
+    // We use amount to get the withdraw_ratio,
+    // but from this point forwards everything is based on withdraw_ratio
+    // not amount
 
-    // Get the amount of aust to redeem
-    let aust_to_redeem = withdraw_value / rate;
-
-    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
-    let redeemed_amount = aust_to_redeem * rate;
-
-    // Get the value of the returned amount after accounting for taxes.
-    let mut return_amount = Uint256::from(
-        deduct_tax(
-            deps.as_ref(),
-            coin(redeemed_amount.into(), config.clone().stable_denom),
-        )?
-        .amount,
-    );
+    // Calculate how many tickets to remove
 
     let tickets_amount = depositor.tickets.len() as u128;
 
@@ -757,13 +745,19 @@ pub fn execute_withdraw(
         })?;
     }
 
-    // Take the ceil when calculating withdrawn_lottery_deposits and withdrawn_savings_aust
-    // because we will be subtracting with this value and don't want to under subtract
+    // Get the amount of the user's savings aust to withdraw
+    // no need to take the ceil because we will be redeeming the exact amount of aust
+    let withdrawn_savings_aust = depositor.savings_aust * withdraw_ratio;
+
+    // Get the value of the user's lottery_deposit to withdraw
+    let raw_withdrawn_lottery_deposit = depositor.lottery_deposit * withdraw_ratio;
+    // Get the amount of aust to withdraw in order to match this amount, it may be worth slightly less because of flooring
+    let aust_to_redeem_for_lottery_deposit = raw_withdrawn_lottery_deposit / rate;
+    // Take the ceil when calculating withdrawn_lottery_deposits
+    // because we will be subtracting with this value from total_user_lottery_deposits and don't want to under subtract
     // TODO does withdrawn_lottery_deposits + withdrawn_savings_aust * rate = redeemed_amount?
     let withdrawn_lottery_deposits =
         uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
-    let withdrawn_savings_aust =
-        uint256_times_decimal256_ceil(depositor.savings_aust, withdraw_ratio);
 
     // Update depositor info
 
@@ -782,6 +776,24 @@ pub fn execute_withdraw(
     // Remove withdrawn_tickets from total_tickets
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
 
+    // Get the total aust to withdraw
+    let total_aust_to_redeem = withdrawn_savings_aust + aust_to_redeem_for_lottery_deposit;
+
+    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
+    let total_aust_to_redeem_value = total_aust_to_redeem * rate;
+
+    // Get the value of the returned amount after accounting for taxes.
+    let mut return_amount = Uint256::from(
+        deduct_tax(
+            deps.as_ref(),
+            coin(
+                total_aust_to_redeem_value.into(),
+                config.clone().stable_denom,
+            ),
+        )?
+        .amount,
+    );
+
     let mut msgs: Vec<CosmosMsg> = vec![];
 
     // Message for redeem amount operation of aUST
@@ -790,7 +802,7 @@ pub fn execute_withdraw(
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
             contract: config.anchor_contract.to_string(),
-            amount: aust_to_redeem.into(),
+            amount: total_aust_to_redeem.into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
         })?,
     });
@@ -837,7 +849,7 @@ pub fn execute_withdraw(
         attr("action", "withdraw_ticket"),
         attr("depositor", info.sender.to_string()),
         attr("tickets_amount", withdrawn_tickets.to_string()),
-        attr("redeem_amount_anchor", aust_to_redeem.to_string()),
+        attr("redeem_amount_anchor", total_aust_to_redeem.to_string()),
         attr("redeem_stable_amount", return_amount.to_string()),
         attr("instant_withdrawal_fee", withdrawal_fee.to_string()),
     ]))

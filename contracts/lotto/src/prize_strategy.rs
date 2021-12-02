@@ -82,8 +82,8 @@ pub fn execute_lottery(
         env.clone().contract.address,
     )?;
 
-    // Lottery balance equals aust_balance - savings_shares
-    let aust_lottery_balance = Uint256::from(aust_balance) - pool.total_user_savings_shares;
+    // Lottery balance equals aust_balance - total_user_savings_aust
+    let aust_lottery_balance = Uint256::from(aust_balance) - pool.total_user_savings_aust;
 
     // Get the aust exchange rate
     let rate = query_exchange_rate(
@@ -108,18 +108,18 @@ pub fn execute_lottery(
         >= pooled_lottery_deposits
     {
         if state.award_available.is_zero() {
-            // If lottery related shares have a smaller value than the amount of lottery deposits and award_available is zero
+            // If lottery related aust have a smaller value than the amount of lottery deposits and award_available is zero
             // Return InsufficientLotteryFunds
             return Err(ContractError::InsufficientLotteryFunds {});
         }
     } else {
-        // The value to redeem is the difference between the value of the appreciated lottery aust shares
+        // The value to redeem is the difference between the value of the appreciated lottery aust
         // and the total ust amount that has been deposited towards the lottery.
         let amount_to_redeem = pooled_lottery_deposits
             - pool.total_user_lottery_deposits
             - pool.total_sponsor_lottery_deposits;
 
-        // Divide by the rate to get the number of shares to redeem
+        // Divide by the rate to get the number of aust to redeem
         aust_to_redeem = amount_to_redeem / rate;
 
         // Get the value of the aust that will be redeemed

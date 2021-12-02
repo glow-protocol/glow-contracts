@@ -40,7 +40,7 @@
         "lottery_deposit",
         "pending_rewards",
         "reward_index",
-        "savings_shares",
+        "savings_aust",
         "tickets",
         "unbonding_info"
       ],
@@ -57,7 +57,7 @@
         "reward_index": {
           "$ref": "#/definitions/Decimal256"
         },
-        "savings_shares": {
+        "savings_aust": {
           "$ref": "#/definitions/Uint256"
         },
         "tickets": {

@@ -67,13 +67,11 @@ pub struct Pool {
     // - calculating the global reward index
     // - calculating the amount to redeem when executing a lottery
     pub total_user_lottery_deposits: Uint256,
-    // Sum of all user savings shares
-    // total_user_savings_shares equals the amount of aust reserved
-    // for user savings
+    // Sum of all user savings aust
     // This is used for:
-    // - calculating shares_supply to be used for getting depositor_ratio
+    // - checking for pool solvency
     // - tracking the amount of aust reserved for savings
-    pub total_user_savings_shares: Uint256,
+    pub total_user_savings_aust: Uint256,
     // Sum of all sponsor deposits going towards the lottery.
     // This is the same as the sum of all sponsor deposits
     // because all sponsor deposits go entirely towards the lottery
@@ -96,7 +94,7 @@ pub struct DepositorInfo {
     // Amount of aust in the users savings account
     // This is used for:
     // - calculating the depositor's balance (how much they can withdraw)
-    pub savings_shares: Uint256,
+    pub savings_aust: Uint256,
     // Reward index is used for tracking and calculating the depositor's rewards
     pub reward_index: Decimal256,
     // Stores the amount rewards that are available for the user to claim.
@@ -181,7 +179,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
         Ok(v) => v,
         _ => DepositorInfo {
             lottery_deposit: Uint256::zero(),
-            savings_shares: Uint256::zero(),
+            savings_aust: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -228,7 +226,7 @@ pub fn read_depositors(
             Ok(DepositorInfoResponse {
                 depositor,
                 lottery_deposit: v.lottery_deposit,
-                savings_shares: v.savings_shares,
+                savings_aust: v.savings_aust,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
                 tickets: v.tickets,

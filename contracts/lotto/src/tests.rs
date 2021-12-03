@@ -3828,22 +3828,20 @@ fn small_withdraw() {
     let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), depositor_balance);
 
     // Calculate the amount of savings aust to withdraw
-    let withdrawn_savings_aust = depositor.savings_aust * withdraw_ratio;
+    let withdrawn_savings_aust =
+        uint256_times_decimal256_ceil(depositor.savings_aust, withdraw_ratio);
 
     // Withdrawn lottery deposit calculations
 
-    // Calculate ceil and floor of withdrawn lottery aust
-    let ceil_withdrawn_lottery_aust =
+    let withdrawn_lottery_aust =
         uint256_times_decimal256_ceil(depositor_lottery_aust, withdraw_ratio);
     let ceil_withdrawn_lottery_aust_value =
-        uint256_times_decimal256_ceil(ceil_withdrawn_lottery_aust, Decimal256::permille(RATE));
-
-    let floor_withdrawn_lottery_aust = depositor_lottery_aust * withdraw_ratio;
+        uint256_times_decimal256_ceil(withdrawn_lottery_aust, Decimal256::permille(RATE));
 
     // Total aust to redeem calculations
 
     // Get the total aust to redeem
-    let total_aust_to_redeem = floor_withdrawn_lottery_aust + withdrawn_savings_aust;
+    let total_aust_to_redeem = withdrawn_lottery_aust + withdrawn_savings_aust;
 
     // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
     let _total_aust_to_redeem_value = total_aust_to_redeem * Decimal256::permille(RATE);

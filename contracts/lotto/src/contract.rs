@@ -750,22 +750,20 @@ pub fn execute_withdraw(
     // Withdrawn savings aust calculations
 
     // Calculate the amount of savings aust to withdraw
-    let withdrawn_savings_aust = depositor.savings_aust * withdraw_ratio;
+    let withdrawn_savings_aust =
+        uint256_times_decimal256_ceil(depositor.savings_aust, withdraw_ratio);
 
     // Withdrawn lottery deposit calculations
 
-    // Calculate ceil and floor of withdrawn lottery aust
-    let ceil_withdrawn_lottery_aust =
+    let withdrawn_lottery_aust =
         uint256_times_decimal256_ceil(depositor_lottery_aust, withdraw_ratio);
     let ceil_withdrawn_lottery_aust_value =
-        uint256_times_decimal256_ceil(ceil_withdrawn_lottery_aust, rate);
-
-    let floor_withdrawn_lottery_aust = depositor_lottery_aust * withdraw_ratio;
+        uint256_times_decimal256_ceil(withdrawn_lottery_aust, rate);
 
     // Total aust to redeem calculations
 
     // Get the total aust to redeem
-    let total_aust_to_redeem = floor_withdrawn_lottery_aust + withdrawn_savings_aust;
+    let total_aust_to_redeem = withdrawn_lottery_aust + withdrawn_savings_aust;
 
     // Get the value of the redeemed aust. total_aust_to_redeem * rate
     let total_aust_to_redeem_value = total_aust_to_redeem * rate;

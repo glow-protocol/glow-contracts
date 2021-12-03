@@ -107,61 +107,48 @@ pub fn execute_lottery(
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
-    let mut aust_to_redeem = Uint256::zero();
-
     // total_user_lottery_deposits plus total_sponsor_lottery_deposits gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
     // aust_lottery_balance_value gives the total ust value of the aust portion of the contract's balance
 
-    // aust_lottery_balance_value should always be greater than or equal to the total_user_lottery_deposits + total_sponsor_lottery_deposits so this is more of a double check
-    if (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-        >= aust_lottery_balance_value
-    {
+    // The value to redeem is the difference between the value of the appreciated lottery aust
+    // and the total ust amount that has been deposited towards the lottery.
+    let amount_to_redeem = aust_lottery_balance_value
+        - pool.total_user_lottery_deposits
+        - pool.total_sponsor_lottery_deposits;
+
+    // Divide by the rate to get the number of aust to redeem
+    let aust_to_redeem = amount_to_redeem / rate;
+
+    // Get the value of the aust that will be redeemed
+    let aust_to_redeem_value = aust_to_redeem * rate;
+
+    // Get the amount of ust that will be received after accounting for taxes
+    let net_amount = deduct_tax(
+        deps.as_ref(),
+        coin(aust_to_redeem_value.into(), config.clone().stable_denom),
+    )?
+    .amount;
+
+    if aust_to_redeem.is_zero() {
         if state.award_available.is_zero() {
-            // If lottery related aust have a smaller value than the amount of lottery deposits and award_available is zero
-            // Return InsufficientLotteryFunds
+            // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
             return Err(ContractError::InsufficientLotteryFunds {});
         }
     } else {
-        // The value to redeem is the difference between the value of the appreciated lottery aust
-        // and the total ust amount that has been deposited towards the lottery.
-        let amount_to_redeem = aust_lottery_balance_value
-            - pool.total_user_lottery_deposits
-            - pool.total_sponsor_lottery_deposits;
+        // Add the net redeemed amount to the award available.
+        state.award_available += Uint256::from(net_amount);
 
-        // Divide by the rate to get the number of aust to redeem
-        aust_to_redeem = amount_to_redeem / rate;
-
-        // Get the value of the aust that will be redeemed
-        let aust_to_redeem_value = aust_to_redeem * rate;
-
-        // Get the amount of ust that will be received after accounting for taxes
-        let net_amount = deduct_tax(
-            deps.as_ref(),
-            coin(aust_to_redeem_value.into(), config.clone().stable_denom),
-        )?
-        .amount;
-
-        if aust_to_redeem.is_zero() {
-            if state.award_available.is_zero() {
-                // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
-                return Err(ContractError::InsufficientLotteryFunds {});
-            }
-        } else {
-            // Add the net redeemed amount to the award available.
-            state.award_available += Uint256::from(net_amount);
-
-            // Message to redeem "aust_to_redeem" of aust from the Anchor contract
-            let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.a_terra_contract.to_string(),
-                funds: vec![],
-                msg: to_binary(&Cw20Send {
-                    contract: config.anchor_contract.to_string(),
-                    amount: aust_to_redeem.into(),
-                    msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
-                })?,
-            });
-            msgs.push(redeem_msg);
-        }
+        // Message to redeem "aust_to_redeem" of aust from the Anchor contract
+        let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.a_terra_contract.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20Send {
+                contract: config.anchor_contract.to_string(),
+                amount: aust_to_redeem.into(),
+                msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
+            })?,
+        });
+        msgs.push(redeem_msg);
     }
 
     // Store the state

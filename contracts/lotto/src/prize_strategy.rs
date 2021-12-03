@@ -64,7 +64,6 @@ pub fn execute_lottery(
     // Validate that value of the contract's aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
-    // TODO Prove that rounding errors won't cause problems here
     if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
         < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {

@@ -576,7 +576,6 @@ pub fn execute_sponsor_withdraw(
     // Validate that value of the contract's aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
-    // TODO Prove that rounding errors won't cause problems here
     if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
         < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
@@ -591,9 +590,7 @@ pub fn execute_sponsor_withdraw(
     let aust_to_redeem_value = aust_to_redeem * rate;
 
     // Update global state
-    // TODO will this cause problems with the pool solvency calculation?
-    // because the value of the aust you are redeeming is greater than the lottery_deposit
-    // no that shouldn't be the case
+
     pool.total_sponsor_lottery_deposits = pool
         .total_sponsor_lottery_deposits
         .sub(sponsor_info.lottery_deposit);
@@ -692,7 +689,6 @@ pub fn execute_withdraw(
     // Validate that value of the contract's aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
-    // TODO Prove that rounding errors won't cause problems here
     if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
         < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
@@ -768,7 +764,7 @@ pub fn execute_withdraw(
     // Get the total aust to redeem
     let total_aust_to_redeem = floor_withdrawn_lottery_aust + withdrawn_savings_aust;
 
-    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
+    // Get the value of the redeemed aust. total_aust_to_redeem * rate
     let total_aust_to_redeem_value = total_aust_to_redeem * rate;
 
     // Update depositor info

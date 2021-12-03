@@ -703,9 +703,14 @@ pub fn execute_withdraw(
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
-    // Calculate the depositor's balance
-    // It's equal to the value of their savings aust plus their lottery deposit
-    let depositor_balance = depositor.savings_aust * rate + depositor.lottery_deposit;
+    // Get the amount of aust equivalent to the depositor's lottery deposit
+    let depositor_lottery_aust = depositor.lottery_deposit / rate;
+
+    // Calculate the depositor's aust balance
+    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
+
+    // Calculate the depositor's balance from their aust balance
+    let depositor_balance = depositor_aust_balance * rate;
 
     // Calculate fraction of the depositor's balance that is being withdrawn
     let mut withdraw_ratio = Decimal256::one();
@@ -717,12 +722,10 @@ pub fn execute_withdraw(
         }
     }
 
-    // We use amount to get the withdraw_ratio,
-    // but from this point forwards everything is based on withdraw_ratio
-    // not amount
+    // We use amount to get the withdraw_ratio
+    // but from this point forwards everything is based on withdraw_ratio, not amount
 
     // Calculate how many tickets to remove
-
     let tickets_amount = depositor.tickets.len() as u128;
 
     // Get ceiling of withdrawn tickets
@@ -745,42 +748,47 @@ pub fn execute_withdraw(
         })?;
     }
 
-    // Get the amount of the user's savings aust to withdraw
-    // no need to take the ceil because we will be redeeming the exact amount of aust
+    // Withdrawn savings aust calculations
+
+    // Calculate the number of shares to withdraw
     let withdrawn_savings_aust = depositor.savings_aust * withdraw_ratio;
 
-    // Get the value of the user's lottery_deposit to withdraw
-    let raw_withdrawn_lottery_deposit = depositor.lottery_deposit * withdraw_ratio;
-    // Get the amount of aust to withdraw in order to match this amount, it may be worth slightly less because of flooring
-    let aust_to_redeem_for_lottery_deposit = raw_withdrawn_lottery_deposit / rate;
-    // Take the ceil when calculating withdrawn_lottery_deposits
-    // because we will be subtracting with this value from total_user_lottery_deposits and don't want to under subtract
-    // TODO does withdrawn_lottery_deposits + withdrawn_savings_aust * rate = redeemed_amount?
-    let withdrawn_lottery_deposits =
-        uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
+    // Withdrawn lottery deposit calculations
+
+    // Calculate ceil and floor of withdrawn lottery aust
+    let ceil_withdrawn_lottery_aust =
+        uint256_times_decimal256_ceil(depositor_lottery_aust, withdraw_ratio);
+    let ceil_withdrawn_lottery_aust_value =
+        uint256_times_decimal256_ceil(ceil_withdrawn_lottery_aust, rate);
+
+    let floor_withdrawn_lottery_aust = depositor_lottery_aust * withdraw_ratio;
+
+    // Total aust to redeem calculations
+
+    // Get the total aust to redeem
+    let total_aust_to_redeem = floor_withdrawn_lottery_aust + withdrawn_savings_aust;
+
+    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
+    let total_aust_to_redeem_value = total_aust_to_redeem * rate;
 
     // Update depositor info
 
-    depositor.lottery_deposit = depositor.lottery_deposit.sub(withdrawn_lottery_deposits);
     depositor.savings_aust = depositor.savings_aust.sub(withdrawn_savings_aust);
+    depositor.lottery_deposit = depositor
+        .lottery_deposit
+        .sub(ceil_withdrawn_lottery_aust_value);
 
     // Update pool
 
+    pool.total_user_savings_aust = pool.total_user_savings_aust.sub(withdrawn_savings_aust);
     pool.total_user_lottery_deposits = pool
         .total_user_lottery_deposits
-        .sub(withdrawn_lottery_deposits);
-    pool.total_user_savings_aust = pool.total_user_savings_aust.sub(withdrawn_savings_aust);
+        .sub(ceil_withdrawn_lottery_aust_value);
 
     // Update state
 
     // Remove withdrawn_tickets from total_tickets
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
-
-    // Get the total aust to withdraw
-    let total_aust_to_redeem = withdrawn_savings_aust + aust_to_redeem_for_lottery_deposit;
-
-    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
-    let total_aust_to_redeem_value = total_aust_to_redeem * rate;
 
     // Get the value of the returned amount after accounting for taxes.
     let mut return_amount = Uint256::from(

@@ -3813,19 +3813,27 @@ fn small_withdraw() {
 
     let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), depositor_balance);
 
-    // Get the amount to redeem
-    let withdraw_value = depositor_balance * withdraw_ratio;
-
-    // Get the amount of aust to redeem
-    let aust_to_redeem = withdraw_value / Decimal256::permille(RATE);
-
-    // Get the value of the redeemed aust. aust_to_redeem * rate = pooled_deposits * withdraw_ratio
-    let _redeemed_amount = aust_to_redeem * Decimal256::permille(RATE);
-
-    let withdrawn_lottery_deposits =
-        uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
+    // Get the amount of the user's savings aust to withdraw
     let withdrawn_savings_aust =
         uint256_times_decimal256_ceil(depositor.savings_aust, withdraw_ratio);
+
+    // Get the value of the user's lottery_deposit to withdraw, floored
+    let floor_withdrawn_lottery_deposit = depositor.lottery_deposit * withdraw_ratio;
+
+    // Get the amount of aust to withdraw in order to match this amount, floored
+    let aust_to_redeem_for_lottery_deposit =
+        floor_withdrawn_lottery_deposit / Decimal256::permille(RATE);
+
+    // Take the ceil when calculating withdrawn_lottery_deposits
+    // because we will be subtracting with this value from total_user_lottery_deposits and don't want to under subtract
+    let ceil_withdrawn_lottery_deposit =
+        uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
+
+    // Get the total aust to withdraw
+    let total_aust_to_redeem = withdrawn_savings_aust + aust_to_redeem_for_lottery_deposit;
+
+    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
+    let total_aust_to_redeem_value = total_aust_to_redeem * Decimal256::permille(RATE);
 
     // Message for redeem amount operation of aUST
 
@@ -3857,7 +3865,7 @@ fn small_withdraw() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            lottery_deposit: minted_lottery_aust_value - withdrawn_lottery_deposits,
+            lottery_deposit: minted_lottery_aust_value - ceil_withdrawn_lottery_deposit,
             savings_aust: minted_savings_aust - withdrawn_savings_aust,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -3888,7 +3896,7 @@ fn small_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lottery_deposits: minted_lottery_aust_value - withdrawn_lottery_deposits,
+            total_user_lottery_deposits: minted_lottery_aust_value - ceil_withdrawn_lottery_deposit,
             total_sponsor_lottery_deposits: Uint256::zero(),
             total_user_savings_aust: minted_savings_aust - withdrawn_savings_aust,
         }

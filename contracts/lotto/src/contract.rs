@@ -338,12 +338,13 @@ pub fn deposit(
     let raw_post_transaction_num_depositor_tickets =
         Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
 
-    let post_transaction_lottery_deposit =
-        depositor_info.lottery_deposit + minted_lottery_aust_value;
+    // Add the depositor's previous lottery_deposit with the split_factor portion of their pretax deposit_amount
+    let mixed_tax_post_transaction_lottery_deposit =
+        depositor_info.lottery_deposit + deposit_amount * config.split_factor;
 
     // Check if we need to round up the number of combinations based on the depositor's post transaction lottery deposit
     let mut new_combinations = combinations;
-    if post_transaction_lottery_deposit
+    if mixed_tax_post_transaction_lottery_deposit
         >= (raw_post_transaction_num_depositor_tickets + Uint256::one())
             * config.ticket_price
             * config.split_factor
@@ -379,6 +380,7 @@ pub fn deposit(
         TICKETS
             .update(deps.storage, combination.as_bytes(), add_ticket)
             .unwrap();
+
         // add the combination to the depositor_info
         depositor_info.tickets.push(combination);
     }
@@ -516,6 +518,7 @@ pub fn execute_sponsor(
         // update pool
         pool.total_sponsor_lottery_deposits =
             pool.total_sponsor_lottery_deposits.add(minted_aust_value);
+
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_contract.to_string(),
             funds: vec![Coin {

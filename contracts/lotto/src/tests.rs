@@ -3827,7 +3827,7 @@ fn small_withdraw() {
 
     let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), depositor_balance);
 
-    // Calculate the number of shares to withdraw
+    // Calculate the amount of savings aust to withdraw
     let withdrawn_savings_aust = depositor.savings_aust * withdraw_ratio;
 
     // Withdrawn lottery deposit calculations

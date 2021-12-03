@@ -61,7 +61,7 @@ pub fn execute_lottery(
         return Err(ContractError::InvalidLotteryExecutionTickets {});
     }
 
-    // Validate that value of the contract's aust is always at least the
+    // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
     if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
@@ -103,18 +103,18 @@ pub fn execute_lottery(
     let aust_lottery_balance = Uint256::from(contract_a_balance) - pool.total_user_savings_aust;
 
     // Get the ust value of the aust going towards the lottery
-    let pooled_lottery_deposits = aust_lottery_balance * rate;
+    let aust_lottery_balance_value = aust_lottery_balance * rate;
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
     let mut aust_to_redeem = Uint256::zero();
 
-    // Lottery deposits plus sponsor amount gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
-    // pooled_lottery_deposits gives the total ust value of the lottery pool according to the fraction of the aust owned by the contract.
+    // total_user_lottery_deposits plus total_sponsor_lottery_deposits gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
+    // aust_lottery_balance_value gives the total ust value of the aust portion of the contract's balance
 
-    // pooled_lottery_deposits should always be greater than or equal to the total_user_lottery_deposits + pool.total_sponsor_deposits so this is more of a double check
+    // aust_lottery_balance_value should always be greater than or equal to the total_user_lottery_deposits + total_sponsor_lottery_deposits so this is more of a double check
     if (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-        >= pooled_lottery_deposits
+        >= aust_lottery_balance_value
     {
         if state.award_available.is_zero() {
             // If lottery related aust have a smaller value than the amount of lottery deposits and award_available is zero
@@ -124,7 +124,7 @@ pub fn execute_lottery(
     } else {
         // The value to redeem is the difference between the value of the appreciated lottery aust
         // and the total ust amount that has been deposited towards the lottery.
-        let amount_to_redeem = pooled_lottery_deposits
+        let amount_to_redeem = aust_lottery_balance_value
             - pool.total_user_lottery_deposits
             - pool.total_sponsor_lottery_deposits;
 

@@ -342,7 +342,7 @@ pub fn deposit(
     let mixed_tax_post_transaction_lottery_deposit =
         depositor_info.lottery_deposit + deposit_amount * config.split_factor;
 
-    // Check if we need to round up the number of combinations based on the depositor's post transaction lottery deposit
+    // Check if we need to round up the number of combinations based on the depositor's mixed_tax_post_transaction_lottery_deposit
     let mut new_combinations = combinations;
     if mixed_tax_post_transaction_lottery_deposit
         >= (raw_post_transaction_num_depositor_tickets + Uint256::one())
@@ -385,12 +385,12 @@ pub fn deposit(
         depositor_info.tickets.push(combination);
     }
 
-    // Increase deposit_amount by the value of the minted_aust
+    // Increase the depositor's lottery_deposit by the value of the minted lottery aust
     depositor_info.lottery_deposit = depositor_info
         .lottery_deposit
         .add(minted_lottery_aust_value);
 
-    // Update depositor_info by the number of minted savings aust
+    // Increase the depositor's savings_aust by the number of minted savings aust
     depositor_info.savings_aust = depositor_info.savings_aust.add(minted_savings_aust);
 
     // Increase total_user_lottery_deposits by the value of the minted lottery aust
@@ -576,7 +576,7 @@ pub fn execute_sponsor_withdraw(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Validate that value of the contract's aust is always at least the
+    // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
     if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
@@ -689,7 +689,7 @@ pub fn execute_withdraw(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Validate that value of the contract's aust is always at least the
+    // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
     if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
@@ -749,7 +749,7 @@ pub fn execute_withdraw(
 
     // Withdrawn savings aust calculations
 
-    // Calculate the number of shares to withdraw
+    // Calculate the amount of savings aust to withdraw
     let withdrawn_savings_aust = depositor.savings_aust * withdraw_ratio;
 
     // Withdrawn lottery deposit calculations

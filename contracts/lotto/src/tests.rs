@@ -1334,11 +1334,16 @@ fn instant_withdraw() {
     let depositor =
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
 
-    // Calculate the depositor's balance
-    let depositor_balance =
-        depositor.savings_aust * Decimal256::permille(RATE) + depositor.lottery_deposit;
+    // Get the amount of aust equivalent to the depositor's lottery deposit
+    let depositor_lottery_aust = depositor.lottery_deposit / Decimal256::permille(RATE);
 
-    let aust_to_redeem = depositor_balance / Decimal256::permille(RATE);
+    // Calculate the depositor's aust balance
+    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
+
+    // Calculate the depositor's balance from their aust balance
+    let _depositor_balance = depositor_aust_balance * Decimal256::permille(RATE);
+
+    let aust_to_redeem = depositor_aust_balance;
     let mut return_amount = aust_to_redeem * Decimal256::permille(RATE);
 
     let withdrawal_fee = return_amount * Decimal256::percent(INSTANT_WITHDRAWAL_FEE);
@@ -1506,12 +1511,16 @@ fn claim() {
     let depositor =
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
 
-    // Calculate the depositor's balance
-    let depositor_balance =
-        depositor.savings_aust * Decimal256::permille(RATE) + depositor.lottery_deposit;
+    // Get the amount of aust equivalent to the depositor's lottery deposit
+    let depositor_lottery_aust = depositor.lottery_deposit / Decimal256::permille(RATE);
 
-    let redeemed_amount =
-        depositor_balance / Decimal256::permille(RATE) * Decimal256::permille(RATE);
+    // Calculate the depositor's aust balance
+    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
+
+    // Calculate the depositor's balance from their aust balance
+    let depositor_balance = depositor_aust_balance * Decimal256::permille(RATE);
+
+    let redeemed_amount = depositor_balance;
 
     // Correct withdraw, user has 1 ticket to be withdrawn
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -3807,33 +3816,37 @@ fn small_withdraw() {
     let depositor =
         read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
 
-    // Calculate the depositor's balance
-    let depositor_balance =
-        depositor.savings_aust * Decimal256::permille(RATE) + depositor.lottery_deposit;
+    // Get the amount of aust equivalent to the depositor's lottery deposit
+    let depositor_lottery_aust = depositor.lottery_deposit / Decimal256::permille(RATE);
+
+    // Calculate the depositor's aust balance
+    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
+
+    // Calculate the depositor's balance from their aust balance
+    let depositor_balance = depositor_aust_balance * Decimal256::permille(RATE);
 
     let withdraw_ratio = Decimal256::from_ratio(Uint256::from(10u128), depositor_balance);
 
-    // Get the amount of the user's savings aust to withdraw
-    let withdrawn_savings_aust =
-        uint256_times_decimal256_ceil(depositor.savings_aust, withdraw_ratio);
+    // Calculate the number of shares to withdraw
+    let withdrawn_savings_aust = depositor.savings_aust * withdraw_ratio;
 
-    // Get the value of the user's lottery_deposit to withdraw, floored
-    let floor_withdrawn_lottery_deposit = depositor.lottery_deposit * withdraw_ratio;
+    // Withdrawn lottery deposit calculations
 
-    // Get the amount of aust to withdraw in order to match this amount, floored
-    let aust_to_redeem_for_lottery_deposit =
-        floor_withdrawn_lottery_deposit / Decimal256::permille(RATE);
+    // Calculate ceil and floor of withdrawn lottery aust
+    let ceil_withdrawn_lottery_aust =
+        uint256_times_decimal256_ceil(depositor_lottery_aust, withdraw_ratio);
+    let ceil_withdrawn_lottery_aust_value =
+        uint256_times_decimal256_ceil(ceil_withdrawn_lottery_aust, Decimal256::permille(RATE));
 
-    // Take the ceil when calculating withdrawn_lottery_deposits
-    // because we will be subtracting with this value from total_user_lottery_deposits and don't want to under subtract
-    let ceil_withdrawn_lottery_deposit =
-        uint256_times_decimal256_ceil(depositor.lottery_deposit, withdraw_ratio);
+    let floor_withdrawn_lottery_aust = depositor_lottery_aust * withdraw_ratio;
 
-    // Get the total aust to withdraw
-    let total_aust_to_redeem = withdrawn_savings_aust + aust_to_redeem_for_lottery_deposit;
+    // Total aust to redeem calculations
+
+    // Get the total aust to redeem
+    let total_aust_to_redeem = floor_withdrawn_lottery_aust + withdrawn_savings_aust;
 
     // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
-    let total_aust_to_redeem_value = total_aust_to_redeem * Decimal256::permille(RATE);
+    let _total_aust_to_redeem_value = total_aust_to_redeem * Decimal256::permille(RATE);
 
     // Message for redeem amount operation of aUST
 
@@ -3865,7 +3878,7 @@ fn small_withdraw() {
             &deps.api.addr_validate("addr0001").unwrap()
         ),
         DepositorInfo {
-            lottery_deposit: minted_lottery_aust_value - ceil_withdrawn_lottery_deposit,
+            lottery_deposit: minted_lottery_aust_value - ceil_withdrawn_lottery_aust_value,
             savings_aust: minted_savings_aust - withdrawn_savings_aust,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
@@ -3896,7 +3909,8 @@ fn small_withdraw() {
     assert_eq!(
         query_pool(deps.as_ref()).unwrap(),
         PoolResponse {
-            total_user_lottery_deposits: minted_lottery_aust_value - ceil_withdrawn_lottery_deposit,
+            total_user_lottery_deposits: minted_lottery_aust_value
+                - ceil_withdrawn_lottery_aust_value,
             total_sponsor_lottery_deposits: Uint256::zero(),
             total_user_savings_aust: minted_savings_aust - withdrawn_savings_aust,
         }

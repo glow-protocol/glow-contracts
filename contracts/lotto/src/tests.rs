@@ -4364,6 +4364,23 @@ pub fn simulate_many_lotteries() {
     );
 }
 
+#[test]
+pub fn ceil_helper_function() {
+    // Test ceiling
+    let res = uint256_times_decimal256_ceil(
+        Uint256::from(5u128),
+        Decimal256::from_ratio(Uint256::from(1u128), Uint256::from(2u128)),
+    );
+    assert_eq!(res, Uint256::from(3u128));
+
+    // Test stay
+    let res = uint256_times_decimal256_ceil(
+        Uint256::from(5u128),
+        Decimal256::from_ratio(Uint256::from(1u128), Uint256::from(5u128)),
+    );
+    assert_eq!(res, Uint256::from(1u128));
+}
+
 fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
     let pool = query_pool(deps).unwrap();
 

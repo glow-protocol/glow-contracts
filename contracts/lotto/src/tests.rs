@@ -1633,7 +1633,7 @@ fn claim_lottery_single_winner() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
-    // Add 150_000 UST to our contract balance
+    // Add INITIAL_DEPOSIT_AMOUNT UST to our contract balance
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR,
         vec![Coin {
@@ -1860,6 +1860,15 @@ fn execute_lottery() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
     )]);
 
+    // Add 100 UST to our contract balance
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR,
+        vec![Coin {
+            denom: DENOM.to_string(),
+            amount: Uint128::from(10 * INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
@@ -1894,15 +1903,6 @@ fn execute_lottery() {
         env.block.time = env.block.time.plus_seconds(time);
     }
 
-    // Add 100 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: DENOM.to_string(),
-            amount: Uint128::from(100_000_000u128),
-        }],
-    );
-
     let res = execute(deps.as_mut(), env.clone(), info, msg);
 
     // Lottery cannot be run with 0 tickets participating
@@ -1927,8 +1927,7 @@ fn execute_lottery() {
     // Calculate the number of minted_aust
     let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // TODO: Test with 10 and 20, to check the pooled_deposits if statement
-    // Add 10 aUST to our contract balance
+    // Add minted_aust to our contract balance
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
         &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
@@ -1939,8 +1938,8 @@ fn execute_lottery() {
     let info = mock_info("addr0001", &[]);
     let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
+    // Messages is empty because aust hasn't appreciated so there is nothing to redeem
     assert_eq!(res.messages, vec![]);
-
     assert_eq!(
         res.attributes,
         vec![
@@ -1997,15 +1996,9 @@ fn execute_lottery() {
         ]
     );
 
-    // TODO: In this case, there should be a redeemd submsg as pooled_deposits > deposits
-    // Add 20 aUST to our contract balance
-    deps.querier.with_token_balances(&[(
-        &A_UST.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(20_000_000u128),
-        )],
-    )]);
+    // Increase the aust exchange rate
+    let new_rate = Decimal256::permille(RATE * 2);
+    deps.querier.with_exchange_rate(new_rate);
 
     // Advance one week in time
     if let Duration::Time(time) = WEEK {
@@ -2029,13 +2022,11 @@ fn execute_lottery() {
 
     let pool = query_pool(deps.as_ref()).unwrap();
 
-    println!("{:?}", pool);
-
     // Lottery balance equals aust_balance - total_user_savings_aust
     let aust_lottery_balance = aust_balance - pool.total_user_savings_aust;
 
     // Get the pooled lottery_deposit
-    let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
+    let pooled_lottery_deposits = aust_lottery_balance * new_rate;
 
     // Get the amount to redeem
     let amount_to_redeem = pooled_lottery_deposits
@@ -2043,9 +2034,9 @@ fn execute_lottery() {
         - pool.total_sponsor_lottery_deposits;
 
     // Divide by the rate to get the number of aust to redeem
-    let aust_to_redeem: Uint128 = (amount_to_redeem / Decimal256::permille(RATE)).into();
+    let aust_to_redeem: Uint128 = (amount_to_redeem / new_rate).into();
 
-    // Calculate amount to redeem for the lottery
+    // Verify amount to redeem for the lottery
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -2098,10 +2089,68 @@ fn execute_lottery() {
         env.block.time = env.block.time.plus_seconds(time * 3);
     }
 
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &Uint128::from(20_000_000u128),
+        )],
+    )]);
+
     // Execute 3rd lottery
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
-    let _res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
+
+    // Amount of aust to redeem
+
+    // Get this contracts aust balance
+    let aust_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+
+    // Lottery balance equals aust_balance - total_user_savings_aust
+    let aust_lottery_balance = aust_balance - pool.total_user_savings_aust;
+
+    // Get the pooled lottery_deposit
+    let pooled_lottery_deposits = aust_lottery_balance * new_rate;
+
+    // Get the amount to redeem
+    let amount_to_redeem = pooled_lottery_deposits
+        - pool.total_user_lottery_deposits
+        - pool.total_sponsor_lottery_deposits;
+
+    // Divide by the rate to get the number of aust to redeem
+    let aust_to_redeem: Uint128 = (amount_to_redeem / new_rate).into();
+
+    // Check the attributes
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "execute_lottery"),
+            attr("redeemed_amount", aust_to_redeem.to_string()),
+        ]
+    );
+
+    // Verify amount to redeem for the lottery
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: A_UST.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: ANCHOR.to_string(),
+                amount: aust_to_redeem,
+                msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
+            })
+            .unwrap(),
+        }))]
+    );
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -3931,98 +3980,7 @@ fn small_withdraw() {
 }
 
 #[test]
-fn small_withdraw_update_exchange_rate() {
-    // Initialize contract
-    let mut deps = mock_dependencies(&[]);
-
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
-    // get env
-    let env = mock_env();
-
-    // mock instantiate the contracts
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    // User deposits and buys one ticket -------------------
-    let info = mock_info(
-        "addr0001",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint256::from(TICKET_PRICE).into(),
-        }],
-    );
-    let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from("23456")],
-    };
-    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
-
-    // Add the funds to the contract address -------------------
-
-    // Calculate the number of minted_aust
-    let minted_aust = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
-
-    deps.querier.with_token_balances(&[(
-        &A_UST.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
-    )]);
-
-    // Compare total_user_savings_aust with contract_a_balance -----------
-
-    let pool = query_pool(deps.as_ref()).unwrap();
-    let contract_a_balance = query_token_balance(
-        deps.as_ref(),
-        Addr::unchecked(A_UST),
-        Addr::unchecked(MOCK_CONTRACT_ADDR),
-    )
-    .unwrap();
-
-    // Total user savings aust should equal contract_a_balance minus contract_a_balance times split_factor
-    assert_eq!(
-        pool.total_user_savings_aust,
-        contract_a_balance - contract_a_balance * Decimal256::percent(SPLIT_FACTOR)
-    );
-
-    // Increase anchor exchange rate in order to withdraw properly
-    deps.querier
-        .with_exchange_rate(Decimal256::permille(RATE + 1));
-
-    // Address withdraws a small amount of money ----------------
-
-    let info = mock_info("addr0001", &[]);
-    let msg = ExecuteMsg::Withdraw {
-        amount: Some(10u128.into()),
-        instant: None,
-    };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
-
-    // Message for redeem amount operation of aUST
-
-    // Get the sent_amount
-    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
-        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
-        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
-            amount
-        } else {
-            panic!("DO NOT ENTER HERE")
-        }
-    } else {
-        panic!("DO NOT ENTER HERE");
-    };
-
-    // Update contract_balance
-    deps.querier.with_token_balances(&[(
-        &A_UST.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &(contract_a_balance - sent_amount.into()).into(),
-        )],
-    )]);
-}
-
-#[test]
-pub fn rounded_lottery_deposits() {
+pub fn lottery_deposit_floor_edge_case() {
     let small_ticket_price = 9590u128;
 
     // Initialize contract
@@ -4084,7 +4042,7 @@ pub fn rounded_lottery_deposits() {
 }
 
 #[test]
-pub fn anchor_pool_smaller_than_total_deposits() {
+pub fn lottery_pool_solvency_edge_case() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 

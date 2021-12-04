@@ -898,7 +898,7 @@ pub fn execute_claim_unbonded(
         config.stable_denom.clone(),
     )?;
 
-    if net_send > balance.into() {
+    if net_send > (balance - state.award_available).into() {
         return Err(ContractError::InsufficientFunds {});
     }
 

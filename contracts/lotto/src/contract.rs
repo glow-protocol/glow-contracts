@@ -959,7 +959,7 @@ pub fn execute_claim_lottery(
             }
 
             to_send += calculate_winner_prize(
-                lottery.total_prizes,
+                lottery.total_available_prizes,
                 prize.matches,
                 lottery.number_winners,
                 config.prize_distribution,
@@ -1366,7 +1366,7 @@ pub fn query_lottery_info(
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             timestamp: lottery.timestamp,
-            total_prizes: lottery.total_prizes,
+            total_available_prizes: lottery.total_available_prizes,
             number_winners: lottery.number_winners,
             page: lottery.page,
         })
@@ -1379,7 +1379,7 @@ pub fn query_lottery_info(
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             timestamp: lottery.timestamp,
-            total_prizes: lottery.total_prizes,
+            total_available_prizes: lottery.total_available_prizes,
             number_winners: lottery.number_winners,
             page: lottery.page,
         })

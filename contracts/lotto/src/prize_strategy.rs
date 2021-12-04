@@ -93,7 +93,7 @@ pub fn execute_lottery(
         sequence: "".to_string(),
         awarded: false,
         timestamp: env.block.height,
-        total_prizes: Uint256::zero(),
+        total_available_prizes: Uint256::zero(),
         number_winners: [0; 6],
         page: "".to_string(),
     };
@@ -307,7 +307,7 @@ pub fn execute_prize(
             }
         }
         // Save the total_prizes
-        lottery_info.total_prizes = total_awarded_prize;
+        lottery_info.total_available_prizes = state.award_available;
 
         // Increment the current_lottery_number
         state.current_lottery += 1;

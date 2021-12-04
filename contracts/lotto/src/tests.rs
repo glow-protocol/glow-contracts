@@ -1771,7 +1771,7 @@ fn claim_lottery_single_winner() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_prizes: awarded_prize,
+            total_available_prizes: award_available,
             number_winners: [0, 0, 0, 0, 0, 1],
             page: "".to_string()
         }
@@ -1803,7 +1803,7 @@ fn claim_lottery_single_winner() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let mut prize = calculate_winner_prize(
-        awarded_prize,
+        lottery.total_available_prizes,
         prizes.matches,
         lottery.number_winners,
         query_config(deps.as_ref()).unwrap().prize_distribution,
@@ -2362,6 +2362,7 @@ fn execute_prize_no_winners() {
 
     // Check lottery info was updated correctly
     let awarded_prize = Uint256::zero();
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -2370,13 +2371,12 @@ fn execute_prize_no_winners() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_prizes: awarded_prize,
+            total_available_prizes: state.award_available,
             number_winners: [0; 6],
             page: "".to_string()
         }
     );
 
-    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero());
 
@@ -2501,7 +2501,7 @@ fn execute_prize_one_winner() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_prizes: awarded_prize,
+            total_available_prizes: award_available,
             number_winners: [0, 0, 0, 0, 0, 1],
             page: "".to_string()
         }
@@ -2663,7 +2663,7 @@ fn execute_prize_winners_diff_ranks() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_prizes: awarded_prize,
+            total_available_prizes: award_available,
             number_winners: [0, 0, 1, 0, 0, 1],
             page: "".to_string()
         }
@@ -2825,7 +2825,7 @@ fn execute_prize_winners_same_rank() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_prizes: awarded_prize,
+            total_available_prizes: award_available,
             number_winners: [0, 0, 0, 0, 2, 0],
             page: "".to_string()
         }
@@ -2982,7 +2982,7 @@ fn execute_prize_one_winner_multiple_ranks() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_prizes: awarded_prize,
+            total_available_prizes: award_available,
             number_winners: [0, 0, 0, 0, 3, 1],
             page: "".to_string()
         }
@@ -3118,7 +3118,7 @@ fn execute_prize_multiple_winners_one_ticket() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_prizes: awarded_prize,
+            total_available_prizes: award_available,
             number_winners: [0, 0, 0, 0, 0, 3],
             page: "".to_string()
         }

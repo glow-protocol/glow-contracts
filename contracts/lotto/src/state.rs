@@ -128,7 +128,7 @@ pub struct LotteryInfo {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub total_prizes: Uint256,
+    pub total_available_prizes: Uint256,
     pub number_winners: [u32; 6],
     pub page: String,
 }
@@ -155,7 +155,7 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             sequence: "".to_string(),
             awarded: false,
             timestamp: 0,
-            total_prizes: Uint256::zero(),
+            total_available_prizes: Uint256::zero(),
             number_winners: [0; 6],
             page: "".to_string(),
         },

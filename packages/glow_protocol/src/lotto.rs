@@ -171,7 +171,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub total_prizes: Uint256,
+    pub total_available_prizes: Uint256,
     pub number_winners: [u32; 6],
     pub page: String,
 }

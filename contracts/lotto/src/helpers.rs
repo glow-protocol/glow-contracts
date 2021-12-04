@@ -15,7 +15,7 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    let total_deposited = pool.total_user_deposits + pool.total_sponsor_deposits;
+    let total_deposited = pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits;
     if !reward_accrued.is_zero() && !total_deposited.is_zero() {
         state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
     }
@@ -25,14 +25,14 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
 
 /// Compute reward amount a depositor received
 pub fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
-    depositor.pending_rewards += Decimal256::from_uint256(depositor.deposit_amount)
+    depositor.pending_rewards += Decimal256::from_uint256(depositor.lottery_deposit)
         * (state.global_reward_index - depositor.reward_index);
     depositor.reward_index = state.global_reward_index;
 }
 
 /// Compute reward amount a sponsor received
 pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
-    sponsor.pending_rewards += Decimal256::from_uint256(sponsor.amount)
+    sponsor.pending_rewards += Decimal256::from_uint256(sponsor.lottery_deposit)
         * (state.global_reward_index - sponsor.reward_index);
     sponsor.reward_index = state.global_reward_index;
 }

@@ -3,22 +3,18 @@
   "title": "PoolResponse",
   "type": "object",
   "required": [
-    "total_sponsor_deposits",
-    "total_sponsor_shares",
-    "total_user_deposits",
-    "total_user_shares"
+    "total_sponsor_lottery_deposits",
+    "total_user_lottery_deposits",
+    "total_user_savings_aust"
   ],
   "properties": {
-    "total_sponsor_deposits": {
+    "total_sponsor_lottery_deposits": {
       "$ref": "#/definitions/Uint256"
     },
-    "total_sponsor_shares": {
+    "total_user_lottery_deposits": {
       "$ref": "#/definitions/Uint256"
     },
-    "total_user_deposits": {
-      "$ref": "#/definitions/Uint256"
-    },
-    "total_user_shares": {
+    "total_user_savings_aust": {
       "$ref": "#/definitions/Uint256"
     }
   },

@@ -59,50 +59,66 @@ pub struct State {
     pub glow_emission_rate: Decimal256,
 }
 
+// Note: total_user_lottery_deposits and total_sponsor_lottery_deposits
+// could be merged into total_lottery_deposits without changing the functionality of the code
+// but keeping them separate allows for a better understanding of the deposit to sponsor distribution
+// as well as makes the code more flexible for future changes.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    // Sum of all user deposits
+    // Sum of all user lottery deposits
     // This is used for
     // - checking for pool solvency
     // - calculating the global reward index
-    pub total_user_deposits: Uint256,
-    // Sum of all user shares
+    // - calculating the amount to redeem when executing a lottery
+    pub total_user_lottery_deposits: Uint256,
+    // Sum of all user savings aust
     // This is used for:
-    // - calculating shares_supply to be used for getting depositor_ratio
-    // - calculating the percentage of aust going towards the lottery
-    pub total_user_shares: Uint256,
-    // Sum of all sponsor deposits going towards the lottery.
-    // This is the same as the sum of all sponsor deposits
+    // - checking for pool solvency
+    // - tracking the amount of aust reserved for savings
+    pub total_user_savings_aust: Uint256,
+    // Sum of all sponsor lottery deposits
+    // which equals the sum of sponsor deposits
     // because all sponsor deposits go entirely towards the lottery
     // This is used for:
     // - checking for pool solvency
     // - calculating the global reward index
     // - calculating the amount to redeem when executing a lottery
-    pub total_sponsor_deposits: Uint256,
-    // Sum of all sponsor shares going towards the lottery.
-    // This is the same as the sum of all sponsor shares
-    // because all sponsor shares go entirely towards the lottery
-    // This is used for:
-    // - calculating shares_supply to be used for getting depositor_ratio
-    // - calculating the percentage of aust going towards the lottery
-    pub total_sponsor_shares: Uint256,
+    pub total_sponsor_lottery_deposits: Uint256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    pub deposit_amount: Uint256,
-    pub shares: Uint256,
+    // Cumulative value of the depositor's lottery deposits
+    // The sums of all depositor deposit amounts equals total_user_lottery_deposits
+    // This is used for:
+    // - calculating how many tickets the user should have access to
+    // - computing the depositor's deposit reward
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub lottery_deposit: Uint256,
+    // Amount of aust in the users savings account
+    // This is used for:
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub savings_aust: Uint256,
+    // Reward index is used for tracking and calculating the depositor's rewards
     pub reward_index: Decimal256,
+    // Stores the amount rewards that are available for the user to claim.
     pub pending_rewards: Decimal256,
+    // The number of tickets the user owns.
     pub tickets: Vec<String>,
+    // Stores information on the user's unbonding claims.
     pub unbonding_info: Vec<Claim>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfo {
-    pub amount: Uint256,
-    pub shares: Uint256,
+    // Cumulative value of the sponsor's deposits.
+    // The sums of all sponsor amounts equals total_sponsor_deposits
+    // This is used for:
+    // - calculating the sponsor's balance (how much they can withdraw)
+    pub lottery_deposit: Uint256,
+    // Reward index is used for tracking and calculating the sponsor's rewards
     pub pending_rewards: Decimal256,
+    // Stores the amount rewards that are available for the sponsor to claim.
     pub reward_index: Decimal256,
 }
 
@@ -117,18 +133,10 @@ pub struct LotteryInfo {
     pub page: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PrizeInfo {
     pub claimed: bool,
     pub matches: [u32; 6],
-}
-impl Default for PrizeInfo {
-    fn default() -> Self {
-        PrizeInfo {
-            claimed: false,
-            matches: [0; 6],
-        }
-    }
 }
 
 pub fn store_lottery_info(
@@ -166,8 +174,8 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
     match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
         _ => DepositorInfo {
-            deposit_amount: Uint256::zero(),
-            shares: Uint256::zero(),
+            lottery_deposit: Uint256::zero(),
+            savings_aust: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![],
@@ -188,8 +196,7 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
     match bucket_read(storage, PREFIX_SPONSOR).load(sponsor.as_bytes()) {
         Ok(v) => v,
         _ => SponsorInfo {
-            amount: Uint256::zero(),
-            shares: Uint256::zero(),
+            lottery_deposit: Uint256::zero(),
             pending_rewards: Decimal256::zero(),
             reward_index: Decimal256::zero(),
         },
@@ -214,8 +221,8 @@ pub fn read_depositors(
             let depositor = String::from_utf8(k).unwrap();
             Ok(DepositorInfoResponse {
                 depositor,
-                deposit_amount: v.deposit_amount,
-                shares: v.shares,
+                lottery_deposit: v.lottery_deposit,
+                savings_aust: v.savings_aust,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
                 tickets: v.tickets,

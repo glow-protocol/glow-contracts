@@ -3,20 +3,20 @@
   "title": "DepositorInfoResponse",
   "type": "object",
   "required": [
-    "deposit_amount",
     "depositor",
+    "lottery_deposit",
     "pending_rewards",
     "reward_index",
-    "shares",
+    "savings_aust",
     "tickets",
     "unbonding_info"
   ],
   "properties": {
-    "deposit_amount": {
-      "$ref": "#/definitions/Uint256"
-    },
     "depositor": {
       "type": "string"
+    },
+    "lottery_deposit": {
+      "$ref": "#/definitions/Uint256"
     },
     "pending_rewards": {
       "$ref": "#/definitions/Decimal256"
@@ -24,7 +24,7 @@
     "reward_index": {
       "$ref": "#/definitions/Decimal256"
     },
-    "shares": {
+    "savings_aust": {
       "$ref": "#/definitions/Uint256"
     },
     "tickets": {

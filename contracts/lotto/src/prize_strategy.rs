@@ -31,8 +31,20 @@ pub fn execute_lottery(
     let config = CONFIG.load(deps.storage)?;
     let pool = POOL.load(deps.storage)?;
 
-    // Compute global Glow rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    // Get the contract's aust balance
+    let contract_a_balance = query_token_balance(
+        &deps.querier,
+        deps.api.addr_validate(config.a_terra_contract.as_str())?,
+        env.clone().contract.address,
+    )?;
+
+    // Get the aust exchange rate
+    let rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
 
     // Validate that no funds are sent when executing the lottery
     if !info.funds.is_empty() {
@@ -48,6 +60,18 @@ pub fn execute_lottery(
     if state.total_tickets.is_zero() {
         return Err(ContractError::InvalidLotteryExecutionTickets {});
     }
+
+    // Validate that the value of the contract's lottery aust is always at least the
+    // sum of the value of the user savings aust and lottery deposits.
+    // This check should never fail but is in place as an extra safety measure.
+    if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
+        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    {
+        return Err(ContractError::InsufficientPoolFunds {});
+    }
+
+    // Compute global Glow rewards
+    compute_reward(&mut state, &pool, env.block.height);
 
     // Set the next_lottery_exec_time to the current block time plus `config.block_time`
     // This is so that `execute_prize` can't be run until the randomness oracle is ready
@@ -75,88 +99,56 @@ pub fn execute_lottery(
     };
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
-    // Get this contracts aust balance
-    let aust_balance = query_token_balance(
-        &deps.querier,
-        deps.api.addr_validate(config.a_terra_contract.as_str())?,
-        env.clone().contract.address,
-    )?;
-
-    let total_user_lottery_shares = pool.total_user_shares * config.split_factor;
-    let total_user_lottery_deposits = pool.total_user_deposits * config.split_factor;
-
-    // Get the number of shares that are dedicated to the lottery
-    // by multiplying the total number of shares by the fraction of shares dedicated to the lottery
-    let aust_lottery_balance = Uint256::from(aust_balance).multiply_ratio(
-        total_user_lottery_shares + pool.total_sponsor_shares,
-        pool.total_user_shares + pool.total_sponsor_shares,
-    );
-
-    // Get the aust exchange rate
-    let rate = query_exchange_rate(
-        deps.as_ref(),
-        config.anchor_contract.to_string(),
-        env.block.height,
-    )?
-    .exchange_rate;
+    // Lottery balance equals aust_balance - total_user_savings_aust
+    let aust_lottery_balance = Uint256::from(contract_a_balance) - pool.total_user_savings_aust;
 
     // Get the ust value of the aust going towards the lottery
-    let pooled_lottery_deposits = aust_lottery_balance * rate;
+    let aust_lottery_balance_value = aust_lottery_balance * rate;
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
-    let mut aust_to_redeem = Uint256::zero();
+    // total_user_lottery_deposits plus total_sponsor_lottery_deposits gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
+    // aust_lottery_balance_value gives the total ust value of the aust portion of the contract's balance
 
-    // Lottery deposits plus sponsor amount gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
-    // pooled_lottery_deposits gives the total ust value of the lottery pool according to the fraction of the aust owned by the contract.
+    // The value to redeem is the difference between the value of the appreciated lottery aust
+    // and the total ust amount that has been deposited towards the lottery.
+    let amount_to_redeem = aust_lottery_balance_value
+        - pool.total_user_lottery_deposits
+        - pool.total_sponsor_lottery_deposits;
 
-    // pooled_lottery_deposits should always be greater than or equal to the total_user_lottery_deposits + pool.total_sponsor_deposits so this is more of a double check
-    if (total_user_lottery_deposits + pool.total_sponsor_deposits) >= pooled_lottery_deposits {
+    // Divide by the rate to get the number of aust to redeem
+    let aust_to_redeem = amount_to_redeem / rate;
+
+    // Get the value of the aust that will be redeemed
+    let aust_to_redeem_value = aust_to_redeem * rate;
+
+    // Get the amount of ust that will be received after accounting for taxes
+    let net_amount = deduct_tax(
+        deps.as_ref(),
+        coin(aust_to_redeem_value.into(), config.clone().stable_denom),
+    )?
+    .amount;
+
+    if aust_to_redeem.is_zero() {
         if state.award_available.is_zero() {
-            // If lottery related shares have a smaller value than the amount of lottery deposits and award_available is zero
-            // Return InsufficientLotteryFunds
+            // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
             return Err(ContractError::InsufficientLotteryFunds {});
         }
     } else {
-        // The value to redeem is the difference between the value of the appreciated lottery aust shares
-        // and the total ust amount that has been deposited towards the lottery.
-        let amount_to_redeem =
-            pooled_lottery_deposits - total_user_lottery_deposits - pool.total_sponsor_deposits;
+        // Add the net redeemed amount to the award available.
+        state.award_available += Uint256::from(net_amount);
 
-        // Divide by the rate to get the number of shares to redeem
-        aust_to_redeem = amount_to_redeem / rate;
-
-        // Get the value of the aust that will be redeemed
-        let aust_to_redeem_value = aust_to_redeem * rate;
-
-        // Get the amount of ust that will be received after accounting for taxes
-        let net_amount = deduct_tax(
-            deps.as_ref(),
-            coin(aust_to_redeem_value.into(), config.clone().stable_denom),
-        )?
-        .amount;
-
-        if aust_to_redeem.is_zero() {
-            if state.award_available.is_zero() {
-                // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
-                return Err(ContractError::InsufficientLotteryFunds {});
-            }
-        } else {
-            // Add the net redeemed amount to the award available.
-            state.award_available += Uint256::from(net_amount);
-
-            // Message to redeem "aust_to_redeem" of aust from the Anchor contract
-            let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.a_terra_contract.to_string(),
-                funds: vec![],
-                msg: to_binary(&Cw20Send {
-                    contract: config.anchor_contract.to_string(),
-                    amount: aust_to_redeem.into(),
-                    msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
-                })?,
-            });
-            msgs.push(redeem_msg);
-        }
+        // Message to redeem "aust_to_redeem" of aust from the Anchor contract
+        let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.a_terra_contract.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20Send {
+                contract: config.anchor_contract.to_string(),
+                amount: aust_to_redeem.into(),
+                msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
+            })?,
+        });
+        msgs.push(redeem_msg);
     }
 
     // Store the state

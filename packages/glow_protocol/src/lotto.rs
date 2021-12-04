@@ -98,7 +98,7 @@ pub enum QueryMsg {
     Config {},
     /// Current state. If block_height is provided, return current depositor rewards
     State { block_height: Option<u64> },
-    /// Lotto pool current state. Shares and deposits.
+    /// Lotto pool current state. Savings aust and lottery deposits.
     Pool {},
     /// Lottery information by lottery id
     LotteryInfo { lottery_id: Option<u64> },
@@ -158,10 +158,9 @@ pub struct StateResponse {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
-    pub total_user_deposits: Uint256,
-    pub total_user_shares: Uint256,
-    pub total_sponsor_deposits: Uint256,
-    pub total_sponsor_shares: Uint256,
+    pub total_user_lottery_deposits: Uint256,
+    pub total_user_savings_aust: Uint256,
+    pub total_sponsor_lottery_deposits: Uint256,
 }
 
 // We define a custom struct for each query response
@@ -181,8 +180,8 @@ pub struct LotteryInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfoResponse {
     pub depositor: String,
-    pub deposit_amount: Uint256,
-    pub shares: Uint256,
+    pub lottery_deposit: Uint256,
+    pub savings_aust: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
@@ -193,8 +192,7 @@ pub struct DepositorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfoResponse {
     pub sponsor: String,
-    pub amount: Uint256,
-    pub shares: Uint256,
+    pub lottery_deposit: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
 }

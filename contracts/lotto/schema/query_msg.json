@@ -39,7 +39,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Lotto pool current state. Shares and deposits.",
+      "description": "Lotto pool current state. Savings aust and lottery deposits.",
       "type": "object",
       "required": [
         "pool"

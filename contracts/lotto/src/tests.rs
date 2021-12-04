@@ -5,8 +5,8 @@ use crate::contract::{
 use crate::helpers::{calculate_winner_prize, uint256_times_decimal256_ceil};
 use crate::mock_querier::{mock_dependencies, mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use crate::state::{
-    query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, DepositorInfo,
-    LotteryInfo, PrizeInfo, STATE,
+    query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
+    DepositorInfo, LotteryInfo, PrizeInfo, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -1449,6 +1449,14 @@ fn claim() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR,
+        vec![Coin {
+            denom: DENOM.to_string(),
+            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+        }],
+    );
+
     // Address buys one ticket
     let info = mock_info(
         "addr0001",
@@ -1478,23 +1486,6 @@ fn claim() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
     )]);
 
-    let contract_a_balance = query_token_balance(
-        deps.as_ref(),
-        Addr::unchecked(A_UST),
-        Addr::unchecked(MOCK_CONTRACT_ADDR),
-    )
-    .unwrap();
-    let pool = query_pool(deps.as_ref()).unwrap();
-    println!("contract_a_balance: {}", contract_a_balance);
-    println!(
-        "contract_a_balance value: {}",
-        contract_a_balance * Decimal256::permille(RATE)
-    );
-    println!(
-        "total user lottery deposits: {}",
-        pool.total_user_lottery_deposits
-    );
-
     // Get the number of minted aust
     let minted_aust = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
@@ -1523,7 +1514,19 @@ fn claim() {
     let redeemed_amount = depositor_balance;
 
     // Correct withdraw, user has 1 ticket to be withdrawn
-    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Get the amount to redeem and it's corresponding value
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
+        } else {
+            panic!("DO NOT ENTER HERE")
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
 
     // Claim amount that you don't have, should fail
     let info = mock_info("addr0002", &[]);
@@ -1535,21 +1538,17 @@ fn claim() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    //TODO: test insufficient funds in contract
-
     // Claim amount that you have, but still in unbonding state, should fail
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Claim {};
 
     let mut env = mock_env();
 
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     match res {
         Err(ContractError::InsufficientClaimableFunds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
-
-    let msg = ExecuteMsg::Claim {};
 
     println!("Block time 1: {}", env.block.time);
 
@@ -1559,19 +1558,35 @@ fn claim() {
     }
     println!("Block time 2: {}", env.block.time);
 
-    // TODO: change also the exchange rate here
-    // This update is not needed (??)
+    // Read the depositor info
+    let dep = read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
+
+    // Fail because not enough funds in the contract
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    match res {
+        Err(ContractError::InsufficientFunds {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Revert the state of the depositor
+    store_depositor_info(
+        &mut deps.storage,
+        &deps.api.addr_validate("addr0001").unwrap(),
+        &dep,
+    )
+    .unwrap();
+
+    // Update the contract balance to include the withdrawn funds
     deps.querier.update_balance(
         MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: DENOM.to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT + 10000000u128),
+            amount: Uint128::from(
+                Uint256::from(INITIAL_DEPOSIT_AMOUNT)
+                    + Uint256::from(sent_amount) * Decimal256::permille(RATE),
+            ),
         }],
     );
-
-    let dep = read_depositor_info(&deps.storage, &deps.api.addr_validate("addr0001").unwrap());
-
-    println!("DepositorInfo: {:x?}", dep);
 
     // Claim amount is already unbonded, so claim execution should work
     let res = execute(deps.as_mut(), env, info, msg).unwrap();

@@ -10,7 +10,7 @@
     "rand_round",
     "sequence",
     "timestamp",
-    "total_prizes"
+    "total_available_prizes"
   ],
   "properties": {
     "awarded": {
@@ -47,7 +47,7 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "total_prizes": {
+    "total_available_prizes": {
       "$ref": "#/definitions/Uint256"
     }
   },

@@ -9,7 +9,7 @@ static KEY_CONFIG: &[u8] = b"config";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: CanonicalAddr, // Owner address, to be transferred to Gov Contract
-    pub glow_token: CanonicalAddr, // glow token address
+    pub test_token: CanonicalAddr, // test token address
     pub spend_limit: Uint128, // spend limit per each `spend` request
 }
 

@@ -6,8 +6,8 @@ use cosmwasm_storage::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use glow_protocol::common::OrderBy;
-use glow_protocol::gov::{PollStatus, VoterInfo};
+use test_protocol::common::OrderBy;
+use test_protocol::gov::{PollStatus, VoterInfo};
 use std::cmp::Ordering;
 
 static KEY_CONFIG: &[u8] = b"config";
@@ -21,7 +21,7 @@ static PREFIX_BANK: &[u8] = b"bank";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: CanonicalAddr,
-    pub glow_token: CanonicalAddr,
+    pub test_token: CanonicalAddr,
     pub terraswap_factory: CanonicalAddr,
     pub quorum: Decimal,
     pub threshold: Decimal,

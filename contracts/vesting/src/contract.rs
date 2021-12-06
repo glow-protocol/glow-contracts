@@ -10,8 +10,8 @@ use crate::state::{
     read_config, read_vesting_info, read_vesting_infos, store_config, store_vesting_info, Config,
 };
 use cw20::Cw20ExecuteMsg;
-use glow_protocol::common::OrderBy;
-use glow_protocol::vesting::{
+use test_protocol::common::OrderBy;
+use test_protocol::vesting::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, VestingAccount,
     VestingAccountResponse, VestingAccountsResponse, VestingInfo,
 };
@@ -27,7 +27,7 @@ pub fn instantiate(
         deps.storage,
         &Config {
             owner: deps.api.addr_canonicalize(&msg.owner)?,
-            glow_token: deps.api.addr_canonicalize(&msg.glow_token)?,
+            test_token: deps.api.addr_canonicalize(&msg.test_token)?,
             genesis_time: msg.genesis_time,
         },
     )?;
@@ -44,9 +44,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             match msg {
                 ExecuteMsg::UpdateConfig {
                     owner,
-                    glow_token,
+                    test_token,
                     genesis_time,
-                } => update_config(deps, owner, glow_token, genesis_time),
+                } => update_config(deps, owner, test_token, genesis_time),
                 ExecuteMsg::RegisterVestingAccounts { vesting_accounts } => {
                     register_vesting_accounts(deps, vesting_accounts)
                 }
@@ -67,7 +67,7 @@ fn assert_owner_privilege(storage: &dyn Storage, api: &dyn Api, sender: Addr) ->
 pub fn update_config(
     deps: DepsMut,
     owner: Option<String>,
-    glow_token: Option<String>,
+    test_token: Option<String>,
     genesis_time: Option<u64>,
 ) -> StdResult<Response> {
     let mut config = read_config(deps.storage)?;
@@ -75,8 +75,8 @@ pub fn update_config(
         config.owner = deps.api.addr_canonicalize(&owner)?;
     }
 
-    if let Some(glow_token) = glow_token {
-        config.glow_token = deps.api.addr_canonicalize(&glow_token)?;
+    if let Some(test_token) = test_token {
+        config.test_token = deps.api.addr_canonicalize(&test_token)?;
     }
 
     if let Some(genesis_time) = genesis_time {
@@ -143,7 +143,7 @@ pub fn claim(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> 
         vec![]
     } else {
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+            contract_addr: deps.api.addr_humanize(&config.test_token)?.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: address.to_string(),
@@ -208,7 +208,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = read_config(deps.storage)?;
     let resp = ConfigResponse {
         owner: deps.api.addr_humanize(&state.owner)?.to_string(),
-        glow_token: deps.api.addr_humanize(&state.glow_token)?.to_string(),
+        test_token: deps.api.addr_humanize(&state.test_token)?.to_string(),
         genesis_time: state.genesis_time,
     };
 

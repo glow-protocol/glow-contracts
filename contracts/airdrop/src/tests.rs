@@ -6,7 +6,7 @@ use cosmwasm_std::{
     attr, from_binary, to_binary, Addr, CosmosMsg, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use glow_protocol::airdrop::{
+use test_protocol::airdrop::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, IsClaimedResponse, LatestStageResponse,
     MerkleRootResponse, QueryMsg,
 };
@@ -17,7 +17,7 @@ fn proper_instantiation() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
-        glow_token: "glow0000".to_string(),
+        test_token: "test0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -29,7 +29,7 @@ fn proper_instantiation() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!("owner0000", config.owner.as_str());
-    assert_eq!("glow0000", config.glow_token.as_str());
+    assert_eq!("test0000", config.test_token.as_str());
 
     let res = query(deps.as_ref(), mock_env(), QueryMsg::LatestStage {}).unwrap();
     let latest_stage: LatestStageResponse = from_binary(&res).unwrap();
@@ -42,7 +42,7 @@ fn update_config() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
-        glow_token: "glow0000".to_string(),
+        test_token: "test0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -84,7 +84,7 @@ fn register_merkle_root() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
-        glow_token: "glow0000".to_string(),
+        test_token: "test0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -171,7 +171,7 @@ fn claim() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
-        glow_token: "glow0000".to_string(),
+        test_token: "test0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -219,7 +219,7 @@ fn claim() {
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "glow0000".to_string(),
+            contract_addr: "test0000".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8".to_string(),
                 amount: Uint128::new(1000001u128),
@@ -279,7 +279,7 @@ fn claim() {
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "glow0000".to_string(),
+            contract_addr: "test0000".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "terra1qfqa2eu9wp272ha93lj4yhcenrc6ymng079nu8".to_string(),
                 amount: Uint128::new(2000001u128),
@@ -329,7 +329,7 @@ fn withdraw_expired_tokens() {
     let mut deps = mock_dependencies(&[]);
 
     deps.querier.with_token_balances(&[(
-        &"glow0000".to_string(),
+        &"test0000".to_string(),
         &[(&"airdrop0000".to_string(), &Uint128::from(123u128))],
     )]);
 
@@ -343,7 +343,7 @@ fn withdraw_expired_tokens() {
     // Instantiate the airdrop with an owner of owner0000 ----------
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
-        glow_token: "glow0000".to_string(),
+        test_token: "test0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -391,7 +391,7 @@ fn withdraw_expired_tokens() {
     // Update the block time so that the airdrop expiry time is in the past
     env.block.time = Timestamp::from_seconds(seconds3);
 
-    // Successfully withdraw the glow tokens
+    // Successfully withdraw the test tokens
     let res = execute(deps.as_mut(), env.clone(), info, withdraw_msg.clone()).unwrap();
 
     assert_eq!(res.messages.len(), 1);

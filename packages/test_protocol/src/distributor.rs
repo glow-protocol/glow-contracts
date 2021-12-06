@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub owner: String,          // glow gov contract
-    pub glow_token: String,     // glow token address
+    pub owner: String,          // test gov contract
+    pub test_token: String,     // test token address
     pub whitelist: Vec<String>, // whitelisted contract addresses to spend distributor
     pub spend_limit: Uint128,   // spend limit per each `spend` request
     pub emission_cap: Decimal256,
@@ -46,7 +46,7 @@ pub struct MigrateMsg {}
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    GlowEmissionRate {
+    TestEmissionRate {
         current_award: Uint256,
         target_award: Uint256,
         current_emission_rate: Decimal256,
@@ -57,7 +57,7 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub glow_token: String,
+    pub test_token: String,
     pub whitelist: Vec<String>,
     pub spend_limit: Uint128,
     pub emission_cap: Decimal256,
@@ -68,6 +68,6 @@ pub struct ConfigResponse {
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GlowEmissionRateResponse {
+pub struct TestEmissionRateResponse {
     pub emission_rate: Decimal256,
 }

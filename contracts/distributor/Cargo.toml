@@ -1,5 +1,5 @@
 [package]
-name = "glow-distributor"
+name = "test-distributor"
 version = "0.2.0"
 authors = ["Terraform Labs, PTE."]
 edition = "2018"
@@ -38,7 +38,7 @@ cw20 = "0.8.0"
 cosmwasm-std = "0.16.0"
 cosmwasm-storage = "0.16.0"
 cosmwasm-bignumber = "2.2.0"
-glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
+test-protocol = { version = "0.2.0", path = "../../packages/test_protocol" }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 

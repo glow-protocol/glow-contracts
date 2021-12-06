@@ -1,6 +1,6 @@
 use crate::contract::{execute, instantiate, query};
-use glow_protocol::common::OrderBy;
-use glow_protocol::vesting::{
+use test_protocol::common::OrderBy;
+use test_protocol::vesting::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, VestingAccount, VestingAccountResponse,
     VestingAccountsResponse, VestingInfo,
 };
@@ -18,7 +18,7 @@ fn proper_initialization() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow_token".to_string(),
+        test_token: "test_token".to_string(),
         genesis_time: 12345u64,
     };
 
@@ -32,7 +32,7 @@ fn proper_initialization() {
         .unwrap(),
         ConfigResponse {
             owner: "owner".to_string(),
-            glow_token: "glow_token".to_string(),
+            test_token: "test_token".to_string(),
             genesis_time: 12345u64,
         }
     );
@@ -44,7 +44,7 @@ fn update_config() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow_token".to_string(),
+        test_token: "test_token".to_string(),
         genesis_time: 12345u64,
     };
 
@@ -53,7 +53,7 @@ fn update_config() {
 
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("owner2".to_string()),
-        glow_token: None,
+        test_token: None,
         genesis_time: None,
     };
     let info = mock_info("owner", &[]);
@@ -66,14 +66,14 @@ fn update_config() {
         .unwrap(),
         ConfigResponse {
             owner: "owner2".to_string(),
-            glow_token: "glow_token".to_string(),
+            test_token: "test_token".to_string(),
             genesis_time: 12345u64,
         }
     );
 
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("owner".to_string()),
-        glow_token: None,
+        test_token: None,
         genesis_time: None,
     };
     let info = mock_info("owner", &[]);
@@ -85,7 +85,7 @@ fn update_config() {
 
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
-        glow_token: Some("glow_token2".to_string()),
+        test_token: Some("test_token2".to_string()),
         genesis_time: Some(1u64),
     };
     let info = mock_info("owner2", &[]);
@@ -98,7 +98,7 @@ fn update_config() {
         .unwrap(),
         ConfigResponse {
             owner: "owner2".to_string(),
-            glow_token: "glow_token2".to_string(),
+            test_token: "test_token2".to_string(),
             genesis_time: 1u64,
         }
     );
@@ -110,7 +110,7 @@ fn register_vesting_accounts() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow_token".to_string(),
+        test_token: "test_token".to_string(),
         genesis_time: 100u64,
     };
 
@@ -250,7 +250,7 @@ fn claim() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow_token".to_string(),
+        test_token: "test_token".to_string(),
         genesis_time: 100u64,
     };
 
@@ -301,7 +301,7 @@ fn claim() {
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "glow_token".to_string(),
+            contract_addr: "test_token".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "addr0000".to_string(),
                 amount: Uint128::from(111u128),
@@ -325,7 +325,7 @@ fn claim() {
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "glow_token".to_string(),
+            contract_addr: "test_token".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "addr0000".to_string(),
                 amount: Uint128::from(11u128),

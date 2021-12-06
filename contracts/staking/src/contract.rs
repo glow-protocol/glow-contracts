@@ -7,7 +7,7 @@ use cosmwasm_std::{
 };
 
 use crate::{
-    querier::query_glow_minter,
+    querier::query_test_minter,
     state::{
         read_config, read_staker_info, read_state, remove_staker_info, store_config,
         store_staker_info, store_state, Config, StakerInfo, State,
@@ -15,7 +15,7 @@ use crate::{
 };
 
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use glow_protocol::staking::{
+use test_protocol::staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
     StakerInfoResponse, StateResponse,
 };
@@ -37,7 +37,7 @@ pub fn instantiate(
     store_config(
         deps.storage,
         &Config {
-            glow_token: deps.api.addr_canonicalize(&msg.glow_token)?,
+            test_token: deps.api.addr_canonicalize(&msg.test_token)?,
             staking_token: deps.api.addr_canonicalize(&msg.staking_token)?,
             distribution_schedule: msg.distribution_schedule,
         },
@@ -187,7 +187,7 @@ pub fn withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+            contract_addr: deps.api.addr_humanize(&config.test_token)?.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
                 amount,
@@ -210,12 +210,12 @@ pub fn migrate_staking(
     let sender_addr_raw: CanonicalAddr = deps.api.addr_canonicalize(info.sender.as_str())?;
     let mut config: Config = read_config(deps.storage)?;
     let mut state: State = read_state(deps.storage)?;
-    let glow_token: Addr = deps.api.addr_humanize(&config.glow_token)?;
+    let test_token: Addr = deps.api.addr_humanize(&config.test_token)?;
 
-    // get gov address by querying glow token minter
+    // get gov address by querying test token minter
     let gov_addr_raw: CanonicalAddr = deps
         .api
-        .addr_canonicalize(&query_glow_minter(&deps.querier, glow_token.clone())?)?;
+        .addr_canonicalize(&query_test_minter(&deps.querier, test_token.clone())?)?;
     if sender_addr_raw != gov_addr_raw {
         return Err(StdError::generic_err("unauthorized"));
     }
@@ -258,21 +258,21 @@ pub fn migrate_staking(
     // update state
     store_state(deps.storage, &state)?;
 
-    let remaining_glow = total_distribution_amount.checked_sub(distributed_amount)?;
+    let remaining_test = total_distribution_amount.checked_sub(distributed_amount)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: glow_token.to_string(),
+            contract_addr: test_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: new_staking_contract,
-                amount: remaining_glow,
+                amount: remaining_test,
             })?,
             funds: vec![],
         })])
         .add_attributes(vec![
             ("action", "migrate_staking"),
             ("distributed_amount", &distributed_amount.to_string()),
-            ("remaining_amount", &remaining_glow.to_string()),
+            ("remaining_amount", &remaining_test.to_string()),
         ]))
 }
 
@@ -343,7 +343,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = read_config(deps.storage)?;
     let resp = ConfigResponse {
-        glow_token: deps.api.addr_humanize(&state.glow_token)?.to_string(),
+        test_token: deps.api.addr_humanize(&state.test_token)?.to_string(),
         staking_token: deps.api.addr_humanize(&state.staking_token)?.to_string(),
         distribution_schedule: state.distribution_schedule,
     };

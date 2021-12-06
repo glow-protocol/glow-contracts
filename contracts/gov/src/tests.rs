@@ -12,8 +12,8 @@ use cosmwasm_std::{
     DepsMut, Env, ReplyOn, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use glow_protocol::common::OrderBy;
-use glow_protocol::gov::{
+use test_protocol::common::OrderBy;
+use test_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollExecuteMsg, PollResponse,
     PollStatus, PollsResponse, QueryMsg, StakerResponse, VoteOption, VoterInfo, VotersResponse,
     VotersResponseItem,
@@ -55,7 +55,7 @@ fn mock_instantiate(deps: DepsMut) {
 fn mock_register_contracts(deps: DepsMut) {
     let info = mock_info(TEST_CREATOR, &[]);
     let msg = ExecuteMsg::RegisterContracts {
-        glow_token: VOTING_TOKEN.to_string(),
+        test_token: VOTING_TOKEN.to_string(),
         terraswap_factory: TERRASWAP_FACTORY.to_string(),
     };
     let _res = execute(deps, mock_env(), info, msg)
@@ -94,7 +94,7 @@ fn proper_initialization() {
     assert_eq!(
         config,
         Config {
-            glow_token: CanonicalAddr::from(vec![]),
+            test_token: CanonicalAddr::from(vec![]),
             terraswap_factory: CanonicalAddr::from(vec![]),
             owner: deps.api.addr_canonicalize(TEST_CREATOR).unwrap(),
             quorum: Decimal::percent(DEFAULT_QUORUM),
@@ -108,13 +108,13 @@ fn proper_initialization() {
     );
 
     let msg = ExecuteMsg::RegisterContracts {
-        glow_token: VOTING_TOKEN.to_string(),
+        test_token: VOTING_TOKEN.to_string(),
         terraswap_factory: TERRASWAP_FACTORY.to_string(),
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     let config: Config = config_read(deps.as_ref().storage).load().unwrap();
     assert_eq!(
-        config.glow_token,
+        config.test_token,
         deps.api.addr_canonicalize(VOTING_TOKEN).unwrap()
     );
 
@@ -270,7 +270,7 @@ fn fails_contract_already_registered() {
     let _res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::RegisterContracts {
-        glow_token: VOTING_TOKEN.to_string(),
+        test_token: VOTING_TOKEN.to_string(),
         terraswap_factory: TERRASWAP_FACTORY.to_string(),
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();

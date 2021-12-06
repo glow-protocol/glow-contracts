@@ -14,7 +14,7 @@ static PREFIX_EXPIRY_AT_SECONDS: &[u8] = b"expiry_at_seconds";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: CanonicalAddr,
-    pub glow_token: CanonicalAddr,
+    pub test_token: CanonicalAddr,
 }
 
 pub fn store_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()> {

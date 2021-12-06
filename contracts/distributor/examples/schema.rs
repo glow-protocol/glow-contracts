@@ -2,8 +2,8 @@ use std::env::current_dir;
 use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
-use glow_protocol::distributor::{
-    ConfigResponse, ExecuteMsg, GlowEmissionRateResponse, InstantiateMsg, QueryMsg,
+use test_protocol::distributor::{
+    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, TestEmissionRateResponse,
 };
 
 fn main() {
@@ -16,5 +16,5 @@ fn main() {
     export_schema(&schema_for!(ExecuteMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(ConfigResponse), &out_dir);
-    export_schema(&schema_for!(GlowEmissionRateResponse), &out_dir)
+    export_schema(&schema_for!(TestEmissionRateResponse), &out_dir)
 }

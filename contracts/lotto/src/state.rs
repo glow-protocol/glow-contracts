@@ -6,7 +6,7 @@ use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage};
 use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Item, Map, U64Key};
-use glow_protocol::lotto::{Claim, DepositorInfoResponse};
+use test_protocol::lotto::{Claim, DepositorInfoResponse};
 
 const PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_DEPOSIT: &[u8] = b"depositor";
@@ -56,7 +56,7 @@ pub struct State {
     pub next_epoch: Expiration,
     pub last_reward_updated: u64,
     pub global_reward_index: Decimal256,
-    pub glow_emission_rate: Decimal256,
+    pub test_emission_rate: Decimal256,
 }
 
 // Note: total_user_lottery_deposits and total_sponsor_lottery_deposits

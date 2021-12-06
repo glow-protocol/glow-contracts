@@ -5,8 +5,8 @@ use cosmwasm_std::Uint128;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub owner: String,        // owner contract, to be transferred to glow gov contract
-    pub glow_token: String,   // glow token address
+    pub owner: String,        // owner contract, to be transferred to test gov contract
+    pub test_token: String,   // test token address
     pub spend_limit: Uint128, // spend limit per each `spend` request
 }
 
@@ -37,6 +37,6 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub glow_token: String,
+    pub test_token: String,
     pub spend_limit: Uint128,
 }

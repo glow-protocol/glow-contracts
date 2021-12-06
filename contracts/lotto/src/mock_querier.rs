@@ -11,9 +11,9 @@ use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use glow_protocol::distributor::GlowEmissionRateResponse;
 use moneymarket::market::EpochStateResponse;
 use std::collections::HashMap;
+use test_protocol::distributor::TestEmissionRateResponse;
 
 use crate::tests::RATE;
 
@@ -31,7 +31,7 @@ pub enum QueryMsg {
     },
 
     /// Query GLOW emission rate to distributor model contract
-    GlowEmissionRate {
+    TestEmissionRate {
         current_award: Decimal256,
         target_award: Decimal256,
         current_emission_rate: Decimal256,
@@ -229,11 +229,11 @@ impl WasmMockQuerier {
                     })))
                 }
                 // TODO: revise, currently hard-coded
-                QueryMsg::GlowEmissionRate {
+                QueryMsg::TestEmissionRate {
                     current_award: _,
                     target_award: _,
                     current_emission_rate: _,
-                } => SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse {
+                } => SystemResult::Ok(ContractResult::from(to_binary(&TestEmissionRateResponse {
                     emission_rate: Decimal256::one(),
                 }))),
 
@@ -323,7 +323,7 @@ impl WasmMockQuerier {
         self.exchange_rate_querier = ExchangeRateQuerier::new(rate);
     }
 
-    // configure glow emission rate
+    // configure test emission rate
     #[allow(dead_code)] //TODO: Use in tests
     pub fn with_emission_rate(&mut self, rate: Decimal256) {
         self.emission_rate_querier = EmissionRateQuerier::new(rate);

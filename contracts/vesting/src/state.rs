@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{CanonicalAddr, StdResult, Storage};
 use cosmwasm_storage::{bucket, bucket_read, singleton, singleton_read, ReadonlyBucket};
-use glow_protocol::common::OrderBy;
-use glow_protocol::vesting::VestingInfo;
+use test_protocol::common::OrderBy;
+use test_protocol::vesting::VestingInfo;
 
 const KEY_CONFIG: &[u8] = b"config";
 const PREFIX_KEY_VESTING_INFO: &[u8] = b"vesting_info";
@@ -12,7 +12,7 @@ const PREFIX_KEY_VESTING_INFO: &[u8] = b"vesting_info";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: CanonicalAddr,
-    pub glow_token: CanonicalAddr,
+    pub test_token: CanonicalAddr,
     pub genesis_time: u64,
 }
 

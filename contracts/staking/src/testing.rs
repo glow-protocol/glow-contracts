@@ -5,7 +5,7 @@ use cosmwasm_std::{
     attr, from_binary, to_binary, CosmosMsg, Decimal, StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use glow_protocol::staking::{
+use test_protocol::staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, StakerInfoResponse,
     StateResponse,
 };
@@ -15,7 +15,7 @@ fn proper_initialization() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
-        glow_token: "reward0000".to_string(),
+        test_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![(100, 200, Uint128::from(1000000u128))],
     };
@@ -31,7 +31,7 @@ fn proper_initialization() {
     assert_eq!(
         config,
         ConfigResponse {
-            glow_token: "reward0000".to_string(),
+            test_token: "reward0000".to_string(),
             staking_token: "staking0000".to_string(),
             distribution_schedule: vec![(100, 200, Uint128::from(1000000u128))],
         }
@@ -59,7 +59,7 @@ fn test_bond_tokens() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
-        glow_token: "reward0000".to_string(),
+        test_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
             (12345, 12345 + 100, Uint128::from(1000000u128)),
@@ -186,7 +186,7 @@ fn test_unbond() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
-        glow_token: "reward0000".to_string(),
+        test_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
             (12345, 12345 + 100, Uint128::from(1000000u128)),
@@ -246,7 +246,7 @@ fn test_compute_reward() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
-        glow_token: "reward0000".to_string(),
+        test_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
             (12345, 12345 + 100, Uint128::from(1000000u128)),
@@ -359,7 +359,7 @@ fn test_withdraw() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
-        glow_token: "reward0000".to_string(),
+        test_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
             (12345, 12345 + 100, Uint128::from(1000000u128)),
@@ -407,7 +407,7 @@ fn test_migrate_staking() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
-        glow_token: "reward0000".to_string(),
+        test_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
             (12345, 12345 + 100, Uint128::from(1000000u128)),
@@ -452,7 +452,7 @@ fn test_migrate_staking() {
     // execute migration after 50 blocks
     env.block.height += 50;
 
-    deps.querier.with_glow_minter("gov0000".to_string());
+    deps.querier.with_test_minter("gov0000".to_string());
 
     let msg = ExecuteMsg::MigrateStaking {
         new_staking_contract: "newstaking0000".to_string(),
@@ -498,7 +498,7 @@ fn test_migrate_staking() {
     assert_eq!(
         config,
         ConfigResponse {
-            glow_token: "reward0000".to_string(),
+            test_token: "reward0000".to_string(),
             staking_token: "staking0000".to_string(),
             distribution_schedule: vec![
                 (12345, 12345 + 100, Uint128::from(1000000u128)),

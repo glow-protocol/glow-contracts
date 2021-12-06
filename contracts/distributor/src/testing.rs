@@ -4,7 +4,7 @@ use cosmwasm_bignumber::Decimal256;
 use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
 use cosmwasm_std::{from_binary, to_binary, CosmosMsg, StdError, SubMsg, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
-use glow_protocol::distributor::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use test_protocol::distributor::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 #[test]
 fn proper_initialization() {
@@ -12,7 +12,7 @@ fn proper_initialization() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow".to_string(),
+        test_token: "test".to_string(),
         whitelist: vec![
             "addr1".to_string(),
             "addr2".to_string(),
@@ -34,7 +34,7 @@ fn proper_initialization() {
     let config: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!("owner", config.owner.as_str());
-    assert_eq!("glow", config.glow_token.as_str());
+    assert_eq!("test", config.test_token.as_str());
     assert_eq!(
         vec![
             "addr1".to_string(),
@@ -52,7 +52,7 @@ fn update_config() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow".to_string(),
+        test_token: "test".to_string(),
         whitelist: vec![
             "addr1".to_string(),
             "addr2".to_string(),
@@ -74,7 +74,7 @@ fn update_config() {
     let config: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!("owner", config.owner.as_str());
-    assert_eq!("glow", config.glow_token.as_str());
+    assert_eq!("test", config.test_token.as_str());
     assert_eq!(
         vec![
             "addr1".to_string(),
@@ -155,7 +155,7 @@ fn update_config() {
         config,
         ConfigResponse {
             owner: "owner".to_string(),
-            glow_token: "glow".to_string(),
+            test_token: "test".to_string(),
             whitelist: vec![
                 "addr1".to_string(),
                 "addr2".to_string(),
@@ -176,7 +176,7 @@ fn transfer_to_gov() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow".to_string(),
+        test_token: "test".to_string(),
         whitelist: vec![
             "addr1".to_string(),
             "addr2".to_string(),
@@ -198,7 +198,7 @@ fn transfer_to_gov() {
     let config: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
     assert_eq!("owner", config.owner.as_str());
-    assert_eq!("glow", config.glow_token.as_str());
+    assert_eq!("test", config.test_token.as_str());
     assert_eq!(
         vec![
             "addr1".to_string(),
@@ -233,7 +233,7 @@ fn transfer_to_gov() {
         config,
         ConfigResponse {
             owner: "gov".to_string(),
-            glow_token: "glow".to_string(),
+            test_token: "test".to_string(),
             whitelist: vec![
                 "addr1".to_string(),
                 "addr2".to_string(),
@@ -254,7 +254,7 @@ fn test_add_remove_distributor() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow".to_string(),
+        test_token: "test".to_string(),
         whitelist: vec![
             "addr1".to_string(),
             "addr2".to_string(),
@@ -309,7 +309,7 @@ fn test_add_remove_distributor() {
         config,
         ConfigResponse {
             owner: "owner".to_string(),
-            glow_token: "glow".to_string(),
+            test_token: "test".to_string(),
             whitelist: vec![
                 "addr1".to_string(),
                 "addr2".to_string(),
@@ -337,7 +337,7 @@ fn test_add_remove_distributor() {
         config,
         ConfigResponse {
             owner: "owner".to_string(),
-            glow_token: "glow".to_string(),
+            test_token: "test".to_string(),
             whitelist: vec![
                 "addr2".to_string(),
                 "addr3".to_string(),
@@ -358,7 +358,7 @@ fn test_spend() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
-        glow_token: "glow".to_string(),
+        test_token: "test".to_string(),
         whitelist: vec![
             "addr1".to_string(),
             "addr2".to_string(),
@@ -415,7 +415,7 @@ fn test_spend() {
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "glow".to_string(),
+            contract_addr: "test".to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "addr0000".to_string(),

@@ -1,12 +1,14 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::common::OrderBy;
 use cosmwasm_std::Uint128;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
-    pub glow_token: String,
+    pub test_token: String,
+    pub genesis_time: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -14,19 +16,26 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
+        test_token: Option<String>,
+        genesis_time: Option<u64>,
     },
-    WithdrawExpiredTokens {
-        recipient: String,
+    RegisterVestingAccounts {
+        vesting_accounts: Vec<VestingAccount>,
     },
-    RegisterMerkleRoot {
-        merkle_root: String,
-        expiry_at_seconds: u64,
-    },
-    Claim {
-        stage: u8,
-        amount: Uint128,
-        proof: Vec<String>,
-    },
+    Claim {},
+}
+
+/// CONTRACT: end_time > start_time
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct VestingAccount {
+    pub address: String,
+    pub schedules: Vec<(u64, u64, Uint128)>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct VestingInfo {
+    pub schedules: Vec<(u64, u64, Uint128)>,
+    pub last_claim_time: u64,
 }
 
 /// We currently take no arguments for migrations
@@ -37,40 +46,33 @@ pub struct MigrateMsg {}
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    MerkleRoot { stage: u8 },
-    LatestStage {},
-    IsClaimed { stage: u8, address: String },
-    ExpiryAtSeconds { stage: u8 },
+    VestingAccount {
+        address: String,
+    },
+    VestingAccounts {
+        start_after: Option<String>,
+        limit: Option<u32>,
+        order_by: Option<OrderBy>,
+    },
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub glow_token: String,
+    pub test_token: String,
+    pub genesis_time: u64,
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MerkleRootResponse {
-    pub stage: u8,
-    pub merkle_root: String,
+pub struct VestingAccountResponse {
+    pub address: String,
+    pub info: VestingInfo,
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct LatestStageResponse {
-    pub latest_stage: u8,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct IsClaimedResponse {
-    pub is_claimed: bool,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ExpiryAtSecondsResponse {
-    pub expiry_at_seconds: u64,
+pub struct VestingAccountsResponse {
+    pub vesting_accounts: Vec<VestingAccountResponse>,
 }

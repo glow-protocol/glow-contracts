@@ -1,5 +1,5 @@
 [package]
-name = "glow-lotto"
+name = "test-lotto"
 version = "0.2.0"
 authors = ["Eleven Yellow <info@elevenyellow.com>"]
 edition = "2018"
@@ -35,7 +35,7 @@ cw20 = "0.8.0"
 cw0 = "0.8.0"
 terraswap = "2.3.0"
 moneymarket = "0.3.0"
-glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
+test-protocol = { version = "0.2.0", path = "../../packages/test_protocol" }
 cosmwasm-std = "0.16.0"
 cosmwasm-storage = "0.16.0"
 cosmwasm-bignumber = "2.2.0"

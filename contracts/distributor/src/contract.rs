@@ -9,8 +9,8 @@ use cosmwasm_std::{
     StdError, StdResult, Uint128, WasmMsg,
 };
 
-use glow_protocol::distributor::{
-    ConfigResponse, ExecuteMsg, GlowEmissionRateResponse, InstantiateMsg, MigrateMsg, QueryMsg,
+use test_protocol::distributor::{
+    ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, TestEmissionRateResponse,
 };
 
 use cw20::Cw20ExecuteMsg;
@@ -50,7 +50,7 @@ pub fn instantiate(
         deps.storage,
         &Config {
             owner: deps.api.addr_canonicalize(&msg.owner)?,
-            glow_token: deps.api.addr_canonicalize(&msg.glow_token)?,
+            test_token: deps.api.addr_canonicalize(&msg.test_token)?,
             whitelist,
             spend_limit: msg.spend_limit,
             emission_cap: msg.emission_cap,
@@ -237,10 +237,10 @@ pub fn spend(
         return Err(StdError::generic_err("Cannot spend more than spend_limit"));
     }
 
-    let glow_token = deps.api.addr_humanize(&config.glow_token)?.to_string();
+    let test_token = deps.api.addr_humanize(&config.test_token)?.to_string();
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: glow_token,
+            contract_addr: test_token,
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: recipient.clone(),
@@ -258,11 +258,11 @@ pub fn spend(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::GlowEmissionRate {
+        QueryMsg::TestEmissionRate {
             current_award,
             target_award,
             current_emission_rate,
-        } => to_binary(&query_glow_emission_rate(
+        } => to_binary(&query_test_emission_rate(
             deps,
             current_award,
             target_award,
@@ -275,7 +275,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = read_config(deps.storage)?;
     let resp = ConfigResponse {
         owner: deps.api.addr_humanize(&config.owner)?.to_string(),
-        glow_token: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+        test_token: deps.api.addr_humanize(&config.test_token)?.to_string(),
         whitelist: config
             .whitelist
             .into_iter()
@@ -295,12 +295,12 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 }
 
 #[allow(clippy::comparison_chain)]
-fn query_glow_emission_rate(
+fn query_test_emission_rate(
     deps: Deps,
     current_award: Uint256,
     target_award: Uint256,
     current_emission_rate: Decimal256,
-) -> StdResult<GlowEmissionRateResponse> {
+) -> StdResult<TestEmissionRateResponse> {
     let config: Config = read_config(deps.storage)?;
 
     let emission_rate = if current_award < target_award {
@@ -319,7 +319,7 @@ fn query_glow_emission_rate(
         emission_rate
     };
 
-    Ok(GlowEmissionRateResponse { emission_rate })
+    Ok(TestEmissionRateResponse { emission_rate })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

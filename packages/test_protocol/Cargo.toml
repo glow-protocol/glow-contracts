@@ -1,13 +1,13 @@
 [package]
-name = "glow-protocol"
+name = "test-protocol"
 version = "0.2.0"
-authors = ["Glow Savings"]
+authors = ["Test Savings"]
 edition = "2018"
-description = "Common helpers for Glow protocol"
+description = "Common helpers for Test protocol"
 license = "Apache-2.0"
 repository = ""
-homepage = "https://joinglow.com"
-documentation = "https://docs.joinglow.com"
+homepage = "https://jointest.com"
+documentation = "https://docs.jointest.com"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

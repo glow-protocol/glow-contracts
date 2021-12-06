@@ -6,7 +6,7 @@ use cw20::Cw20ReceiveMsg;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub glow_token: String,
+    pub test_token: String,
     pub staking_token: String, // lp token of GLOW-UST pair contract
     pub distribution_schedule: Vec<(u64, u64, Uint128)>,
 }
@@ -53,7 +53,7 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub glow_token: String,
+    pub test_token: String,
     pub staking_token: String,
     pub distribution_schedule: Vec<(u64, u64, Uint128)>,
 }

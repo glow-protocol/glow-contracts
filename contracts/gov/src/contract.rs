@@ -15,8 +15,8 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
-use glow_protocol::common::OrderBy;
-use glow_protocol::gov::{
+use test_protocol::common::OrderBy;
+use test_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PollExecuteMsg,
     PollResponse, PollStatus, PollsResponse, QueryMsg, StateResponse, VoteOption, VoterInfo,
     VotersResponse, VotersResponseItem,
@@ -44,7 +44,7 @@ pub fn instantiate(
     validate_threshold(msg.threshold)?;
 
     let config = Config {
-        glow_token: CanonicalAddr::from(vec![]),
+        test_token: CanonicalAddr::from(vec![]),
         terraswap_factory: CanonicalAddr::from(vec![]),
         owner: deps.api.addr_canonicalize(info.sender.as_str())?,
         quorum: msg.quorum,
@@ -79,9 +79,9 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::RegisterContracts {
-            glow_token,
+            test_token,
             terraswap_factory,
-        } => register_contracts(deps, glow_token, terraswap_factory),
+        } => register_contracts(deps, test_token, terraswap_factory),
         ExecuteMsg::Sweep { denom } => sweep(deps, env, denom),
         ExecuteMsg::UpdateConfig {
             owner,
@@ -125,7 +125,7 @@ pub fn receive_cw20(
 ) -> Result<Response, ContractError> {
     // only asset contract can execute this message
     let config: Config = config_read(deps.storage).load()?;
-    if config.glow_token != deps.api.addr_canonicalize(info.sender.as_str())? {
+    if config.test_token != deps.api.addr_canonicalize(info.sender.as_str())? {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -155,15 +155,15 @@ pub fn receive_cw20(
 
 pub fn register_contracts(
     deps: DepsMut,
-    glow_token: String,
+    test_token: String,
     terraswap_factory: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = config_read(deps.storage).load()?;
-    if config.glow_token != CanonicalAddr::from(vec![]) {
+    if config.test_token != CanonicalAddr::from(vec![]) {
         return Err(ContractError::Unauthorized {});
     }
 
-    config.glow_token = deps.api.addr_canonicalize(&glow_token)?;
+    config.test_token = deps.api.addr_canonicalize(&test_token)?;
     config.terraswap_factory = deps.api.addr_canonicalize(&terraswap_factory)?;
     config_store(deps.storage).save(&config)?;
 
@@ -175,7 +175,7 @@ pub fn register_contracts(
 /// asset native denom => GLOW token
 pub fn sweep(deps: DepsMut, env: Env, denom: String) -> Result<Response, ContractError> {
     let config: Config = config_read(deps.storage).load()?;
-    let glow_token = deps.api.addr_humanize(&config.glow_token)?;
+    let test_token = deps.api.addr_humanize(&config.test_token)?;
     let terraswap_factory_addr = deps.api.addr_humanize(&config.terraswap_factory)?;
 
     let pair_info: PairInfo = query_pair_info(
@@ -186,7 +186,7 @@ pub fn sweep(deps: DepsMut, env: Env, denom: String) -> Result<Response, Contrac
                 denom: denom.to_string(),
             },
             AssetInfo::Token {
-                contract_addr: glow_token.to_string(),
+                contract_addr: test_token.to_string(),
             },
         ],
     )?;
@@ -460,7 +460,7 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> Result<Response, Contr
     } else {
         let staked_weight = query_token_balance(
             &deps.querier,
-            deps.api.addr_humanize(&config.glow_token)?,
+            deps.api.addr_humanize(&config.test_token)?,
             deps.api.addr_humanize(&state.contract_addr)?,
         )?
         .checked_sub(state.total_deposit)?;
@@ -488,7 +488,7 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> Result<Response, Contr
         // Refunds deposit only when quorum is reached
         if !a_poll.deposit_amount.is_zero() {
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+                contract_addr: deps.api.addr_humanize(&config.test_token)?.to_string(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: deps.api.addr_humanize(&a_poll.creator)?.to_string(),
@@ -614,7 +614,7 @@ pub fn snapshot_poll(deps: DepsMut, env: Env, poll_id: u64) -> Result<Response, 
 
     let staked_amount = query_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.glow_token)?,
+        deps.api.addr_humanize(&config.test_token)?,
         deps.api.addr_humanize(&state.contract_addr)?,
     )?
     .checked_sub(state.total_deposit)?;
@@ -665,7 +665,7 @@ pub fn cast_vote(
     let total_share = state.total_share;
     let total_balance = query_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.glow_token)?,
+        deps.api.addr_humanize(&config.test_token)?,
         deps.api.addr_humanize(&state.contract_addr)?,
     )?
     .checked_sub(state.total_deposit)?;
@@ -753,7 +753,7 @@ fn query_config(deps: Deps) -> Result<ConfigResponse, ContractError> {
     let config: Config = config_read(deps.storage).load()?;
     Ok(ConfigResponse {
         owner: deps.api.addr_humanize(&config.owner)?.to_string(),
-        glow_token: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+        test_token: deps.api.addr_humanize(&config.test_token)?.to_string(),
         terraswap_factory: deps
             .api
             .addr_humanize(&config.terraswap_factory)?

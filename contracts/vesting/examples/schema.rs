@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use glow_protocol::vesting::{
+use test_protocol::vesting::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, VestingAccountResponse,
     VestingAccountsResponse,
 };

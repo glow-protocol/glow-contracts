@@ -9,7 +9,7 @@ use cosmwasm_std::{
     Storage, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use glow_protocol::gov::{PollStatus, StakerResponse};
+use test_protocol::gov::{PollStatus, StakerResponse};
 use terraswap::querier::query_token_balance;
 
 pub fn stake_voting_tokens(
@@ -31,7 +31,7 @@ pub fn stake_voting_tokens(
     // balance already increased, so subtract deposit amount
     let total_balance = query_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.glow_token)?,
+        deps.api.addr_humanize(&config.test_token)?,
         deps.api.addr_humanize(&state.contract_addr)?,
     )?
     .checked_sub(state.total_deposit + amount)?;
@@ -73,7 +73,7 @@ pub fn withdraw_voting_tokens(
         let total_share = state.total_share.u128();
         let total_balance = query_token_balance(
             &deps.querier,
-            deps.api.addr_humanize(&config.glow_token)?,
+            deps.api.addr_humanize(&config.test_token)?,
             deps.api.addr_humanize(&state.contract_addr)?,
         )?
         .checked_sub(state.total_deposit)?
@@ -104,7 +104,7 @@ pub fn withdraw_voting_tokens(
 
             send_tokens(
                 deps,
-                &config.glow_token,
+                &config.test_token,
                 &sender_address_raw,
                 withdraw_amount,
                 "withdraw",
@@ -186,7 +186,7 @@ pub fn query_staker(deps: Deps, address: String) -> StdResult<StakerResponse> {
 
     let total_balance = query_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.glow_token)?,
+        deps.api.addr_humanize(&config.test_token)?,
         deps.api.addr_humanize(&state.contract_addr)?,
     )?
     .checked_sub(state.total_deposit)?;

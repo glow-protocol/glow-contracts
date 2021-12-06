@@ -1,23 +1,19 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "InstantiateMsg",
-  "type": "object",
-  "required": [
-    "genesis_time",
-    "glow_token",
-    "owner"
-  ],
-  "properties": {
-    "genesis_time": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "glow_token": {
-      "type": "string"
-    },
-    "owner": {
-      "type": "string"
-    }
-  }
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "InstantiateMsg",
+	"type": "object",
+	"required": ["genesis_time", "test_token", "owner"],
+	"properties": {
+		"genesis_time": {
+			"type": "integer",
+			"format": "uint64",
+			"minimum": 0.0
+		},
+		"test_token": {
+			"type": "string"
+		},
+		"owner": {
+			"type": "string"
+		}
+	}
 }

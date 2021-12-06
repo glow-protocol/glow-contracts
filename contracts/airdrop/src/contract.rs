@@ -9,12 +9,12 @@ use crate::state::{
     Config,
 };
 
-use glow_protocol::airdrop::{
+use test_protocol::airdrop::{
     ConfigResponse, ExecuteMsg, ExpiryAtSecondsResponse, InstantiateMsg, IsClaimedResponse,
     LatestStageResponse, MerkleRootResponse, MigrateMsg, QueryMsg,
 };
 
-use glow_protocol::querier::query_token_balance;
+use test_protocol::querier::query_token_balance;
 
 use cosmwasm_std::{
     attr, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
@@ -36,7 +36,7 @@ pub fn instantiate(
         deps.storage,
         &Config {
             owner: deps.api.addr_canonicalize(&msg.owner)?,
-            glow_token: deps.api.addr_canonicalize(&msg.glow_token)?,
+            test_token: deps.api.addr_canonicalize(&msg.test_token)?,
         },
     )?;
 
@@ -116,19 +116,19 @@ pub fn execute_withdraw_expired_tokens(
             return Err(ContractError::AirdropNotExpired {});
         }
     }
-    // get the glow cw20 contract address
-    let glow_cw20_address = deps.api.addr_humanize(&config.glow_token)?;
+    // get the test cw20 contract address
+    let test_cw20_address = deps.api.addr_humanize(&config.test_token)?;
 
-    // get the glow balance of this airdrop contract
+    // get the test balance of this airdrop contract
     let token_balance = query_token_balance(
         deps.as_ref(),
-        glow_cw20_address.clone(),
+        test_cw20_address.clone(),
         env.contract.address,
     )?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: glow_cw20_address.to_string(),
+            contract_addr: test_cw20_address.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: recipient.clone(),
@@ -240,7 +240,7 @@ pub fn claim(
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+            contract_addr: deps.api.addr_humanize(&config.test_token)?.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
@@ -285,7 +285,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = read_config(deps.storage)?;
     let resp = ConfigResponse {
         owner: deps.api.addr_humanize(&state.owner)?.to_string(),
-        glow_token: deps.api.addr_humanize(&state.glow_token)?.to_string(),
+        test_token: deps.api.addr_humanize(&state.test_token)?.to_string(),
     };
 
     Ok(resp)

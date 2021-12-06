@@ -15,18 +15,18 @@ use cosmwasm_std::{
     DepsMut, Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::{
+use test_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
+use test_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, PoolResponse,
     QueryMsg, SponsorInfoResponse, StateResponse,
 };
 
 use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
-use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Mul, Sub};
 use std::str::FromStr;
+use test_protocol::querier::{deduct_tax, query_token_balance};
 
 const TEST_CREATOR: &str = "creator";
 const ANCHOR: &str = "anchor";
@@ -236,7 +236,7 @@ fn proper_initialization() {
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -518,7 +518,7 @@ fn deposit() {
             next_epoch: (HOUR.mul(3)).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -875,7 +875,7 @@ fn gift_tickets() {
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -1102,7 +1102,7 @@ fn withdraw() {
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -1392,7 +1392,7 @@ fn instant_withdraw() {
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -3271,12 +3271,12 @@ fn claim_rewards_one_depositor() {
 
     /*
     STATE.update(deps.as_mut().storage,  |mut state| {
-        state.glow_emission_rate = Decimal256::one();
+        state.test_emission_rate = Decimal256::one();
         Ok(state.unwrap())
     }).unwrap();
      */
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
+    state.test_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has no deposits, so no claimable rewards and empty msg returned
@@ -3367,13 +3367,13 @@ fn claim_rewards_multiple_depositors() {
     mock_register_contracts(deps.as_mut());
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
+    state.test_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
-    //TODO: should query glow emission rate instead of hard-code
+    //TODO: should query test emission rate instead of hard-code
     /*
     STATE.update(deps.as_mut().storage,  |mut state| {
-        state.glow_emission_rate = Decimal256::one();
+        state.test_emission_rate = Decimal256::one();
         Ok(state)
     }).unwrap();
      */
@@ -3423,7 +3423,7 @@ fn claim_rewards_multiple_depositors() {
 
     let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
     println!("Global reward index: {:?}", state.global_reward_index);
-    println!("Emission rate {:?}", state.glow_emission_rate);
+    println!("Emission rate {:?}", state.test_emission_rate);
     println!("Last reward updated {:?}", state.last_reward_updated);
     println!("Current height {:?}", env.block.height);
 
@@ -3509,7 +3509,7 @@ fn claim_rewards_depositor_and_sponsor() {
     mock_register_contracts(deps.as_mut());
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
+    state.test_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // USER 0 Deposits 20_000_000 uusd -----------------------------
@@ -3563,7 +3563,7 @@ fn claim_rewards_depositor_and_sponsor() {
     // Query the state --------------------------------------------
     let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
     println!("Global reward index: {:?}", state.global_reward_index);
-    println!("Emission rate {:?}", state.glow_emission_rate);
+    println!("Emission rate {:?}", state.test_emission_rate);
     println!("Last reward updated {:?}", state.last_reward_updated);
     println!("Current height {:?}", env.block.height);
 
@@ -3745,7 +3745,7 @@ fn execute_epoch_operations() {
     );
 
     let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
-    // Glow Emission rate must be 1 as hard-coded in mock querier
+    // Test Emission rate must be 1 as hard-coded in mock querier
     assert_eq!(
         state,
         StateResponse {
@@ -3757,7 +3757,7 @@ fn execute_epoch_operations() {
             global_reward_index: Decimal256::zero(),
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            glow_emission_rate: Decimal256::one(),
+            test_emission_rate: Decimal256::one(),
             next_epoch: HOUR.mul(3).after(&env.block)
         }
     );
@@ -3854,7 +3854,7 @@ fn small_withdraw() {
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -3966,7 +3966,7 @@ fn small_withdraw() {
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 
@@ -4137,7 +4137,7 @@ pub fn lottery_pool_solvency_edge_case() {
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             last_reward_updated: 12345,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            test_emission_rate: Decimal256::zero(),
         }
     );
 

@@ -16,11 +16,11 @@ use terraswap::querier::query_token_balance;
 
 use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
-use glow_protocol::querier::deduct_tax;
 use moneymarket::market::Cw20HookMsg;
 use std::ops::{Add, Sub};
 use std::str;
 use std::usize;
+use test_protocol::querier::deduct_tax;
 
 pub fn execute_lottery(
     deps: DepsMut,
@@ -70,7 +70,7 @@ pub fn execute_lottery(
         return Err(ContractError::InsufficientPoolFunds {});
     }
 
-    // Compute global Glow rewards
+    // Compute global Test rewards
     compute_reward(&mut state, &pool, env.block.height);
 
     // Set the next_lottery_exec_time to the current block time plus `config.block_time`
@@ -181,7 +181,7 @@ pub fn execute_prize(
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
     let current_lottery = state.current_lottery;
 
-    // Compute global Glow rewards
+    // Compute global Test rewards
     compute_reward(&mut state, &pool, env.block.height);
 
     // Validate that no funds are sent when executing the prize distribution

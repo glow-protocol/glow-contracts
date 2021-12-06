@@ -13,7 +13,7 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     }
 
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
-    let reward_accrued = passed_blocks * state.glow_emission_rate;
+    let reward_accrued = passed_blocks * state.test_emission_rate;
 
     let total_deposited = pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits;
     if !reward_accrued.is_zero() && !total_deposited.is_zero() {

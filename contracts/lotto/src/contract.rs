@@ -7,7 +7,7 @@ use crate::helpers::{
     compute_sponsor_reward, is_valid_sequence, pseudo_random_seq, uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
-use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
+use crate::querier::{query_balance, query_exchange_rate, query_test_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
     store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo,
@@ -21,16 +21,16 @@ use cosmwasm_std::{
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
-use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::{
+use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
+use std::ops::{Add, Sub};
+use terraswap::querier::query_token_balance;
+use test_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
+use test_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
     InstantiateMsg, LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse, QueryMsg,
     SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
-use glow_protocol::querier::deduct_tax;
-use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
-use std::ops::{Add, Sub};
-use terraswap::querier::query_token_balance;
+use test_protocol::querier::deduct_tax;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
 pub const SEQUENCE_DIGITS: u8 = 5;
@@ -130,7 +130,7 @@ pub fn instantiate(
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
             last_reward_updated: 0,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: msg.initial_emission_rate,
+            test_emission_rate: msg.initial_emission_rate,
         },
     )?;
 
@@ -310,9 +310,9 @@ pub fn deposit(
         };
     }
 
-    // update the glow deposit reward index
+    // update the test deposit reward index
     compute_reward(&mut state, &pool, env.block.height);
-    // update the glow depositor reward for the depositor
+    // update the test depositor reward for the depositor
     compute_depositor_reward(&state, &mut depositor_info);
 
     // deduct tx taxes when calculating the net deposited amount in anchor
@@ -585,7 +585,7 @@ pub fn execute_sponsor_withdraw(
         return Err(ContractError::InsufficientPoolFunds {});
     }
 
-    // Compute Glow depositor rewards
+    // Compute Test depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
     compute_sponsor_reward(&state, &mut sponsor_info);
 
@@ -615,14 +615,14 @@ pub fn execute_sponsor_withdraw(
     });
     msgs.push(redeem_msg);
 
-    // Discount tx taxes from Anchor to Glow
+    // Discount tx taxes from Anchor to Test
     let coin_amount = deduct_tax(
         deps.as_ref(),
         coin(aust_to_redeem_value.into(), config.clone().stable_denom),
     )?
     .amount;
 
-    // Discount tx taxes from Glow to User
+    // Discount tx taxes from Test to User
     let net_coin_amount = deduct_tax(deps.as_ref(), coin(coin_amount.into(), config.stable_denom))?;
 
     msgs.push(CosmosMsg::Bank(BankMsg::Send {
@@ -876,7 +876,7 @@ pub fn execute_claim_unbonded(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Compute Glow depositor rewards
+    // Compute Test depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
@@ -939,7 +939,7 @@ pub fn execute_claim_lottery(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Compute Glow depositor rewards
+    // Compute Test depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
 
@@ -1039,16 +1039,16 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Compute global Glow rewards
+    // Compute global Test rewards
     compute_reward(&mut state, &pool, env.block.height);
 
-    // Query updated Glow emission rate and update state
-    state.glow_emission_rate = query_glow_emission_rate(
+    // Query updated Test emission rate and update state
+    state.test_emission_rate = query_test_emission_rate(
         &deps.querier,
         config.distributor_contract,
         state.award_available,
         config.target_award,
-        state.glow_emission_rate,
+        state.test_emission_rate,
     )?
     .emission_rate;
 
@@ -1078,7 +1078,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "execute_epoch_operations"),
         attr("total_reserves", total_reserves.to_string()),
-        attr("glow_emission_rate", state.glow_emission_rate.to_string()),
+        attr("test_emission_rate", state.test_emission_rate.to_string()),
     ]))
 }
 
@@ -1095,7 +1095,7 @@ pub fn execute_claim_rewards(
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
     let mut sponsor: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
-    // Compute Glow depositor rewards
+    // Compute Test depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
     compute_depositor_reward(&state, &mut depositor);
     compute_sponsor_reward(&state, &mut sponsor);
@@ -1144,7 +1144,7 @@ pub fn execute_update_config(
     if info.sender != config.owner {
         return Err(ContractError::Unauthorized {});
     }
-    // change owner of Glow lotto contract
+    // change owner of Test lotto contract
     if let Some(owner) = owner {
         config.owner = deps.api.addr_validate(owner.as_str())?;
     }
@@ -1339,7 +1339,7 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
         next_epoch: state.next_epoch,
         last_reward_updated: state.last_reward_updated,
         global_reward_index: state.global_reward_index,
-        glow_emission_rate: state.glow_emission_rate,
+        test_emission_rate: state.test_emission_rate,
     })
 }
 

@@ -22,7 +22,7 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     RegisterContracts {
-        glow_token: String,
+        test_token: String,
         terraswap_factory: String,
     },
     /// Public Message
@@ -117,7 +117,7 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub glow_token: String,
+    pub test_token: String,
     pub terraswap_factory: String,
     pub quorum: Decimal,
     pub threshold: Decimal,

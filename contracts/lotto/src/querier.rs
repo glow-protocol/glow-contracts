@@ -4,8 +4,8 @@ use cosmwasm_std::{
     to_binary, Addr, BalanceResponse, BankQuery, Deps, QuerierWrapper, QueryRequest, StdResult,
     WasmQuery,
 };
-use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
+use test_protocol::distributor::{QueryMsg as DistributorQueryMsg, TestEmissionRateResponse};
 
 pub fn query_exchange_rate(
     deps: Deps,
@@ -33,24 +33,24 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
     Ok(balance.amount.amount.into())
 }
 
-pub fn query_glow_emission_rate(
+pub fn query_test_emission_rate(
     querier: &QuerierWrapper,
     distributor: Addr,
     current_award: Uint256,
     target_award: Uint256,
     current_emission_rate: Decimal256,
-) -> StdResult<GlowEmissionRateResponse> {
-    let glow_emission_rate: GlowEmissionRateResponse =
+) -> StdResult<TestEmissionRateResponse> {
+    let test_emission_rate: TestEmissionRateResponse =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: distributor.to_string(),
-            msg: to_binary(&DistributorQueryMsg::GlowEmissionRate {
+            msg: to_binary(&DistributorQueryMsg::TestEmissionRate {
                 current_award,
                 target_award,
                 current_emission_rate,
             })?,
         }))?;
 
-    Ok(glow_emission_rate)
+    Ok(test_emission_rate)
 }
 
 pub fn query_oracle(deps: Deps, oracle_addr: String, round: u64) -> StdResult<OracleResponse> {

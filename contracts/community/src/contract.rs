@@ -8,7 +8,7 @@ use cosmwasm_std::{
     StdResult, Uint128, WasmMsg,
 };
 
-use glow_protocol::community::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use test_protocol::community::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
 use cw20::Cw20ExecuteMsg;
 
@@ -23,7 +23,7 @@ pub fn instantiate(
         deps.storage,
         &Config {
             owner: deps.api.addr_canonicalize(&msg.owner)?,
-            glow_token: deps.api.addr_canonicalize(&msg.glow_token)?,
+            test_token: deps.api.addr_canonicalize(&msg.test_token)?,
             spend_limit: msg.spend_limit,
         },
     )?;
@@ -88,11 +88,11 @@ pub fn spend(
         return Err(StdError::generic_err("Cannot spend more than spend_limit"));
     }
 
-    let glow_token = deps.api.addr_humanize(&config.glow_token)?.to_string();
+    let test_token = deps.api.addr_humanize(&config.test_token)?.to_string();
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: glow_token,
+            contract_addr: test_token,
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: recipient.clone(),
@@ -117,7 +117,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = read_config(deps.storage)?;
     let resp = ConfigResponse {
         owner: deps.api.addr_humanize(&config.owner)?.to_string(),
-        glow_token: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+        test_token: deps.api.addr_humanize(&config.test_token)?.to_string(),
         spend_limit: config.spend_limit,
     };
 

@@ -33,9 +33,9 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Register Contracts contract address - restricted to owner
     RegisterContracts {
-        /// Gov contract accrues protocol fees and distributes them to Glow stakers
+        /// Gov contract accrues protocol fees and distributes them to Test stakers
         gov_contract: String,
-        /// Faucet contract to drip GLOW token to users and update Glow emission rate
+        /// Faucet contract to drip GLOW token to users and update Test emission rate
         distributor_contract: String,
     },
     /// Update contract configuration - restricted to owner
@@ -152,7 +152,7 @@ pub struct StateResponse {
     pub next_epoch: Expiration,
     pub last_reward_updated: u64,
     pub global_reward_index: Decimal256,
-    pub glow_emission_rate: Decimal256,
+    pub test_emission_rate: Decimal256,
 }
 
 // We define a custom struct for each query response

@@ -37,7 +37,7 @@ pub fn contract_cw20() -> Box<dyn Contract<Empty>> {
 
 #[test]
 // Instantiate GLOW token
-fn instantiate_glow_token() {
+fn instantiate_test_token() {
     let mut app = mock_app();
 
     // set personal balance
@@ -48,7 +48,7 @@ fn instantiate_glow_token() {
     // set up cw20 contract with some tokens
     let cw20_id = app.store_code(contract_cw20());
     let msg = cw20_base::msg::InstantiateMsg {
-        name: "Glow Token".to_string(),
+        name: "Test Token".to_string(),
         symbol: "GLOW".to_string(),
         decimals: 2,
         initial_balances: vec![Cw20Coin {
@@ -65,7 +65,7 @@ fn instantiate_glow_token() {
 
 #[test]
 // Instantiate GLOW Lotto
-fn instantiate_glow_lotto() {
+fn instantiate_test_lotto() {
     let mut app = mock_app();
 
     // set personal balance

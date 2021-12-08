@@ -36,10 +36,15 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
 pub fn query_glow_emission_rate(
     querier: &QuerierWrapper,
     distributor: Addr,
-    current_award: Uint256,
+    current_prize_buckets: [Uint256; 6],
     target_award: Uint256,
     current_emission_rate: Decimal256,
 ) -> StdResult<GlowEmissionRateResponse> {
+    let mut current_award = Uint256::zero();
+    for prize in current_prize_buckets.iter() {
+        current_award += *prize;
+    }
+
     let glow_emission_rate: GlowEmissionRateResponse =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: distributor.to_string(),

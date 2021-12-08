@@ -74,19 +74,18 @@ pub fn claim_deposits(
 }
 
 pub fn calculate_winner_prize(
-    total_available_prizes: Uint256,
+    lottery_prize_buckets: [Uint256; 6],
     address_rank: [u32; 6],
     lottery_winners: [u32; 6],
-    prize_dis: [Decimal256; 6],
 ) -> Uint128 {
     let mut to_send: Uint128 = Uint128::zero();
     for i in 2..6 {
         if lottery_winners[i] == 0 {
             continue;
         }
-        let ranked_price: Uint256 = total_available_prizes * prize_dis[i];
+        let prize_available: Uint256 = lottery_prize_buckets[i];
 
-        let amount: Uint128 = ranked_price
+        let amount: Uint128 = prize_available
             .multiply_ratio(address_rank[i], lottery_winners[i])
             .into();
 

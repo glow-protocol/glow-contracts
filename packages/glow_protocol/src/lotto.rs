@@ -145,7 +145,7 @@ pub struct ConfigResponse {
 pub struct StateResponse {
     pub total_tickets: Uint256,
     pub total_reserve: Uint256,
-    pub award_available: Uint256,
+    pub prize_buckets: [Uint256; 6],
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
@@ -171,7 +171,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub total_available_prizes: Uint256,
+    pub prize_buckets: [Uint256; 6],
     pub number_winners: [u32; 6],
     pub page: String,
 }

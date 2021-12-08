@@ -25,6 +25,7 @@ use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
+use std::convert::TryInto;
 use std::ops::{Add, Mul, Sub};
 use std::str::FromStr;
 
@@ -112,7 +113,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
     }
 }
 
-fn mock_instantiate(deps: DepsMut) -> Response {
+fn mock_instantiate(deps: DepsMut) {
     let msg = instantiate_msg();
 
     let info = mock_info(
@@ -123,7 +124,28 @@ fn mock_instantiate(deps: DepsMut) -> Response {
         }],
     );
 
-    instantiate(deps, mock_env(), info, msg).expect("contract successfully executes InstantiateMsg")
+    instantiate(deps, mock_env(), info, msg)
+        .expect("contract successfully executes InstantiateMsg");
+
+    let net_amount = Uint256::from(
+        deduct_tax(
+            deps.as_ref(),
+            Coin {
+                denom: String::from("uusd"),
+                amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+            },
+        )
+        .unwrap()
+        .amount,
+    );
+
+    // withdraw sponsor
+    let app_aust = net_amount / Decimal256::permille(RATE);
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &app_aust.into())],
+    )]);
 }
 
 fn mock_instantiate_small_ticket_price(deps: DepsMut) -> Response {
@@ -229,7 +251,7 @@ fn proper_initialization() {
         StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -511,7 +533,7 @@ fn deposit() {
         StateResponse {
             total_tickets: Uint256::from(2u64),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -868,7 +890,7 @@ fn gift_tickets() {
         StateResponse {
             total_tickets: Uint256::from(2u64),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -966,18 +988,9 @@ fn sponsor() {
 
     let minted_aust = net_amount / Decimal256::permille(RATE);
 
-    let minted_aust_value = minted_aust * Decimal256::permille(RATE);
-
-    assert_eq!(sponsor_info.lottery_deposit, minted_aust_value);
-
-    assert_eq!(pool.total_sponsor_lottery_deposits, minted_aust_value);
-
-    // withdraw sponsor
-    let app_aust = net_amount / Decimal256::permille(RATE);
-
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &app_aust.into())],
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
     )]);
 
     let info = mock_info("addr0001", &[]);
@@ -1036,7 +1049,7 @@ fn withdraw() {
         MOCK_CONTRACT_ADDR.to_string(),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + deposit_amount,
+            amount: deposit_amount,
         }],
     );
 
@@ -1095,7 +1108,7 @@ fn withdraw() {
         StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -1186,7 +1199,7 @@ fn withdraw() {
         MOCK_CONTRACT_ADDR.to_string(),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + deposit_amount,
+            amount: deposit_amount,
         }],
     );
 
@@ -1314,7 +1327,7 @@ fn instant_withdraw() {
         MOCK_CONTRACT_ADDR.to_string(),
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT) + deposit_amount,
+            amount: deposit_amount,
         }],
     );
 
@@ -1385,7 +1398,7 @@ fn instant_withdraw() {
         StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: withdrawal_fee,
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -1448,14 +1461,6 @@ fn claim() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: DENOM.to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     // Address buys one ticket
     let info = mock_info(
@@ -1581,10 +1586,7 @@ fn claim() {
         MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: DENOM.to_string(),
-            amount: Uint128::from(
-                Uint256::from(INITIAL_DEPOSIT_AMOUNT)
-                    + Uint256::from(sent_amount) * Decimal256::permille(RATE),
-            ),
+            amount: Uint128::from(Uint256::from(sent_amount) * Decimal256::permille(RATE)),
         }],
     );
 
@@ -1632,15 +1634,6 @@ fn claim_lottery_single_winner() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    // Add INITIAL_DEPOSIT_AMOUNT UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
@@ -1702,19 +1695,17 @@ fn claim_lottery_single_winner() {
         )],
     )]);
 
+    let state_prize_buckets = calculate_prize_buckets(deps.as_ref());
+
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    // Check that award_available lines up
-
+    // Check that state equals calculated prize
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
-    let award_available =
-        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
-
-    assert_eq!(state.award_available, award_available);
+    assert_eq!(state.prize_buckets, state_prize_buckets);
 
     // Get the amount of aust that is being redeemed
     let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
@@ -1736,10 +1727,7 @@ fn claim_lottery_single_winner() {
         MOCK_CONTRACT_ADDR,
         vec![Coin {
             denom: "uusd".to_string(),
-            amount: Uint128::from(
-                Uint256::from(INITIAL_DEPOSIT_AMOUNT)
-                    + Uint256::from(sent_amount) * Decimal256::permille(RATE),
-            ),
+            amount: Uint128::from(Uint256::from(sent_amount) * Decimal256::permille(RATE)),
         }],
     );
 
@@ -1760,8 +1748,9 @@ fn claim_lottery_single_winner() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    let awarded_prize = award_available * Decimal256::percent(50);
-    println!("awarded_prize: {}", awarded_prize);
+    let number_winners = [0, 0, 0, 0, 0, 1];
+    let lottery_prize_buckets =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
     let lottery = read_lottery_info(deps.as_ref().storage, 0u64);
     assert_eq!(
@@ -1771,8 +1760,8 @@ fn claim_lottery_single_winner() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_available_prizes: award_available,
-            number_winners: [0, 0, 0, 0, 0, 1],
+            prize_buckets: lottery_prize_buckets,
+            number_winners: number_winners,
             page: "".to_string()
         }
     );
@@ -1791,8 +1780,11 @@ fn claim_lottery_single_winner() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
+    let remaining_state_prize_buckets =
+        calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
+
     // From the initialization of the contract
-    assert_eq!(state.award_available, award_available - awarded_prize);
+    assert_eq!(state.prize_buckets, remaining_state_prize_buckets);
 
     let info = mock_info("addr0000", &[]);
     let msg = ExecuteMsg::ClaimLottery {
@@ -1803,10 +1795,9 @@ fn claim_lottery_single_winner() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let mut prize = calculate_winner_prize(
-        lottery.total_available_prizes,
+        lottery.prize_buckets,
         prizes.matches,
         lottery.number_winners,
-        query_config(deps.as_ref()).unwrap().prize_distribution,
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
@@ -1859,15 +1850,6 @@ fn execute_lottery() {
         &A_UST.to_string(),
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
     )]);
-
-    // Add 100 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: DENOM.to_string(),
-            amount: Uint128::from(10 * INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
@@ -2278,15 +2260,6 @@ fn execute_prize_no_winners() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: DENOM.to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
-
     // Users buys a non-winning ticket
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from("11111")],
@@ -2344,13 +2317,18 @@ fn execute_prize_no_winners() {
         )],
     )]);
 
-    // Run lottery, one winner (5 hits) - should run correctly
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    // Calculate the prize buckets
+    let state_prize_buckets = calculate_prize_buckets(deps.as_ref());
 
-    // Execute Lottery
+    // Execute lottery - should run correctly
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // Check that state equals calculated prize
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, state_prize_buckets);
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -2371,7 +2349,7 @@ fn execute_prize_no_winners() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_available_prizes: state.award_available,
+            prize_buckets: [Uint256::zero(); 6],
             number_winners: [0; 6],
             page: "".to_string()
         }
@@ -2380,11 +2358,8 @@ fn execute_prize_no_winners() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero());
 
-    // Calculate the total_prize
-    let award_available =
-        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
-
-    assert_eq!(state.award_available, award_available);
+    // After executing the lottery, the prize buckets remain unchanged because there were no winning tickets
+    assert_eq!(state.prize_buckets, state_prize_buckets);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2404,15 +2379,6 @@ fn execute_prize_one_winner() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
@@ -2475,6 +2441,9 @@ fn execute_prize_one_winner() {
         )],
     )]);
 
+    // Check lottery info was updated correctly
+    let state_prize_buckets = calculate_prize_buckets(deps.as_ref());
+
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
@@ -2488,11 +2457,7 @@ fn execute_prize_one_winner() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    // Check lottery info was updated correctly
-    let award_available =
-        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
-
-    let awarded_prize = award_available * Decimal256::percent(50);
+    // let awarded_prize = award_available * Decimal256::percent(50);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -2501,7 +2466,14 @@ fn execute_prize_one_winner() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_available_prizes: award_available,
+            prize_buckets: [
+                Uint256::zero(),
+                Uint256::zero(),
+                Uint256::zero(),
+                Uint256::zero(),
+                Uint256::zero(),
+                state_prize_buckets[5]
+            ],
             number_winners: [0, 0, 0, 0, 0, 1],
             page: "".to_string()
         }
@@ -2516,7 +2488,17 @@ fn execute_prize_one_winner() {
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
     // From the initialization of the contract
-    assert_eq!(state.award_available, award_available - awarded_prize);
+    assert_eq!(
+        state.prize_buckets,
+        [
+            state_prize_buckets[0],
+            state_prize_buckets[1],
+            state_prize_buckets[2],
+            state_prize_buckets[3],
+            state_prize_buckets[4],
+            Uint256::zero()
+        ]
+    );
 
     assert_eq!(res.messages, vec![]);
 
@@ -2524,7 +2506,7 @@ fn execute_prize_one_winner() {
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr("total_awarded_prize", state_prize_buckets[5].to_string()),
         ]
     );
 }
@@ -2536,15 +2518,6 @@ fn execute_prize_winners_diff_ranks() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
@@ -2634,6 +2607,9 @@ fn execute_prize_winners_diff_ranks() {
         )],
     )]);
 
+    // Get the prize buckets
+    let state_prize_buckets = calculate_prize_buckets(deps.as_ref());
+
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
@@ -2648,13 +2624,13 @@ fn execute_prize_winners_diff_ranks() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    // Check lottery info was updated correctly
-    let award_available =
-        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
+    // let awarded_prize_0 = award_available * Decimal256::percent(50);
+    // let awarded_prize_1 = award_available * Decimal256::percent(5);
+    // let awarded_prize = awarded_prize_0 + awarded_prize_1;
 
-    let awarded_prize_0 = award_available * Decimal256::percent(50);
-    let awarded_prize_1 = award_available * Decimal256::percent(5);
-    let awarded_prize = awarded_prize_0 + awarded_prize_1;
+    let number_winners = [0, 0, 1, 0, 0, 1];
+    let lottery_prize_buckets =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -2663,8 +2639,8 @@ fn execute_prize_winners_diff_ranks() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_available_prizes: award_available,
-            number_winners: [0, 0, 1, 0, 0, 1],
+            prize_buckets: lottery_prize_buckets,
+            number_winners: number_winners,
             page: "".to_string()
         }
     );
@@ -2679,8 +2655,11 @@ fn execute_prize_winners_diff_ranks() {
 
     assert_eq!(state.current_lottery, 1u64);
 
+    let remaining_state_prize_buckets =
+        calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
+
     // From the initialization of the contract
-    assert_eq!(state.award_available, award_available - awarded_prize);
+    assert_eq!(state.prize_buckets, remaining_state_prize_buckets);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2688,7 +2667,13 @@ fn execute_prize_winners_diff_ranks() {
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "total_awarded_prize",
+                lottery_prize_buckets
+                    .iter()
+                    .fold(Uint256::zero(), |sum, val| sum + *val)
+                    .to_string()
+            ),
         ]
     );
 }
@@ -2700,15 +2685,6 @@ fn execute_prize_winners_same_rank() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
@@ -2798,11 +2774,17 @@ fn execute_prize_winners_same_rank() {
         )],
     )]);
 
+    let state_prize_buckets = calculate_prize_buckets(deps.as_ref());
+
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
 
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // Check that state equals calculated prize
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, state_prize_buckets);
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -2812,11 +2794,9 @@ fn execute_prize_winners_same_rank() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    // Get total_prize
-    let award_available =
-        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
-
-    let awarded_prize = award_available * Decimal256::percent(30);
+    let number_winners = [0, 0, 0, 0, 2, 0];
+    let lottery_prize_buckets =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -2825,8 +2805,8 @@ fn execute_prize_winners_same_rank() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_available_prizes: award_available,
-            number_winners: [0, 0, 0, 0, 2, 0],
+            prize_buckets: lottery_prize_buckets,
+            number_winners: number_winners,
             page: "".to_string()
         }
     );
@@ -2835,8 +2815,11 @@ fn execute_prize_winners_same_rank() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
+    let remaining_state_prize_buckets =
+        calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
+
     // Check award_available
-    assert_eq!(state.award_available, award_available - awarded_prize);
+    assert_eq!(state.prize_buckets, remaining_state_prize_buckets);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2844,7 +2827,13 @@ fn execute_prize_winners_same_rank() {
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "total_awarded_prize",
+                lottery_prize_buckets
+                    .iter()
+                    .fold(Uint256::zero(), |sum, val| sum + *val)
+                    .to_string()
+            ),
         ]
     );
 }
@@ -2856,15 +2845,6 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
@@ -2950,11 +2930,17 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
 
+    // Get state prize buckets
+    let state_prize_buckets = calculate_prize_buckets(deps.as_ref());
+
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
-
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // Check that state equals calculated prize
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, state_prize_buckets);
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -2964,11 +2950,9 @@ fn execute_prize_one_winner_multiple_ranks() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    // Get total prize
-    let award_available =
-        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
-
-    let awarded_prize = award_available * Decimal256::percent(50 + 30);
+    let number_winners = [0, 0, 0, 0, 3, 1];
+    let lottery_prize_buckets =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
     println!(
         "lottery_info: {:x?}",
@@ -2982,8 +2966,8 @@ fn execute_prize_one_winner_multiple_ranks() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_available_prizes: award_available,
-            number_winners: [0, 0, 0, 0, 3, 1],
+            prize_buckets: lottery_prize_buckets,
+            number_winners: number_winners,
             page: "".to_string()
         }
     );
@@ -2995,8 +2979,11 @@ fn execute_prize_one_winner_multiple_ranks() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero());
 
+    let remaining_state_prize_buckets =
+        calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
+
     // From the initialization of the contract
-    assert_eq!(state.award_available, award_available - awarded_prize);
+    assert_eq!(state.prize_buckets, remaining_state_prize_buckets);
 
     assert_eq!(res.messages, vec![]);
 
@@ -3004,7 +2991,13 @@ fn execute_prize_one_winner_multiple_ranks() {
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "total_awarded_prize",
+                lottery_prize_buckets
+                    .iter()
+                    .fold(Uint256::zero(), |sum, val| sum + *val)
+                    .to_string()
+            ),
         ]
     );
 }
@@ -3016,15 +3009,6 @@ fn execute_prize_multiple_winners_one_ticket() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from(WINNING_SEQUENCE)],
@@ -3091,11 +3075,17 @@ fn execute_prize_multiple_winners_one_ticket() {
 
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
 
+    // Get state prize buckets
+    let state_prize_buckets = calculate_prize_buckets(deps.as_ref());
+
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
     let exec_height = env.block.height;
-
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // Check that state equals calculated prize
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, state_prize_buckets);
 
     // Advance block_time in time
     if let Duration::Time(time) = HOUR {
@@ -3105,11 +3095,9 @@ fn execute_prize_multiple_winners_one_ticket() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    // Get total_prize
-    let award_available =
-        calculate_award_available(deps.as_ref(), Uint256::from(INITIAL_DEPOSIT_AMOUNT));
-
-    let awarded_prize = award_available * Decimal256::percent(50);
+    let number_winners = [0, 0, 0, 0, 0, 3];
+    let lottery_prize_buckets =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -3118,8 +3106,8 @@ fn execute_prize_multiple_winners_one_ticket() {
             sequence: WINNING_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            total_available_prizes: award_available,
-            number_winners: [0, 0, 0, 0, 0, 3],
+            prize_buckets: lottery_prize_buckets,
+            number_winners: number_winners,
             page: "".to_string()
         }
     );
@@ -3131,8 +3119,11 @@ fn execute_prize_multiple_winners_one_ticket() {
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero());
 
+    let remaining_state_prize_buckets =
+        calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
+
     // From the initialization of the contract
-    assert_eq!(state.award_available, award_available - awarded_prize);
+    assert_eq!(state.prize_buckets, remaining_state_prize_buckets);
 
     assert_eq!(res.messages, vec![]);
 
@@ -3140,7 +3131,13 @@ fn execute_prize_multiple_winners_one_ticket() {
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("total_awarded_prize", awarded_prize.to_string()),
+            attr(
+                "total_awarded_prize",
+                lottery_prize_buckets
+                    .iter()
+                    .fold(Uint256::zero(), |sum, val| sum + *val)
+                    .to_string()
+            ),
         ]
     );
 }
@@ -3152,15 +3149,6 @@ fn execute_prize_pagination() {
 
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
-
-    // Add 150_000 UST to our contract balance
-    deps.querier.update_balance(
-        MOCK_CONTRACT_ADDR,
-        vec![Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-        }],
-    );
 
     let addresses_count = 480u64;
     let addresses_range = 0..addresses_count;
@@ -3751,7 +3739,7 @@ fn execute_epoch_operations() {
         StateResponse {
             total_tickets: Uint256::zero(),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             last_reward_updated: 12445,
             global_reward_index: Decimal256::zero(),
@@ -3847,7 +3835,7 @@ fn small_withdraw() {
         StateResponse {
             total_tickets: Uint256::from(1u64),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -3959,7 +3947,7 @@ fn small_withdraw() {
         StateResponse {
             total_tickets: Uint256::from(0u64),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -4130,7 +4118,7 @@ pub fn lottery_pool_solvency_edge_case() {
         StateResponse {
             total_tickets: Uint256::from(1u64),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(INITIAL_DEPOSIT_AMOUNT),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
@@ -4871,8 +4859,10 @@ pub fn ceil_helper_function() {
     assert_eq!(res, Uint256::from(1u128));
 }
 
-fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
+fn calculate_prize_buckets(deps: Deps) -> [Uint256; 6] {
     let pool = query_pool(deps).unwrap();
+    let config = query_config(deps).unwrap();
+    let state = STATE.load(deps.storage).unwrap();
 
     let contract_a_balance = query_token_balance(
         deps,
@@ -4905,6 +4895,39 @@ fn calculate_award_available(deps: Deps, initial_balance: Uint256) -> Uint256 {
             .amount,
     );
 
+    let mut prize_buckets = state.prize_buckets.clone();
+
+    for index in 0..state.prize_buckets.len() {
+        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+        prize_buckets[index] += net_amount * config.prize_distribution[index];
+    }
+
     // Return the initial balance plus the post tax redeemed aust value
-    initial_balance + net_amount
+    prize_buckets
+}
+
+pub fn calculate_lottery_prize_buckets(
+    state_prize_buckets: [Uint256; 6],
+    number_winners: [u32; 6],
+) -> [Uint256; 6] {
+    state_prize_buckets
+        .iter()
+        .zip(&number_winners)
+        .map(|(a, b)| if *b == 0 { Uint256::zero() } else { *a })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
+}
+
+pub fn calculate_remaining_state_prize_buckets(
+    state_prize_buckets: [Uint256; 6],
+    number_winners: [u32; 6],
+) -> [Uint256; 6] {
+    state_prize_buckets
+        .iter()
+        .zip(&number_winners)
+        .map(|(a, b)| if *b == 0 { *a } else { Uint256::zero() })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }

@@ -111,7 +111,7 @@ pub fn instantiate(
         },
     )?;
 
-    // validate first lottery is in the future
+    // Validate first lottery is in the future
     if msg.initial_lottery_execution <= env.block.time.seconds() {
         return Err(ContractError::InvalidFirstLotteryExec {});
     }
@@ -121,7 +121,7 @@ pub fn instantiate(
         &State {
             total_tickets: Uint256::zero(),
             total_reserve: Uint256::zero(),
-            award_available: Uint256::from(initial_deposit),
+            prize_buckets: [Uint256::zero(); 6],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
                 msg.initial_lottery_execution,
@@ -143,7 +143,26 @@ pub fn instantiate(
         },
     )?;
 
-    Ok(Response::default())
+    // Deduct taxes that will be payed when transferring to anchor
+    let tax_deducted_initial_deposit = Uint256::from(
+        deduct_tax(
+            deps.as_ref(),
+            coin(initial_deposit.into(), msg.stable_denom.clone()),
+        )?
+        .amount,
+    );
+
+    // Convert the initial deposit amount to aust
+    let messages: Vec<CosmosMsg> = vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: msg.anchor_contract,
+        funds: vec![Coin {
+            denom: msg.stable_denom.clone(),
+            amount: tax_deducted_initial_deposit.into(),
+        }],
+        msg: to_binary(&AnchorMsg::DepositStable {})?,
+    })];
+
+    Ok(Response::default().add_messages(messages))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -479,24 +498,22 @@ pub fn execute_sponsor(
 
     compute_reward(&mut state, &pool, env.block.height);
 
-    let mut messages: Vec<CosmosMsg> = vec![];
+    // Deduct taxes that will be payed when transferring to anchor
+    let net_sponsor_amount = Uint256::from(
+        deduct_tax(
+            deps.as_ref(),
+            coin(sponsor_amount.into(), config.stable_denom.clone()),
+        )?
+        .amount,
+    );
 
-    if let Some(true) = award {
-        state.award_available = state.award_available.add(sponsor_amount);
-    } else {
+    if let None = award {
         // query exchange_rate from anchor money market
         let epoch_state: EpochStateResponse = query_exchange_rate(
             deps.as_ref(),
             config.anchor_contract.to_string(),
             env.block.height,
         )?;
-
-        // Discount tx taxes
-        let net_coin_amount = deduct_tax(
-            deps.as_ref(),
-            coin(sponsor_amount.into(), config.stable_denom.clone()),
-        )?;
-        let net_sponsor_amount = Uint256::from(net_coin_amount.amount);
 
         // add amount of aUST entitled from the deposit
         let minted_aust = net_sponsor_amount / epoch_state.exchange_rate;
@@ -518,16 +535,16 @@ pub fn execute_sponsor(
         // update pool
         pool.total_sponsor_lottery_deposits =
             pool.total_sponsor_lottery_deposits.add(minted_aust_value);
-
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.anchor_contract.to_string(),
-            funds: vec![Coin {
-                denom: config.stable_denom,
-                amount: net_sponsor_amount.into(),
-            }],
-            msg: to_binary(&AnchorMsg::DepositStable {})?,
-        }));
     }
+
+    let messages: Vec<CosmosMsg> = vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: config.anchor_contract.to_string(),
+        funds: vec![Coin {
+            denom: config.stable_denom,
+            amount: net_sponsor_amount.into(),
+        }],
+        msg: to_binary(&AnchorMsg::DepositStable {})?,
+    })];
 
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
@@ -898,7 +915,12 @@ pub fn execute_claim_unbonded(
         config.stable_denom.clone(),
     )?;
 
-    if net_send > (balance - state.award_available).into() {
+    let reserved_for_rewards = state
+        .prize_buckets
+        .iter()
+        .fold(Uint256::zero(), |sum, val| sum + *val);
+
+    if net_send > (balance - reserved_for_rewards).into() {
         return Err(ContractError::InsufficientFunds {});
     }
 
@@ -959,10 +981,9 @@ pub fn execute_claim_lottery(
             }
 
             to_send += calculate_winner_prize(
-                lottery.total_available_prizes,
+                lottery.prize_buckets,
                 prize.matches,
                 lottery.number_winners,
-                config.prize_distribution,
             );
 
             PRIZES.save(
@@ -1046,7 +1067,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     state.glow_emission_rate = query_glow_emission_rate(
         &deps.querier,
         config.distributor_contract,
-        state.award_available,
+        state.prize_buckets,
         config.target_award,
         state.glow_emission_rate,
     )?
@@ -1332,7 +1353,7 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
     Ok(StateResponse {
         total_tickets: state.total_tickets,
         total_reserve: state.total_reserve,
-        award_available: state.award_available,
+        prize_buckets: state.prize_buckets,
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,
         next_lottery_exec_time: state.next_lottery_exec_time,
@@ -1366,7 +1387,7 @@ pub fn query_lottery_info(
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             timestamp: lottery.timestamp,
-            total_available_prizes: lottery.total_available_prizes,
+            prize_buckets: lottery.prize_buckets,
             number_winners: lottery.number_winners,
             page: lottery.page,
         })
@@ -1379,7 +1400,7 @@ pub fn query_lottery_info(
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             timestamp: lottery.timestamp,
-            total_available_prizes: lottery.total_available_prizes,
+            prize_buckets: lottery.prize_buckets,
             number_winners: lottery.number_winners,
             page: lottery.page,
         })

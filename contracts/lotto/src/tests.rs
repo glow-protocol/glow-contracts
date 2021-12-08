@@ -3,16 +3,19 @@ use crate::contract::{
     INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::helpers::{calculate_winner_prize, uint256_times_decimal256_ceil};
-use crate::mock_querier::{mock_dependencies, mock_env, mock_info, MOCK_CONTRACT_ADDR};
+use crate::mock_querier::{
+    mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
+};
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
     DepositorInfo, LotteryInfo, PrizeInfo, STATE,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
+use cosmwasm_std::testing::MockApi;
 use cosmwasm_std::{
     attr, coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, Response, SubMsg, Timestamp, Uint128, WasmMsg,
+    DepsMut, Env, MemoryStorage, OwnedDeps, Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -113,7 +116,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
     }
 }
 
-fn mock_instantiate(deps: DepsMut) {
+fn mock_instantiate(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = instantiate_msg();
 
     let info = mock_info(
@@ -124,7 +127,7 @@ fn mock_instantiate(deps: DepsMut) {
         }],
     );
 
-    instantiate(deps, mock_env(), info, msg)
+    instantiate(deps.as_mut(), mock_env(), info, msg)
         .expect("contract successfully executes InstantiateMsg");
 
     let net_amount = Uint256::from(
@@ -199,7 +202,7 @@ fn proper_initialization() {
     let env = mock_env();
 
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    assert_eq!(0, res.messages.len());
+    assert_eq!(1, res.messages.len());
 
     let config = query_config(deps.as_ref()).unwrap();
 
@@ -285,7 +288,7 @@ fn proper_initialization() {
 fn update_config() {
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // update owner
@@ -405,7 +408,7 @@ fn deposit() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Must deposit stable_denom coins
@@ -713,7 +716,7 @@ fn gift_tickets() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Must deposit stable_denom coins
@@ -943,7 +946,7 @@ fn sponsor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let sponsor_amount = 100_000_000u128;
@@ -966,13 +969,6 @@ fn sponsor() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg);
     println!("{:?}", _res);
-
-    let sponsor_info = read_sponsor_info(
-        deps.as_ref().storage,
-        &deps.api.addr_validate("addr0001").unwrap(),
-    );
-
-    let pool = query_pool(deps.as_ref()).unwrap();
 
     let net_amount = Uint256::from(
         deduct_tax(
@@ -1016,7 +1012,7 @@ fn withdraw() {
         amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
     }]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let deposit_amount = Uint256::from(TICKET_PRICE).into();
@@ -1296,7 +1292,7 @@ fn instant_withdraw() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let deposit_amount = Uint256::from(TICKET_PRICE).into();
@@ -1459,7 +1455,7 @@ fn claim() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Address buys one ticket
@@ -1632,7 +1628,7 @@ fn claim_lottery_single_winner() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Users buys winning ticket
@@ -1761,7 +1757,7 @@ fn claim_lottery_single_winner() {
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
-            number_winners: number_winners,
+            number_winners,
             page: "".to_string()
         }
     );
@@ -1851,7 +1847,7 @@ fn execute_lottery() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
     )]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let info = mock_info(
@@ -1910,24 +1906,42 @@ fn execute_lottery() {
     let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
 
     // Add minted_aust to our contract balance
-    deps.querier.with_token_balances(&[(
-        &A_UST.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
-    )]);
+    deps.querier.increment_token_balance(
+        A_UST.to_string(),
+        MOCK_CONTRACT_ADDR.to_string(),
+        minted_aust.into(),
+    );
 
     // Execute lottery, now with tickets
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
     let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
+    // Get the sent_amount
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
+        } else {
+            panic!("DO NOT ENTER HERE")
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
+
     // Messages is empty because aust hasn't appreciated so there is nothing to redeem
-    assert_eq!(res.messages, vec![]);
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "execute_lottery"),
-            attr("redeemed_amount", "0"),
+            attr("redeemed_amount", sent_amount.to_string()),
         ]
+    );
+
+    deps.querier.decrement_token_balance(
+        A_UST.to_string(),
+        MOCK_CONTRACT_ADDR.to_string(),
+        sent_amount,
     );
 
     // Directly check next_lottery_exec_time has been set up
@@ -2217,7 +2231,7 @@ fn execute_lottery_no_tickets() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
     )]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let info = mock_info("addr0001", &[]);
@@ -2257,7 +2271,7 @@ fn execute_prize_no_winners() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Users buys a non-winning ticket
@@ -2377,7 +2391,7 @@ fn execute_prize_one_winner() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Users buys winning ticket
@@ -2516,7 +2530,7 @@ fn execute_prize_winners_diff_ranks() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Users buys winning ticket - 5 hits
@@ -2640,7 +2654,7 @@ fn execute_prize_winners_diff_ranks() {
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
-            number_winners: number_winners,
+            number_winners,
             page: "".to_string()
         }
     );
@@ -2683,7 +2697,7 @@ fn execute_prize_winners_same_rank() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Users buys winning ticket - 4 hits
@@ -2806,7 +2820,7 @@ fn execute_prize_winners_same_rank() {
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
-            number_winners: number_winners,
+            number_winners,
             page: "".to_string()
         }
     );
@@ -2843,7 +2857,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Users buys winning ticket - 5 hits
@@ -2967,7 +2981,7 @@ fn execute_prize_one_winner_multiple_ranks() {
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
-            number_winners: number_winners,
+            number_winners,
             page: "".to_string()
         }
     );
@@ -3007,7 +3021,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let msg = ExecuteMsg::Deposit {
@@ -3107,7 +3121,7 @@ fn execute_prize_multiple_winners_one_ticket() {
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
-            number_winners: number_winners,
+            number_winners,
             page: "".to_string()
         }
     );
@@ -3147,7 +3161,7 @@ fn execute_prize_pagination() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let addresses_count = 480u64;
@@ -3252,7 +3266,7 @@ fn claim_rewards_one_depositor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let info = mock_info("addr0000", &[]);
@@ -3351,7 +3365,7 @@ fn claim_rewards_multiple_depositors() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
@@ -3493,7 +3507,7 @@ fn claim_rewards_depositor_and_sponsor() {
     // Mock aUST-UST exchange rate
     deps.querier.with_exchange_rate(Decimal256::permille(RATE));
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
@@ -3691,7 +3705,7 @@ fn execute_epoch_operations() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     deps.querier.with_tax(
@@ -3763,7 +3777,7 @@ fn small_withdraw() {
     let env = mock_env();
 
     // mock instantiate the contracts
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // User deposits and buys one ticket -------------------
@@ -4207,7 +4221,7 @@ pub fn simulate_many_lotteries_with_one_depositor() {
     let mut env = mock_env();
 
     // mock instantiate the contracts
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // User deposits and buys one ticket -------------------
@@ -4452,7 +4466,7 @@ pub fn simulate_many_lotteries_with_one_sponsor() {
     let mut env = mock_env();
 
     // mock instantiate the contracts
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Add a dummy ticket in order to pass validation
@@ -4596,7 +4610,7 @@ pub fn simulate_many_lotteries_with_one_depositor_and_sponsor() {
     let mut env = mock_env();
 
     // mock instantiate the contracts
-    mock_instantiate(deps.as_mut());
+    mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
     // Add a dummy ticket in order to pass validation
@@ -4895,7 +4909,7 @@ fn calculate_prize_buckets(deps: Deps) -> [Uint256; 6] {
             .amount,
     );
 
-    let mut prize_buckets = state.prize_buckets.clone();
+    let mut prize_buckets = state.prize_buckets;
 
     for index in 0..state.prize_buckets.len() {
         // Add the proportional amount of the net redeemed amount to the relevant award bucket.

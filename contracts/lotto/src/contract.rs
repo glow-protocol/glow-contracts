@@ -156,7 +156,7 @@ pub fn instantiate(
     let messages: Vec<CosmosMsg> = vec![CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: msg.anchor_contract,
         funds: vec![Coin {
-            denom: msg.stable_denom.clone(),
+            denom: msg.stable_denom,
             amount: tax_deducted_initial_deposit.into(),
         }],
         msg: to_binary(&AnchorMsg::DepositStable {})?,
@@ -507,7 +507,7 @@ pub fn execute_sponsor(
         .amount,
     );
 
-    if let None = award {
+    if let None | Some(false) = award {
         // query exchange_rate from anchor money market
         let epoch_state: EpochStateResponse = query_exchange_rate(
             deps.as_ref(),

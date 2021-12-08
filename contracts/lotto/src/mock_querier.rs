@@ -313,6 +313,34 @@ impl WasmMockQuerier {
         self.token_querier = TokenQuerier::new(balances);
     }
 
+    pub fn increment_token_balance(&mut self, address: String, token_addr: String, diff: Uint128) {
+        let contract_balances_map = self
+            .token_querier
+            .balances
+            .entry(address)
+            .or_insert_with(HashMap::new);
+
+        let balance = contract_balances_map
+            .entry(token_addr)
+            .or_insert_with(|| Uint128::from(0u128));
+
+        *balance += diff;
+    }
+
+    pub fn decrement_token_balance(&mut self, address: String, token_addr: String, diff: Uint128) {
+        let contract_balances_map = self
+            .token_querier
+            .balances
+            .entry(address)
+            .or_insert_with(HashMap::new);
+
+        let balance = contract_balances_map
+            .entry(token_addr)
+            .or_insert_with(|| Uint128::from(0u128));
+
+        *balance -= diff;
+    }
+
     // configure the token owner mock querier
     pub fn with_tax(&mut self, rate: Decimal, caps: &[(&String, &Uint128)]) {
         self.tax_querier = TaxQuerier::new(rate, caps);

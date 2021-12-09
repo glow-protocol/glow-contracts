@@ -168,5 +168,9 @@ pub fn calculate_lottery_balance(
     // Get the ust value of the aust going towards the lottery
     let aust_lottery_balance_value = aust_lottery_balance * rate;
 
-    Ok(carry_over_value + aust_lottery_balance_value)
+    let amount_to_redeem = aust_lottery_balance_value
+        - pool.total_user_lottery_deposits
+        - pool.total_sponsor_lottery_deposits;
+
+    Ok(carry_over_value + amount_to_redeem)
 }

@@ -116,7 +116,6 @@ pub fn execute_lottery(
         - pool.total_user_lottery_deposits
         - pool.total_sponsor_lottery_deposits;
 
-    // TODO What if some of these values are zero?
     // Divide by the rate to get the number of aust to redeem
     let aust_to_redeem = amount_to_redeem / rate;
 

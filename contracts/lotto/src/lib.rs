@@ -1,6 +1,7 @@
 pub mod contract;
 pub mod state;
 
+mod anchor_mock;
 mod error;
 mod helpers;
 mod oracle;

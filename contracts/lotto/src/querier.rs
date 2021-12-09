@@ -40,10 +40,9 @@ pub fn query_glow_emission_rate(
     target_award: Uint256,
     current_emission_rate: Decimal256,
 ) -> StdResult<GlowEmissionRateResponse> {
-    let mut current_award = Uint256::zero();
-    for prize in current_prize_buckets.iter() {
-        current_award += *prize;
-    }
+    let current_award = current_prize_buckets
+        .iter()
+        .fold(Uint256::zero(), |sum, val| sum + *val);
 
     let glow_emission_rate: GlowEmissionRateResponse =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {

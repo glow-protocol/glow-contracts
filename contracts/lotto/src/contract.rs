@@ -25,8 +25,8 @@ use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
-    InstantiateMsg, LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse, QueryMsg,
-    SponsorInfoResponse, StateResponse, TicketInfoResponse,
+    InstantiateMsg, LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse,
+    PrizeInfoResponse, QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
@@ -1299,6 +1299,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Depositors { start_after, limit } => {
             to_binary(&query_depositors(deps, start_after, limit)?)
         }
+        QueryMsg::LotteryBalance {} => to_binary(&query_lottery_balance(deps, env)?),
     }
 }
 
@@ -1479,6 +1480,27 @@ pub fn query_depositors(
 
     let depositors = read_depositors(deps, start_after, limit)?;
     Ok(DepositorsInfoResponse { depositors })
+}
+
+pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceResponse> {
+    let config = CONFIG.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
+
+    // Get the contract's aust balance
+    let contract_a_balance = Uint256::from(query_token_balance(
+        &deps.querier,
+        config.a_terra_contract.clone(),
+        env.clone().contract.address,
+    )?);
+
+    // Get the aust exchange rate
+    let rate = query_exchange_rate(deps, config.anchor_contract.to_string(), env.block.height)?
+        .exchange_rate;
+
+    let lottery_balance = calculate_lottery_balance(&state, &pool, contract_a_balance, rate)?;
+
+    Ok(LotteryBalanceResponse { lottery_balance })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

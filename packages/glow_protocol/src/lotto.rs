@@ -115,6 +115,9 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
+    /// now.
+    LotteryBalance {},
 }
 
 // We define a custom struct for each query response
@@ -220,4 +223,9 @@ pub struct PrizeInfoResponse {
     pub lottery_id: u64,
     pub claimed: bool,
     pub matches: [u32; 6],
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct LotteryBalanceResponse {
+    pub lottery_balance: Uint256,
 }

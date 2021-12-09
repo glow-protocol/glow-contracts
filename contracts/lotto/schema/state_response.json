@@ -3,7 +3,6 @@
   "title": "StateResponse",
   "type": "object",
   "required": [
-    "award_available",
     "current_lottery",
     "global_reward_index",
     "glow_emission_rate",
@@ -11,13 +10,11 @@
     "next_epoch",
     "next_lottery_exec_time",
     "next_lottery_time",
+    "prize_buckets",
     "total_reserve",
     "total_tickets"
   ],
   "properties": {
-    "award_available": {
-      "$ref": "#/definitions/Uint256"
-    },
     "current_lottery": {
       "type": "integer",
       "format": "uint64",
@@ -42,6 +39,14 @@
     },
     "next_lottery_time": {
       "$ref": "#/definitions/Expiration"
+    },
+    "prize_buckets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Uint256"
+      },
+      "maxItems": 6,
+      "minItems": 6
     },
     "total_reserve": {
       "$ref": "#/definitions/Uint256"

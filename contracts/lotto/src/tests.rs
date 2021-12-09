@@ -4902,6 +4902,8 @@ pub fn simulate_jackpot_growth_with_one_depositor() {
     let mut amount_distributed_through_lottery = Uint256::zero();
 
     // Add the funds to the contract address -------------------
+    // This overwrites the aust from INITIAL_DEPOSIT_AMOUNT
+    // but that is good for making it easier to interpret the results of the lottery
     deps.querier.with_token_balances(&[(
         &A_UST.to_string(),
         &[(&MOCK_CONTRACT_ADDR.to_string(), &contract_balance.into())],
@@ -4928,6 +4930,17 @@ pub fn simulate_jackpot_growth_with_one_depositor() {
         let lottery_msg = ExecuteMsg::ExecuteLottery {};
         let info = mock_info("addr0001", &[]);
         let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
+
+        if i % 5 == 0 {
+            // Remaining prizes in state
+
+            let state = STATE.load(deps.as_ref().storage).unwrap();
+
+            println!(
+                "Jackpot size after week {} of prize execution: {:?}",
+                i, state.prize_buckets[5]
+            );
+        }
 
         // Check how much aust was redeemed
         let sent_amount =
@@ -4967,21 +4980,7 @@ pub fn simulate_jackpot_growth_with_one_depositor() {
                 / Decimal256::from_uint256(pool_size_appreciation);
 
         assert!(percent_appreciation_towards_lottery <= Decimal256::percent(SPLIT_FACTOR));
-
-        if i % 5 == 0 {
-            // Remaining prizes in state
-
-            let state = STATE.load(deps.as_ref().storage).unwrap();
-
-            println!(
-                "Remaining prizes after week {} of prize execution: {:?}",
-                i, state.prize_buckets
-            );
-        }
     }
-
-    let state = STATE.load(deps.as_ref().storage).unwrap();
-    println!("Final jackpot size: {}", state.prize_buckets[5]);
 }
 
 #[test]

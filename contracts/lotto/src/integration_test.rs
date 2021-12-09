@@ -1,9 +1,9 @@
 #![cfg(test)]
 
-use crate::anchor_mock::{contract_anchor_mock, MockInstantiateMsg};
+use crate::anchor_mock::{contract_anchor_mock, set_aust_addr, MockInstantiateMsg};
 use cosmwasm_std::testing::{mock_env, MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{coins, Addr, Coin, Empty, Uint128};
-use cw20::Cw20Coin;
+use cw20::{Cw20Coin, MinterResponse};
 use terra_multi_test::{App, BankKeeper, Contract, ContractWrapper, Executor, TerraMockQuerier};
 
 use crate::contract::{
@@ -93,25 +93,47 @@ fn instantiate_glow_lotto() {
         )
         .unwrap();
 
+    // set up cw20 contract with some tokens
+    let cw20_id = app.store_code(contract_cw20());
+    let msg = cw20_base::msg::InstantiateMsg {
+        name: "Anchor Token".to_string(),
+        symbol: "AUST".to_string(),
+        decimals: 2,
+        initial_balances: vec![Cw20Coin {
+            address: owner.to_string(),
+            amount: Uint128::new(INITIAL_DEPOSIT_AMOUNT),
+        }],
+        mint: Some(MinterResponse {
+            minter: anchor_address.to_string(),
+            cap: None,
+        }),
+        marketing: None,
+    };
+    let aust_addr = app
+        .instantiate_contract(cw20_id, owner.clone(), &msg, &[], "CASH", None)
+        .unwrap();
+
+    set_aust_addr(aust_addr.to_string());
+
     // set up glow lotto
-    let _lotto_id = app.store_code(contract_lotto());
+    let lotto_id = app.store_code(contract_lotto());
     let mut msg = crate::tests::instantiate_msg();
 
     msg.anchor_contract = anchor_address.to_string();
     println!("{:?}", msg);
 
     // throwing errors because we need to add support for Anchor
-    // let _lotto_addr = app
-    //     .instantiate_contract(
-    //         lotto_id,
-    //         owner,
-    //         &msg,
-    //         &[Coin {
-    //             denom: DENOM.to_string(),
-    //             amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
-    //         }],
-    //         "CORE",
-    //         None,
-    //     )
-    //     .unwrap();
+    let _lotto_addr = app
+        .instantiate_contract(
+            lotto_id,
+            owner,
+            &msg,
+            &[Coin {
+                denom: DENOM.to_string(),
+                amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+            }],
+            "CORE",
+            None,
+        )
+        .unwrap();
 }

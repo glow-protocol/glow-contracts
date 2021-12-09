@@ -136,9 +136,9 @@ pub fn execute_lottery(
         return Err(ContractError::InsufficientLotteryFunds {});
     }
 
-    for index in 0..state.prize_buckets.len() {
+    for (index, fraction_of_prize) in config.prize_distribution.iter().enumerate() {
         // Add the proportional amount of the net redeemed amount to the relevant award bucket.
-        state.prize_buckets[index] += net_amount * config.prize_distribution[index];
+        state.prize_buckets[index] += net_amount * *fraction_of_prize
     }
 
     // Message to redeem "aust_to_redeem" of aust from the Anchor contract

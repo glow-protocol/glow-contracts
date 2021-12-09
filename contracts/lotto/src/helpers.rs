@@ -1,3 +1,4 @@
+use crate::error::ContractError;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, StdResult, Storage, Uint128};
 use sha3::{Digest, Keccak256};
@@ -139,4 +140,33 @@ pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
     } else {
         rounded_output
     }
+}
+
+pub fn calculate_lottery_balance(
+    state: &State,
+    pool: &Pool,
+    contract_a_balance: Uint256,
+    rate: Decimal256,
+) -> Result<Uint256, ContractError> {
+    // Validate that the value of the contract's lottery aust is always at least the
+    // sum of the value of the user savings aust and lottery deposits.
+    // This check should never fail but is in place as an extra safety measure.
+    if (contract_a_balance - pool.total_user_savings_aust) * rate
+        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    {
+        return Err(ContractError::InsufficientPoolFunds {});
+    }
+
+    let carry_over_value = state
+        .prize_buckets
+        .iter()
+        .fold(Uint256::zero(), |sum, val| sum + *val);
+
+    // Lottery balance equals aust_balance - total_user_savings_aust
+    let aust_lottery_balance = Uint256::from(contract_a_balance) - pool.total_user_savings_aust;
+
+    // Get the ust value of the aust going towards the lottery
+    let aust_lottery_balance_value = aust_lottery_balance * rate;
+
+    Ok(carry_over_value + aust_lottery_balance_value)
 }

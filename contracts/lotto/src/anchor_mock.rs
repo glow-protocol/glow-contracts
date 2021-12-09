@@ -24,7 +24,7 @@ lazy_static! {
 pub fn set_aust_addr(new_addr: String) -> String {
     let mut addr = AUST_ADDR_MOCK.write().unwrap();
     *addr = new_addr;
-    return addr.to_string();
+    addr.to_string()
 }
 
 pub fn get_aust_addr() -> String {
@@ -136,7 +136,7 @@ pub fn contract_anchor_mock() -> Box<dyn Contract<Empty>> {
                     let deposit_amount: Uint256 = info
                         .funds
                         .iter()
-                        .find(|c| c.denom == String::from("uusd"))
+                        .find(|c| c.denom == *"uusd")
                         .map(|c| Uint256::from(c.amount))
                         .unwrap_or_else(Uint256::zero);
                     // Get Mint amount
@@ -209,5 +209,5 @@ pub fn mock_epoch_state() -> EpochStateResponse {
         exchange_rate: Decimal256::percent(120),
         aterra_supply: Uint256::from(1000000u64),
     };
-    return epoch_state;
+    epoch_state
 }

@@ -36,19 +36,17 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
 pub fn query_glow_emission_rate(
     querier: &QuerierWrapper,
     distributor: Addr,
-    current_prize_buckets: [Uint256; 6],
+    lottery_balance: Uint256,
     target_award: Uint256,
     current_emission_rate: Decimal256,
 ) -> StdResult<GlowEmissionRateResponse> {
-    let current_award = current_prize_buckets
-        .iter()
-        .fold(Uint256::zero(), |sum, val| sum + *val);
+    // get the amount of money in the lottery pool
 
     let glow_emission_rate: GlowEmissionRateResponse =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: distributor.to_string(),
             msg: to_binary(&DistributorQueryMsg::GlowEmissionRate {
-                current_award,
+                current_award: lottery_balance,
                 target_award,
                 current_emission_rate,
             })?,

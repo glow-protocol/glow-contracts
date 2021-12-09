@@ -164,7 +164,7 @@ pub fn calculate_lottery_balance(
         .fold(Uint256::zero(), |sum, val| sum + *val);
 
     // Lottery balance equals aust_balance - total_user_savings_aust
-    let aust_lottery_balance = Uint256::from(contract_a_balance) - pool.total_user_savings_aust;
+    let aust_lottery_balance = contract_a_balance - pool.total_user_savings_aust;
 
     // Get the ust value of the aust going towards the lottery
     let aust_lottery_balance_value = aust_lottery_balance * rate;
@@ -185,7 +185,5 @@ pub fn calculate_depositor_balance(depositor: DepositorInfo, rate: Decimal256) -
     let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
 
     // Calculate the depositor's balance from their aust balance
-    let depositor_balance = depositor_aust_balance * rate;
-
-    depositor_balance
+    depositor_aust_balance * rate
 }

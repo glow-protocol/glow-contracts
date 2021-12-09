@@ -3,8 +3,9 @@ use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
 use crate::helpers::{
-    calculate_winner_prize, claim_deposits, compute_depositor_reward, compute_reward,
-    compute_sponsor_reward, is_valid_sequence, pseudo_random_seq, uint256_times_decimal256_ceil,
+    calculate_lottery_balance, calculate_winner_prize, claim_deposits, compute_depositor_reward,
+    compute_reward, compute_sponsor_reward, is_valid_sequence, pseudo_random_seq,
+    uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -1048,6 +1049,21 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
+    // Get the contract's aust balance
+    let contract_a_balance = Uint256::from(query_token_balance(
+        &deps.querier,
+        config.a_terra_contract.clone(),
+        env.clone().contract.address,
+    )?);
+
+    // Get the aust exchange rate
+    let rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
     // Validate that executing epoch will follow rate limiting
     if !state.next_epoch.is_expired(&env.block) {
         return Err(ContractError::InvalidEpochExecution {});
@@ -1063,11 +1079,13 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     // Compute global Glow rewards
     compute_reward(&mut state, &pool, env.block.height);
 
+    let lottery_balance = calculate_lottery_balance(&state, &pool, contract_a_balance, rate)?;
+
     // Query updated Glow emission rate and update state
     state.glow_emission_rate = query_glow_emission_rate(
         &deps.querier,
         config.distributor_contract,
-        state.prize_buckets,
+        lottery_balance,
         config.target_award,
         state.glow_emission_rate,
     )?

@@ -1,6 +1,5 @@
-use crate::error::ContractError;
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, StdError, StdResult, Storage, Uint128};
 use sha3::{Digest, Keccak256};
 
 use crate::state::{
@@ -147,14 +146,16 @@ pub fn calculate_lottery_balance(
     pool: &Pool,
     contract_a_balance: Uint256,
     rate: Decimal256,
-) -> Result<Uint256, ContractError> {
+) -> StdResult<Uint256> {
     // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
     if (contract_a_balance - pool.total_user_savings_aust) * rate
         < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
-        return Err(ContractError::InsufficientPoolFunds {});
+        return Err(StdError::generic_err(
+            "Value of lottery pool must be greater than the value of lottery deposits",
+        ));
     }
 
     let carry_over_value = state
@@ -173,4 +174,18 @@ pub fn calculate_lottery_balance(
         - pool.total_sponsor_lottery_deposits;
 
     Ok(carry_over_value + amount_to_redeem)
+}
+
+#[allow(dead_code)]
+pub fn calculate_depositor_balance(depositor: DepositorInfo, rate: Decimal256) -> Uint256 {
+    // Get the amount of aust equivalent to the depositor's lottery deposit
+    let depositor_lottery_aust = depositor.lottery_deposit / rate;
+
+    // Calculate the depositor's aust balance
+    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
+
+    // Calculate the depositor's balance from their aust balance
+    let depositor_balance = depositor_aust_balance * rate;
+
+    depositor_balance
 }

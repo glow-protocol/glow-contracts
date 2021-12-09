@@ -2641,10 +2641,6 @@ fn execute_prize_winners_diff_ranks() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    // let awarded_prize_0 = award_available * Decimal256::percent(50);
-    // let awarded_prize_1 = award_available * Decimal256::percent(5);
-    // let awarded_prize = awarded_prize_0 + awarded_prize_1;
-
     let number_winners = [0, 0, 1, 0, 0, 1];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
@@ -4973,40 +4969,19 @@ pub fn simulate_jackpot_growth_with_one_depositor() {
         assert!(percent_appreciation_towards_lottery <= Decimal256::percent(SPLIT_FACTOR));
 
         if i % 5 == 0 {
-            println!(
-                "Percent appreciation towards lottery after week {}: {}",
-                i, percent_appreciation_towards_lottery
-            );
             // Remaining prizes in state
 
             let state = STATE.load(deps.as_ref().storage).unwrap();
 
-            println!("Remaining prizes: {:?}", state.prize_buckets);
-            println!()
+            println!(
+                "Remaining prizes after week {} of prize execution: {:?}",
+                i, state.prize_buckets
+            );
         }
     }
 
-    println!("Initial pool size value: {}", minted_aust);
-    println!(
-        "Final pool size value: {}",
-        contract_balance * exchange_rate
-    );
-    println!(
-        "Total appreciation: {}",
-        Decimal256::from_uint256(contract_balance) * exchange_rate
-            / Decimal256::from_uint256(minted_aust)
-    );
-    println!(
-        "Total spent on lottery: {}",
-        amount_distributed_through_lottery
-    );
-    println!(
-        "Percent of total appreciation towards lottery: {}",
-        Decimal256::from_uint256(amount_distributed_through_lottery)
-            / Decimal256::from_uint256(
-                contract_balance * exchange_rate - minted_aust + amount_distributed_through_lottery
-            )
-    );
+    let state = STATE.load(deps.as_ref().storage).unwrap();
+    println!("Final jackpot size: {}", state.prize_buckets[5]);
 }
 
 #[test]

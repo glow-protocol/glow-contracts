@@ -10,6 +10,7 @@ use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
     DepositorInfo, LotteryInfo, PrizeInfo, NUM_PRIZE_BUCKETS, STATE, TICKET_LENGTH,
 };
+use lazy_static::lazy_static;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::MockApi;
@@ -52,21 +53,31 @@ const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
 const FIRST_LOTTO_TIME: u64 = 1595961494; // timestamp between deployment and 1 week after
-const SIX_MATCH_SEQUENCE: &str = "be1ce9";
-const FIVE_MATCH_SEQUENCE: &str = "be1ce8";
-const FOUR_MATCH_SEQUENCE: &str = "be1c79";
-const FOUR_MATCH_SEQUENCE_2: &str = "be1c89";
-const FOUR_MATCH_SEQUENCE_3: &str = "be1c99";
-const THREE_MATCH_SEQUENCE: &str = "be18e9";
-const TWO_MATCH_SEQUENCE: &str = "be0ce9";
-const ONE_MATCH_SEQUENCE: &str = "b81ce9";
-const ZERO_MATCH_SEQUENCE: &str = "6e1ce9";
-const ZERO_MATCH_SEQUENCE_2: &str = "7e1ce9";
-const ZERO_MATCH_SEQUENCE_3: &str = "8e1ce9";
-const ZERO_MATCH_SEQUENCE_4: &str = "9e1ce9";
-const INVALID_TICKET_TOO_LONG: &str = "2b02cab";
-const INVALID_TICKET_TOO_SHORT: &str = "2b02c";
-const INVALID_TICKET_NOT_HEX: &str = "2b02cg";
+const FIVE_MATCH_SEQUENCE: &str = "be1ce";
+const FOUR_MATCH_SEQUENCE: &str = "be1c7";
+const FOUR_MATCH_SEQUENCE_2: &str = "be1c8";
+const FOUR_MATCH_SEQUENCE_3: &str = "be1c9";
+const THREE_MATCH_SEQUENCE: &str = "be18e";
+const TWO_MATCH_SEQUENCE: &str = "be0ce";
+const ONE_MATCH_SEQUENCE: &str = "b81ce";
+const ZERO_MATCH_SEQUENCE: &str = "6e1ce";
+const ZERO_MATCH_SEQUENCE_2: &str = "7e1ce";
+const ZERO_MATCH_SEQUENCE_3: &str = "8e1ce";
+const ZERO_MATCH_SEQUENCE_4: &str = "9e1ce";
+const INVALID_TICKET_TOO_LONG: &str = "2b02ca";
+const INVALID_TICKET_TOO_SHORT: &str = "2b02";
+const INVALID_TICKET_NOT_HEX: &str = "2b02g";
+
+lazy_static! {
+    static ref PRIZE_DISTRIBUTION: [Decimal256; NUM_PRIZE_BUCKETS] = [
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::percent(5),
+        Decimal256::percent(15),
+        Decimal256::percent(30),
+        Decimal256::percent(50),
+    ];
+}
 
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
     InstantiateMsg {
@@ -81,15 +92,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         round_delta: ROUND_DELTA,
         ticket_price: Uint256::from(TICKET_PRICE),
         max_holders: MAX_HOLDERS,
-        prize_distribution: [
-            Decimal256::zero(),
-            Decimal256::zero(),
-            Decimal256::percent(5),
-            Decimal256::percent(15),
-            Decimal256::percent(25),
-            Decimal256::percent(35),
-            Decimal256::percent(20),
-        ],
+        prize_distribution: *PRIZE_DISTRIBUTION,
         target_award: Uint256::zero(),
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
@@ -113,15 +116,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         round_delta: ROUND_DELTA,
         ticket_price: Uint256::from(SMALL_TICKET_PRICE),
         max_holders: MAX_HOLDERS,
-        prize_distribution: [
-            Decimal256::zero(),
-            Decimal256::zero(),
-            Decimal256::percent(5),
-            Decimal256::percent(15),
-            Decimal256::percent(25),
-            Decimal256::percent(35),
-            Decimal256::percent(20),
-        ],
+        prize_distribution: *PRIZE_DISTRIBUTION,
         target_award: Uint256::zero(),
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
@@ -237,15 +232,7 @@ fn proper_initialization() {
             round_delta: ROUND_DELTA,
             ticket_price: Uint256::from(TICKET_PRICE),
             max_holders: MAX_HOLDERS,
-            prize_distribution: [
-                Decimal256::zero(),
-                Decimal256::zero(),
-                Decimal256::percent(5),
-                Decimal256::percent(15),
-                Decimal256::percent(25),
-                Decimal256::percent(35),
-                Decimal256::percent(20),
-            ],
+            prize_distribution: *PRIZE_DISTRIBUTION,
             target_award: Uint256::zero(),
             reserve_factor: Decimal256::percent(RESERVE_FACTOR),
             split_factor: Decimal256::percent(SPLIT_FACTOR),
@@ -686,13 +673,13 @@ fn deposit() {
 
     // Test sequential buys of the same ticket by the same address (should fail)
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FIVE_MATCH_SEQUENCE)],
+        combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FIVE_MATCH_SEQUENCE)],
+        combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
     };
 
     // We let users have a repeated ticket
@@ -837,7 +824,7 @@ fn gift_tickets() {
     let msg = ExecuteMsg::Gift {
         combinations: vec![
             String::from(INVALID_TICKET_TOO_LONG),
-            String::from(FIVE_MATCH_SEQUENCE),
+            String::from(ZERO_MATCH_SEQUENCE),
         ],
         recipient: "addr1111".to_string(),
     };
@@ -857,7 +844,7 @@ fn gift_tickets() {
     // Invalid ticket sequence - less number of digits
     let msg = ExecuteMsg::Gift {
         combinations: vec![
-            String::from(FIVE_MATCH_SEQUENCE),
+            String::from(ZERO_MATCH_SEQUENCE),
             String::from(INVALID_TICKET_TOO_SHORT),
         ],
         recipient: "addr1111".to_string(),
@@ -879,7 +866,7 @@ fn gift_tickets() {
     let msg = ExecuteMsg::Gift {
         combinations: vec![
             String::from(INVALID_TICKET_NOT_HEX),
-            String::from(FIVE_MATCH_SEQUENCE),
+            String::from(ZERO_MATCH_SEQUENCE),
         ],
         recipient: "addr1111".to_string(),
     };
@@ -1274,10 +1261,10 @@ fn withdraw() {
         vec![
             // TODO: Don't hardcode the number of tickets
             // String::from("000005"),
-            String::from("000006"),
-            String::from("000007"),
-            String::from("000008"),
-            String::from("000009")
+            String::from(format!("{:0length$}", 6, length = TICKET_LENGTH)),
+            String::from(format!("{:0length$}", 7, length = TICKET_LENGTH)),
+            String::from(format!("{:0length$}", 8, length = TICKET_LENGTH)),
+            String::from(format!("{:0length$}", 9, length = TICKET_LENGTH))
         ]
     );
 
@@ -1290,16 +1277,22 @@ fn withdraw() {
 
     // Check ticket map is updated correctly
     assert_eq!(
-        query_ticket_info(deps.as_ref(), String::from("000002"))
-            .unwrap()
-            .holders,
+        query_ticket_info(
+            deps.as_ref(),
+            String::from(format!("{:0length$}", 2, length = TICKET_LENGTH))
+        )
+        .unwrap()
+        .holders,
         empty_addr
     );
 
     assert_eq!(
-        query_ticket_info(deps.as_ref(), String::from("000006"))
-            .unwrap()
-            .holders,
+        query_ticket_info(
+            deps.as_ref(),
+            String::from(format!("{:0length$}", 6, length = TICKET_LENGTH))
+        )
+        .unwrap()
+        .holders,
         vec![Addr::unchecked("addr2222")]
     );
 
@@ -1322,9 +1315,9 @@ fn withdraw() {
         vec![
             // TODO Don't hardcode
             // String::from("000006"),
-            String::from("000007"),
-            String::from("000008"),
-            String::from("000009")
+            String::from(format!("{:0length$}", 7, length = TICKET_LENGTH)),
+            String::from(format!("{:0length$}", 8, length = TICKET_LENGTH)),
+            String::from(format!("{:0length$}", 9, length = TICKET_LENGTH))
         ]
     );
 
@@ -1337,9 +1330,12 @@ fn withdraw() {
     );
     // Check ticket map is updated correctly
     assert_eq!(
-        query_ticket_info(deps.as_ref(), String::from("000005"))
-            .unwrap()
-            .holders,
+        query_ticket_info(
+            deps.as_ref(),
+            String::from(format!("{:0length$}", 5, length = TICKET_LENGTH))
+        )
+        .unwrap()
+        .holders,
         empty_addr
     );
 }
@@ -1690,7 +1686,7 @@ fn claim_lottery_single_winner() {
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        combinations: vec![String::from(FIVE_MATCH_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -1724,7 +1720,7 @@ fn claim_lottery_single_winner() {
             savings_aust: minted_savings_aust,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
+            tickets: vec![String::from(FIVE_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
     );
@@ -1801,7 +1797,7 @@ fn claim_lottery_single_winner() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    let number_winners = [0, 0, 0, 0, 0, 0, 1];
+    let number_winners = [0, 0, 0, 0, 0, 1];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
@@ -1810,7 +1806,7 @@ fn claim_lottery_single_winner() {
         lottery,
         LotteryInfo {
             rand_round: 20170,
-            sequence: SIX_MATCH_SEQUENCE.to_string(),
+            sequence: FIVE_MATCH_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
@@ -1824,7 +1820,7 @@ fn claim_lottery_single_winner() {
         prizes,
         PrizeInfo {
             claimed: false,
-            matches: [0, 0, 0, 0, 0, 0, 1]
+            matches: [0, 0, 0, 0, 0, 1]
         }
     );
 
@@ -1858,7 +1854,7 @@ fn claim_lottery_single_winner() {
         prizes,
         PrizeInfo {
             claimed: true,
-            matches: [0, 0, 0, 0, 0, 0, 1]
+            matches: [0, 0, 0, 0, 0, 1]
         }
     );
 
@@ -2420,7 +2416,7 @@ fn execute_prize_no_winners() {
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             rand_round: 20170,
-            sequence: SIX_MATCH_SEQUENCE.to_string(),
+            sequence: FIVE_MATCH_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
@@ -2456,7 +2452,7 @@ fn execute_prize_one_winner() {
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        combinations: vec![String::from(FIVE_MATCH_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -2490,7 +2486,7 @@ fn execute_prize_one_winner() {
             savings_aust: minted_savings_aust,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
+            tickets: vec![String::from(FIVE_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
     );
@@ -2531,50 +2527,36 @@ fn execute_prize_one_winner() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    // let awarded_prize = award_available * Decimal256::percent(50);
+    let number_winners = [0, 0, 0, 0, 0, 1];
+    let lottery_prize_buckets =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             rand_round: 20170,
-            sequence: SIX_MATCH_SEQUENCE.to_string(),
+            sequence: FIVE_MATCH_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
-            prize_buckets: [
-                Uint256::zero(),
-                Uint256::zero(),
-                Uint256::zero(),
-                Uint256::zero(),
-                Uint256::zero(),
-                Uint256::zero(),
-                state_prize_buckets[6]
-            ],
-            number_winners: [0, 0, 0, 0, 0, 0, 1],
+            prize_buckets: lottery_prize_buckets,
+            number_winners: number_winners,
             page: "".to_string()
         }
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
-    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 0, 1]);
+    assert_eq!(prizes.matches, number_winners);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
     assert_eq!(state.total_reserve, Uint256::zero(),);
 
+    let remaining_state_prize_buckets =
+        calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
+
     // From the initialization of the contract
-    assert_eq!(
-        state.prize_buckets,
-        [
-            state_prize_buckets[0],
-            state_prize_buckets[1],
-            state_prize_buckets[2],
-            state_prize_buckets[3],
-            state_prize_buckets[4],
-            state_prize_buckets[5],
-            Uint256::zero()
-        ]
-    );
+    assert_eq!(state.prize_buckets, remaining_state_prize_buckets);
 
     assert_eq!(res.messages, vec![]);
 
@@ -2582,7 +2564,10 @@ fn execute_prize_one_winner() {
         res.attributes,
         vec![
             attr("action", "execute_prize"),
-            attr("total_awarded_prize", state_prize_buckets[6].to_string()),
+            attr(
+                "total_awarded_prize",
+                state_prize_buckets[NUM_PRIZE_BUCKETS - 1].to_string()
+            ),
         ]
     );
 }
@@ -2597,7 +2582,7 @@ fn execute_prize_winners_diff_ranks() {
 
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        combinations: vec![String::from(FIVE_MATCH_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -2631,7 +2616,7 @@ fn execute_prize_winners_diff_ranks() {
             savings_aust: minted_savings_aust,
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
-            tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
+            tickets: vec![String::from(FIVE_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
     );
@@ -2700,7 +2685,7 @@ fn execute_prize_winners_diff_ranks() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let number_winners = [0, 0, 1, 0, 0, 0, 1];
+    let number_winners = [0, 0, 1, 0, 0, 1];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
@@ -2708,7 +2693,7 @@ fn execute_prize_winners_diff_ranks() {
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             rand_round: 20170,
-            sequence: SIX_MATCH_SEQUENCE.to_string(),
+            sequence: FIVE_MATCH_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
@@ -2718,10 +2703,10 @@ fn execute_prize_winners_diff_ranks() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw_0, 0u64).unwrap();
-    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 0, 1]);
+    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 1]);
 
     let prizes = query_prizes(deps.as_ref(), &address_raw_1, 0u64).unwrap();
-    assert_eq!(prizes.matches, [0, 0, 1, 0, 0, 0, 0]);
+    assert_eq!(prizes.matches, [0, 0, 1, 0, 0, 0]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
@@ -2866,7 +2851,7 @@ fn execute_prize_winners_same_rank() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let number_winners = [0, 0, 0, 0, 2, 0, 0];
+    let number_winners = [0, 0, 0, 0, 2, 0];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
@@ -2874,7 +2859,7 @@ fn execute_prize_winners_same_rank() {
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             rand_round: 20170,
-            sequence: SIX_MATCH_SEQUENCE.to_string(),
+            sequence: FIVE_MATCH_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
@@ -2920,7 +2905,7 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     // Users buys winning ticket - 6 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        combinations: vec![String::from(FIVE_MATCH_SEQUENCE)],
     };
     let info = mock_info(
         "addr0000",
@@ -2975,7 +2960,7 @@ fn execute_prize_one_winner_multiple_ranks() {
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
             tickets: vec![
-                String::from(SIX_MATCH_SEQUENCE),
+                String::from(FIVE_MATCH_SEQUENCE),
                 String::from(ONE_MATCH_SEQUENCE),
                 String::from(FOUR_MATCH_SEQUENCE),
                 String::from(FOUR_MATCH_SEQUENCE_2),
@@ -3022,7 +3007,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let number_winners = [0, 0, 0, 0, 3, 0, 1];
+    let number_winners = [0, 0, 0, 0, 3, 1];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
@@ -3035,7 +3020,7 @@ fn execute_prize_one_winner_multiple_ranks() {
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             rand_round: 20170,
-            sequence: SIX_MATCH_SEQUENCE.to_string(),
+            sequence: FIVE_MATCH_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
@@ -3045,7 +3030,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
-    assert_eq!(prizes.matches, [0, 0, 0, 0, 3, 0, 1]);
+    assert_eq!(prizes.matches, number_winners);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
@@ -3083,7 +3068,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     mock_register_contracts(deps.as_mut());
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        combinations: vec![String::from(FIVE_MATCH_SEQUENCE)],
     };
 
     // User 0 buys winning ticket - 5 hits
@@ -3123,7 +3108,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     let address_1 = deps.api.addr_validate("addr1111").unwrap();
     let address_2 = deps.api.addr_validate("addr2222").unwrap();
 
-    let ticket = query_ticket_info(deps.as_ref(), String::from(SIX_MATCH_SEQUENCE)).unwrap();
+    let ticket = query_ticket_info(deps.as_ref(), String::from(FIVE_MATCH_SEQUENCE)).unwrap();
 
     assert_eq!(
         ticket.holders,
@@ -3167,7 +3152,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     let msg = ExecuteMsg::ExecutePrize { limit: None };
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-    let number_winners = [0, 0, 0, 0, 0, 0, 3];
+    let number_winners = [0, 0, 0, 0, 0, 3];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
@@ -3175,7 +3160,7 @@ fn execute_prize_multiple_winners_one_ticket() {
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
             rand_round: 20170,
-            sequence: SIX_MATCH_SEQUENCE.to_string(),
+            sequence: FIVE_MATCH_SEQUENCE.to_string(),
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
@@ -3185,7 +3170,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     );
 
     let prizes = query_prizes(deps.as_ref(), &address_0, 0u64).unwrap();
-    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 0, 1]);
+    assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 1]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
@@ -3466,7 +3451,7 @@ fn claim_rewards_multiple_depositors() {
     // USER 1 Deposits another 20_000_000 uusd
     let msg = ExecuteMsg::Deposit {
         combinations: vec![
-            String::from(SIX_MATCH_SEQUENCE),
+            String::from(FIVE_MATCH_SEQUENCE),
             String::from(TWO_MATCH_SEQUENCE),
         ],
     };
@@ -4963,7 +4948,6 @@ pub fn simulate_jackpot_growth_with_one_depositor() {
         combinations: vec![
             String::from(THREE_MATCH_SEQUENCE),
             String::from(FOUR_MATCH_SEQUENCE),
-            String::from(FIVE_MATCH_SEQUENCE),
         ],
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();

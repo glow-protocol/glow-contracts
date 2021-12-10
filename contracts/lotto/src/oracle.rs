@@ -1,3 +1,4 @@
+use crate::state::TICKET_LENGTH;
 use cosmwasm_std::{Addr, Binary, Env};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ pub fn calculate_lottery_rand_round(env: Env, round_delta: u64) -> u64 {
 }
 
 pub fn sequence_from_hash(hash: String) -> String {
-    let seq = &hash[2..8];
+    let seq = &hash[2..TICKET_LENGTH + 2];
     seq.to_string()
 }
 

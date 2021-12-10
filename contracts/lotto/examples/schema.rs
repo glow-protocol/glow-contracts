@@ -5,8 +5,8 @@ use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
 use glow_protocol::lotto::{
     ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg, InstantiateMsg,
-    LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg, SponsorInfoResponse,
-    StateResponse, TicketInfoResponse,
+    LotteryBalanceResponse, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg,
+    SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 
 fn main() {
@@ -27,4 +27,5 @@ fn main() {
     export_schema(&schema_for!(PrizeInfoResponse), &out_dir);
     export_schema(&schema_for!(SponsorInfoResponse), &out_dir);
     export_schema(&schema_for!(TicketInfoResponse), &out_dir);
+    export_schema(&schema_for!(LotteryBalanceResponse), &out_dir);
 }

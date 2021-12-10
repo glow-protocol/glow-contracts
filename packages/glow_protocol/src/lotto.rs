@@ -115,6 +115,9 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
+    /// now.
+    LotteryBalance {},
 }
 
 // We define a custom struct for each query response
@@ -145,7 +148,7 @@ pub struct ConfigResponse {
 pub struct StateResponse {
     pub total_tickets: Uint256,
     pub total_reserve: Uint256,
-    pub award_available: Uint256,
+    pub prize_buckets: [Uint256; 6],
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
@@ -171,7 +174,7 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub total_available_prizes: Uint256,
+    pub prize_buckets: [Uint256; 6],
     pub number_winners: [u32; 6],
     pub page: String,
 }
@@ -220,4 +223,9 @@ pub struct PrizeInfoResponse {
     pub lottery_id: u64,
     pub claimed: bool,
     pub matches: [u32; 6],
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct LotteryBalanceResponse {
+    pub lottery_balance: Uint256,
 }

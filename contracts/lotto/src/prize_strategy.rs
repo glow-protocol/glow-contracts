@@ -18,7 +18,7 @@ use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::Cw20HookMsg;
-use std::ops::{Add, Sub};
+use std::ops::Add;
 use std::str;
 use std::usize;
 
@@ -93,7 +93,7 @@ pub fn execute_lottery(
         sequence: "".to_string(),
         awarded: false,
         timestamp: env.block.height,
-        total_available_prizes: Uint256::zero(),
+        prize_buckets: [Uint256::zero(); 6],
         number_winners: [0; 6],
         page: "".to_string(),
     };
@@ -123,33 +123,35 @@ pub fn execute_lottery(
     let aust_to_redeem_value = aust_to_redeem * rate;
 
     // Get the amount of ust that will be received after accounting for taxes
-    let net_amount = deduct_tax(
-        deps.as_ref(),
-        coin(aust_to_redeem_value.into(), config.clone().stable_denom),
-    )?
-    .amount;
+    let net_amount = Uint256::from(
+        deduct_tax(
+            deps.as_ref(),
+            coin(aust_to_redeem_value.into(), config.clone().stable_denom),
+        )?
+        .amount,
+    );
 
-    if aust_to_redeem.is_zero() {
-        if state.award_available.is_zero() {
-            // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
-            return Err(ContractError::InsufficientLotteryFunds {});
-        }
-    } else {
-        // Add the net redeemed amount to the award available.
-        state.award_available += Uint256::from(net_amount);
-
-        // Message to redeem "aust_to_redeem" of aust from the Anchor contract
-        let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.a_terra_contract.to_string(),
-            funds: vec![],
-            msg: to_binary(&Cw20Send {
-                contract: config.anchor_contract.to_string(),
-                amount: aust_to_redeem.into(),
-                msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
-            })?,
-        });
-        msgs.push(redeem_msg);
+    if net_amount.is_zero() {
+        // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
+        return Err(ContractError::InsufficientLotteryFunds {});
     }
+
+    for (index, fraction_of_prize) in config.prize_distribution.iter().enumerate() {
+        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+        state.prize_buckets[index] += net_amount * *fraction_of_prize
+    }
+
+    // Message to redeem "aust_to_redeem" of aust from the Anchor contract
+    let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: config.a_terra_contract.to_string(),
+        funds: vec![],
+        msg: to_binary(&Cw20Send {
+            contract: config.anchor_contract.to_string(),
+            amount: aust_to_redeem.into(),
+            msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
+        })?,
+    });
+    msgs.push(redeem_msg);
 
     // Store the state
     STATE.save(deps.storage, &state)?;
@@ -299,15 +301,19 @@ pub fn execute_prize(
     // If all winners have been accounted, update lottery info and jump to next round
     let mut total_awarded_prize = Uint256::zero();
     if lottery_info.awarded {
-        // Calculate the total_awarded_prize from the number_winners array
+        // Update the lottery prize buckets based on whether or not there is a winner in the corresponding bucket
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
-                // increase total_awarded_prize
-                total_awarded_prize += state.award_available * config.prize_distribution[index];
+                // Increase total_awarded_prize
+                total_awarded_prize += state.prize_buckets[index];
+
+                // Update the corresponding lottery prize bucket
+                lottery_info.prize_buckets[index] = state.prize_buckets[index];
+
+                // Set the corresponding award bucket to 0
+                state.prize_buckets[index] = Uint256::zero();
             }
         }
-        // Save the total_prizes
-        lottery_info.total_available_prizes = state.award_available;
 
         // Increment the current_lottery_number
         state.current_lottery += 1;
@@ -350,9 +356,6 @@ pub fn execute_prize(
 
         // Set next_lottery_exec_time to never
         state.next_lottery_exec_time = Expiration::Never {};
-
-        // Subtract the awarded prize from the award_available to get the remaining award_available
-        state.award_available = state.award_available.sub(total_awarded_prize);
 
         // Save the state
         STATE.save(deps.storage, &state)?;

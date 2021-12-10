@@ -7,10 +7,10 @@
     "lottery_id",
     "number_winners",
     "page",
+    "prize_buckets",
     "rand_round",
     "sequence",
-    "timestamp",
-    "total_available_prizes"
+    "timestamp"
   ],
   "properties": {
     "awarded": {
@@ -34,6 +34,14 @@
     "page": {
       "type": "string"
     },
+    "prize_buckets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Uint256"
+      },
+      "maxItems": 6,
+      "minItems": 6
+    },
     "rand_round": {
       "type": "integer",
       "format": "uint64",
@@ -46,9 +54,6 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
-    },
-    "total_available_prizes": {
-      "$ref": "#/definitions/Uint256"
     }
   },
   "definitions": {

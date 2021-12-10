@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, StdError, StdResult, Storage, Uint128};
 use sha3::{Digest, Keccak256};
 
 use crate::state::{
@@ -74,19 +74,18 @@ pub fn claim_deposits(
 }
 
 pub fn calculate_winner_prize(
-    total_available_prizes: Uint256,
+    lottery_prize_buckets: [Uint256; 6],
     address_rank: [u32; 6],
     lottery_winners: [u32; 6],
-    prize_dis: [Decimal256; 6],
 ) -> Uint128 {
     let mut to_send: Uint128 = Uint128::zero();
     for i in 2..6 {
         if lottery_winners[i] == 0 {
             continue;
         }
-        let ranked_price: Uint256 = total_available_prizes * prize_dis[i];
+        let prize_available: Uint256 = lottery_prize_buckets[i];
 
-        let amount: Uint128 = ranked_price
+        let amount: Uint128 = prize_available
             .multiply_ratio(address_rank[i], lottery_winners[i])
             .into();
 
@@ -140,4 +139,51 @@ pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
     } else {
         rounded_output
     }
+}
+
+pub fn calculate_lottery_balance(
+    state: &State,
+    pool: &Pool,
+    contract_a_balance: Uint256,
+    rate: Decimal256,
+) -> StdResult<Uint256> {
+    // Validate that the value of the contract's lottery aust is always at least the
+    // sum of the value of the user savings aust and lottery deposits.
+    // This check should never fail but is in place as an extra safety measure.
+    if (contract_a_balance - pool.total_user_savings_aust) * rate
+        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    {
+        return Err(StdError::generic_err(
+            "Value of lottery pool must be greater than the value of lottery deposits",
+        ));
+    }
+
+    let carry_over_value = state
+        .prize_buckets
+        .iter()
+        .fold(Uint256::zero(), |sum, val| sum + *val);
+
+    // Lottery balance equals aust_balance - total_user_savings_aust
+    let aust_lottery_balance = contract_a_balance - pool.total_user_savings_aust;
+
+    // Get the ust value of the aust going towards the lottery
+    let aust_lottery_balance_value = aust_lottery_balance * rate;
+
+    let amount_to_redeem = aust_lottery_balance_value
+        - pool.total_user_lottery_deposits
+        - pool.total_sponsor_lottery_deposits;
+
+    Ok(carry_over_value + amount_to_redeem)
+}
+
+#[allow(dead_code)]
+pub fn calculate_depositor_balance(depositor: DepositorInfo, rate: Decimal256) -> Uint256 {
+    // Get the amount of aust equivalent to the depositor's lottery deposit
+    let depositor_lottery_aust = depositor.lottery_deposit / rate;
+
+    // Calculate the depositor's aust balance
+    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
+
+    // Calculate the depositor's balance from their aust balance
+    depositor_aust_balance * rate
 }

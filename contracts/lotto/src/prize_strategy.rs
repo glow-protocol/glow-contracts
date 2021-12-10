@@ -1,8 +1,8 @@
 use crate::error::ContractError;
 use crate::querier::{query_exchange_rate, query_oracle};
 use crate::state::{
-    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
-    TICKETS,
+    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, NUM_PRIZE_BUCKETS, POOL,
+    PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
@@ -93,8 +93,8 @@ pub fn execute_lottery(
         sequence: "".to_string(),
         awarded: false,
         timestamp: env.block.height,
-        prize_buckets: [Uint256::zero(); 6],
-        number_winners: [0; 6],
+        prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+        number_winners: [0; NUM_PRIZE_BUCKETS],
         page: "".to_string(),
     };
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
@@ -280,7 +280,7 @@ pub fn execute_prize(
                                 prize
                             }
                             None => {
-                                let mut winnings = [0; 6];
+                                let mut winnings = [0; NUM_PRIZE_BUCKETS];
                                 winnings[matches as usize] = 1;
                                 PrizeInfo {
                                     claimed: false,

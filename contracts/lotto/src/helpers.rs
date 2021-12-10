@@ -4,6 +4,7 @@ use sha3::{Digest, Keccak256};
 
 use crate::state::{
     read_depositor_info, store_depositor_info, DepositorInfo, Pool, SponsorInfo, State,
+    NUM_PRIZE_BUCKETS,
 };
 
 /// Compute distributed reward and update global reward index
@@ -74,12 +75,12 @@ pub fn claim_deposits(
 }
 
 pub fn calculate_winner_prize(
-    lottery_prize_buckets: [Uint256; 6],
-    address_rank: [u32; 6],
-    lottery_winners: [u32; 6],
+    lottery_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    address_rank: [u32; NUM_PRIZE_BUCKETS],
+    lottery_winners: [u32; NUM_PRIZE_BUCKETS],
 ) -> Uint128 {
     let mut to_send: Uint128 = Uint128::zero();
-    for i in 2..6 {
+    for i in 0..NUM_PRIZE_BUCKETS {
         if lottery_winners[i] == 0 {
             continue;
         }
@@ -110,8 +111,8 @@ pub fn pseudo_random_seq(sender_addr: String, tickets: u64, time: u64) -> String
     pseudo_random_hash.to_string()
 }
 
-pub fn is_valid_sequence(sequence: &str, len: u8) -> bool {
-    sequence.len() == (len as usize)
+pub fn is_valid_sequence(sequence: &str, len: usize) -> bool {
+    sequence.len() == len
         && sequence
             .chars()
             .all(|c| c.is_digit(10) || ('a'..='f').contains(&c))

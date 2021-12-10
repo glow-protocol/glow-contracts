@@ -12,7 +12,7 @@ use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rat
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
     store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo,
-    State, CONFIG, POOL, PRIZES, STATE, TICKETS,
+    State, CONFIG, NUM_PRIZE_BUCKETS, POOL, PRIZES, STATE, TICKETS, TICKET_LENGTH,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -34,8 +34,6 @@ use std::ops::{Add, Sub};
 use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
-pub const SEQUENCE_DIGITS: u8 = 5;
-pub const PRIZE_DISTR_LEN: usize = 6;
 pub const MAX_CLAIMS: u8 = 15;
 pub const THIRTY_MINUTE_TIME: u64 = 60 * 30;
 
@@ -58,7 +56,7 @@ pub fn instantiate(
     }
 
     // Validate prize distribution
-    if msg.prize_distribution.len() != PRIZE_DISTR_LEN {
+    if msg.prize_distribution.len() != NUM_PRIZE_BUCKETS {
         return Err(ContractError::InvalidPrizeDistribution {});
     }
 
@@ -122,7 +120,7 @@ pub fn instantiate(
         &State {
             total_tickets: Uint256::zero(),
             total_reserve: Uint256::zero(),
-            prize_buckets: [Uint256::zero(); 6],
+            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
                 msg.initial_lottery_execution,
@@ -309,7 +307,7 @@ pub fn deposit(
 
     // Validate that all sequence combinations are valid
     for combination in combinations.clone() {
-        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
+        if !is_valid_sequence(&combination, TICKET_LENGTH) {
             return Err(ContractError::InvalidSequence {});
         }
     }
@@ -1232,7 +1230,7 @@ pub fn execute_update_lottery_config(
     lottery_interval: Option<u64>,
     block_time: Option<u64>,
     ticket_price: Option<Uint256>,
-    prize_distribution: Option<[Decimal256; 6]>,
+    prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
     round_delta: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
@@ -1259,7 +1257,7 @@ pub fn execute_update_lottery_config(
     }
 
     if let Some(prize_distribution) = prize_distribution {
-        if prize_distribution.len() != PRIZE_DISTR_LEN {
+        if prize_distribution.len() != NUM_PRIZE_BUCKETS {
             return Err(ContractError::InvalidPrizeDistribution {});
         }
 

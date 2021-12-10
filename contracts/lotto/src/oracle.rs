@@ -12,7 +12,7 @@ pub fn calculate_lottery_rand_round(env: Env, round_delta: u64) -> u64 {
 }
 
 pub fn sequence_from_hash(hash: String) -> String {
-    let seq = &hash[2..7];
+    let seq = &hash[2..8];
     seq.to_string()
 }
 

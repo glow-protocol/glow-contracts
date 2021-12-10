@@ -1,4 +1,5 @@
 use crate::oracle::{OracleResponse, QueryMsg as QueryOracle};
+use crate::state::NUM_PRIZE_BUCKETS;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     to_binary, Addr, BalanceResponse, BankQuery, Deps, QuerierWrapper, QueryRequest, StdResult,

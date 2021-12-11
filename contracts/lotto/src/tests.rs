@@ -432,7 +432,7 @@ fn deposit() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(ContractError::InvalidDepositAmount {}) => {}
+        Err(ContractError::ZeroDepositAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -447,7 +447,7 @@ fn deposit() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
-        Err(ContractError::InvalidDepositAmount {}) => {}
+        Err(ContractError::ZeroDepositAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -467,7 +467,7 @@ fn deposit() {
     );
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(ContractError::InvalidSequence {}) => {}
+        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_LONG => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -481,7 +481,7 @@ fn deposit() {
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(ContractError::InvalidSequence {}) => {}
+        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_SHORT => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -494,7 +494,7 @@ fn deposit() {
     };
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(ContractError::InvalidSequence {}) => {}
+        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_NOT_HEX => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -671,7 +671,7 @@ fn deposit() {
 
     assert_eq!(depositor_info.tickets.len(), 8);
 
-    // Test sequential buys of the same ticket by the same address (should fail)
+    // Test sequential buys of the same ticket by the same address
     let msg = ExecuteMsg::Deposit {
         combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
     };
@@ -728,7 +728,8 @@ fn deposit() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
-        Err(ContractError::InvalidHolderSequence {}) => {}
+        Err(ContractError::InvalidHolderSequence(sequence))
+            if sequence == ZERO_MATCH_SEQUENCE_4 => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 }
@@ -759,7 +760,7 @@ fn gift_tickets() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(ContractError::InvalidGiftAmount {}) => {}
+        Err(ContractError::ZeroGiftAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -774,7 +775,7 @@ fn gift_tickets() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg.clone());
     match res {
-        Err(ContractError::InvalidGiftAmount {}) => {}
+        Err(ContractError::ZeroGiftAmount {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -816,7 +817,7 @@ fn gift_tickets() {
     );
     let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
-        Err(ContractError::InvalidGift {}) => {}
+        Err(ContractError::GiftToSelf {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -837,7 +838,7 @@ fn gift_tickets() {
     );
     let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
-        Err(ContractError::InvalidSequence {}) => {}
+        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_LONG => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -858,7 +859,7 @@ fn gift_tickets() {
     );
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(ContractError::InvalidSequence {}) => {}
+        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_SHORT => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -873,7 +874,7 @@ fn gift_tickets() {
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
     match res {
-        Err(ContractError::InvalidSequence {}) => {}
+        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_NOT_HEX => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -1618,7 +1619,12 @@ fn claim() {
     // Fail because not enough funds in the contract
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     match res {
-        Err(ContractError::InsufficientFunds {}) => {}
+        Err(ContractError::InsufficientFunds {
+            to_send,
+            available_balance,
+        }) => {
+            if available_balance == Uint256::zero() && Uint256::from(to_send) == redeemed_amount {}
+        }
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -1925,7 +1931,9 @@ fn execute_lottery() {
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
 
     match res {
-        Err(ContractError::LotteryNotReady {}) => {}
+        Err(ContractError::LotteryNotReady { next_lottery_time })
+            if next_lottery_time
+                == Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 

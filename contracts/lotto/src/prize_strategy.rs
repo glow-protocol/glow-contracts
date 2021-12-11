@@ -53,7 +53,9 @@ pub fn execute_lottery(
 
     // Validate that the next_lottery_time has passed
     if !state.next_lottery_time.is_expired(&env.block) {
-        return Err(ContractError::LotteryNotReady {});
+        return Err(ContractError::LotteryNotReady {
+            next_lottery_time: state.next_lottery_time,
+        });
     }
 
     // Validate that there are a non zero number of tickets
@@ -67,7 +69,11 @@ pub fn execute_lottery(
     if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
         < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
-        return Err(ContractError::InsufficientPoolFunds {});
+        return Err(ContractError::InsufficientPoolFunds {
+            pool_value: Uint256::from(contract_a_balance) - pool.total_user_savings_aust,
+            total_lottery_deposits: pool.total_user_lottery_deposits
+                + pool.total_sponsor_lottery_deposits,
+        });
     }
 
     // Compute global Glow rewards
@@ -132,7 +138,7 @@ pub fn execute_lottery(
     );
 
     if net_amount.is_zero() {
-        // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
+        // If aust_to_redeem and award_available are zero, return error
         return Err(ContractError::InsufficientLotteryFunds {});
     }
 

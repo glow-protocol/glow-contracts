@@ -23,7 +23,7 @@ pub enum ContractError {
     #[error("Sequence must be 5 digits between 0-f but instead it was: {0}")]
     InvalidSequence(String),
 
-    #[error("The sender already owns the ticket or the ticket max holder has been reached")]
+    #[error("The ticket max holder limit has been reached for the following ticket: {0}")]
     InvalidHolderSequence(String),
 
     #[error("Gift tickets to oneself is not allowed")]

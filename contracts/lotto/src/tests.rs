@@ -1262,10 +1262,10 @@ fn withdraw() {
         vec![
             // TODO: Don't hardcode the number of tickets
             // String::from("000005"),
-            String::from(format!("{:0length$}", 6, length = TICKET_LENGTH)),
-            String::from(format!("{:0length$}", 7, length = TICKET_LENGTH)),
-            String::from(format!("{:0length$}", 8, length = TICKET_LENGTH)),
-            String::from(format!("{:0length$}", 9, length = TICKET_LENGTH))
+            format!("{:0length$}", 6, length = TICKET_LENGTH),
+            format!("{:0length$}", 7, length = TICKET_LENGTH),
+            format!("{:0length$}", 8, length = TICKET_LENGTH),
+            format!("{:0length$}", 9, length = TICKET_LENGTH)
         ]
     );
 
@@ -1280,7 +1280,7 @@ fn withdraw() {
     assert_eq!(
         query_ticket_info(
             deps.as_ref(),
-            String::from(format!("{:0length$}", 2, length = TICKET_LENGTH))
+            format!("{:0length$}", 2, length = TICKET_LENGTH)
         )
         .unwrap()
         .holders,
@@ -1290,7 +1290,7 @@ fn withdraw() {
     assert_eq!(
         query_ticket_info(
             deps.as_ref(),
-            String::from(format!("{:0length$}", 6, length = TICKET_LENGTH))
+            format!("{:0length$}", 6, length = TICKET_LENGTH)
         )
         .unwrap()
         .holders,
@@ -1316,9 +1316,9 @@ fn withdraw() {
         vec![
             // TODO Don't hardcode
             // String::from("000006"),
-            String::from(format!("{:0length$}", 7, length = TICKET_LENGTH)),
-            String::from(format!("{:0length$}", 8, length = TICKET_LENGTH)),
-            String::from(format!("{:0length$}", 9, length = TICKET_LENGTH))
+            format!("{:0length$}", 7, length = TICKET_LENGTH),
+            format!("{:0length$}", 8, length = TICKET_LENGTH),
+            format!("{:0length$}", 9, length = TICKET_LENGTH)
         ]
     );
 
@@ -1333,7 +1333,7 @@ fn withdraw() {
     assert_eq!(
         query_ticket_info(
             deps.as_ref(),
-            String::from(format!("{:0length$}", 5, length = TICKET_LENGTH))
+            format!("{:0length$}", 5, length = TICKET_LENGTH)
         )
         .unwrap()
         .holders,
@@ -2547,7 +2547,7 @@ fn execute_prize_one_winner() {
             awarded: true,
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
-            number_winners: number_winners,
+            number_winners,
             page: "".to_string()
         }
     );

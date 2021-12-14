@@ -45,6 +45,17 @@ pub struct Config {
     pub unbonding_period: Duration,
 }
 
+impl Config {
+    pub fn contracts_registered(&self) -> bool {
+        if self.gov_contract != Addr::unchecked("")
+            && self.distributor_contract != Addr::unchecked("")
+        {
+            return true;
+        }
+        false
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub total_tickets: Uint256,

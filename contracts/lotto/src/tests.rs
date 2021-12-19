@@ -6,11 +6,13 @@ use crate::helpers::{calculate_winner_prize, uint256_times_decimal256_ceil};
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
 };
+use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
     DepositorInfo, LotteryInfo, PrizeInfo, NUM_PRIZE_BUCKETS, STATE, TICKET_LENGTH,
 };
 use lazy_static::lazy_static;
+use sha2::{Digest, Sha256};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::MockApi;
@@ -5138,4 +5140,23 @@ pub fn calculate_remaining_state_prize_buckets(
         .collect::<Vec<_>>()
         .try_into()
         .unwrap()
+}
+
+#[test]
+pub fn test_hash() {
+    let mut env = mock_env();
+
+    let mut hasher = Sha256::new();
+    hasher.update(env.block.time.to_string());
+    let result = hasher.finalize();
+    let random_hash = hex::encode(result);
+    println!("{}", sequence_from_hash(random_hash));
+
+    env.block.time = env.block.time.plus_seconds(1);
+
+    let mut hasher = Sha256::new();
+    hasher.update(env.block.time.to_string());
+    let result = hasher.finalize();
+    let random_hash = hex::encode(result);
+    println!("{}", sequence_from_hash(random_hash));
 }

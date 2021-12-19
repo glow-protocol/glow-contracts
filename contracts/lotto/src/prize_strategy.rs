@@ -1,5 +1,5 @@
 use crate::error::ContractError;
-use crate::querier::{query_exchange_rate, query_oracle};
+use crate::querier::query_exchange_rate;
 use crate::state::{
     read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, NUM_PRIZE_BUCKETS, POOL,
     PRIZES, STATE, TICKETS,
@@ -12,6 +12,7 @@ use cosmwasm_std::{
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
+use sha2::{Digest, Sha256};
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
@@ -209,12 +210,15 @@ pub fn execute_prize(
 
     // If first time called in current lottery, generate the random winning sequence
     if lottery_info.sequence.is_empty() {
-        let oracle_response = query_oracle(
-            deps.as_ref(),
-            config.oracle_contract.into_string(),
-            lottery_info.rand_round,
-        )?;
-        let random_hash = hex::encode(oracle_response.randomness.as_slice());
+        // let oracle_response = query_oracle(
+        //     deps.as_ref(),
+        //     config.oracle_contract.into_string(),
+        //     lottery_info.rand_round,
+        // )?;
+        let mut hasher = Sha256::new();
+        hasher.update(env.block.time.to_string());
+        let result = hasher.finalize();
+        let random_hash = hex::encode(result);
         lottery_info.sequence = sequence_from_hash(random_hash);
     }
 

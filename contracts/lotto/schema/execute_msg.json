@@ -126,8 +126,8 @@
               "items": {
                 "$ref": "#/definitions/Decimal256"
               },
-              "maxItems": 6,
-              "minItems": 6
+              "maxItems": 7,
+              "minItems": 7
             },
             "round_delta": {
               "type": [
@@ -345,6 +345,14 @@
           "type": "object",
           "properties": {
             "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "max_repeats": {
               "type": [
                 "integer",
                 "null"

@@ -5,7 +5,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
-pub const TICKET_LENGTH: usize = 6;
+pub const TICKET_LENGTH: usize = 5;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -85,7 +85,10 @@ pub enum ExecuteMsg {
     ExecuteLottery {},
     /// Second step (paginated) on the lottery execution. Sets winner sequence and
     /// stores winning sequences
-    ExecutePrize { limit: Option<u32> },
+    ExecutePrize {
+        limit: Option<u32>,
+        max_repeats: Option<u32>,
+    },
     /// Updates rewards emission rate and transfer outstanding reserve to gov
     ExecuteEpochOps {},
 }

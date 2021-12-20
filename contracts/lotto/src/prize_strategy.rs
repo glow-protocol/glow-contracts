@@ -17,6 +17,7 @@ use terraswap::querier::query_token_balance;
 
 use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
+use glow_protocol::lotto::ExecuteMsg;
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::Cw20HookMsg;
 use std::ops::Add;
@@ -174,7 +175,7 @@ fn calc_limit(request: Option<u32>) -> usize {
     request.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize
 }
 
-const MAX_LIMIT: u32 = 120;
+const MAX_LIMIT: u32 = 100000;
 const DEFAULT_LIMIT: u32 = 50;
 
 pub fn execute_prize(
@@ -182,6 +183,7 @@ pub fn execute_prize(
     env: Env,
     info: MessageInfo,
     limit: Option<u32>,
+    max_repeats: Option<u32>,
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
@@ -310,6 +312,8 @@ pub fn execute_prize(
 
     // If all winners have been accounted, update lottery info and jump to next round
     let mut total_awarded_prize = Uint256::zero();
+    // If you haven't awarded the lottery, repeat
+    let mut msgs: Vec<CosmosMsg> = vec![];
     if lottery_info.awarded {
         // Update the lottery prize buckets based on whether or not there is a winner in the corresponding bucket
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
@@ -369,12 +373,23 @@ pub fn execute_prize(
 
         // Save the state
         STATE.save(deps.storage, &state)?;
+    } else if let Some(max_repeats) = max_repeats {
+        // Add a message to repeat calling prize award
+        let repeat_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            funds: vec![],
+            msg: to_binary(&ExecuteMsg::ExecutePrize {
+                limit: Some(limit as u32),
+                max_repeats: Some(max_repeats - 1),
+            })?,
+        });
+        msgs.push(repeat_msg);
     }
 
     // Save the lottery_info
     store_lottery_info(deps.storage, current_lottery, &lottery_info)?;
 
-    Ok(Response::new().add_attributes(vec![
+    Ok(Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "execute_prize"),
         attr("total_awarded_prize", total_awarded_prize.to_string()),
     ]))

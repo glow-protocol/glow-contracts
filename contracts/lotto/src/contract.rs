@@ -192,7 +192,9 @@ pub fn execute(
         }
         ExecuteMsg::ClaimRewards {} => execute_claim_rewards(deps, env, info),
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
-        ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
+        ExecuteMsg::ExecutePrize { limit, max_repeats } => {
+            execute_prize(deps, env, info, limit, max_repeats)
+        }
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,

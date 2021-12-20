@@ -374,16 +374,18 @@ pub fn execute_prize(
         // Save the state
         STATE.save(deps.storage, &state)?;
     } else if let Some(max_repeats) = max_repeats {
-        // Add a message to repeat calling prize award
-        let repeat_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: env.contract.address.to_string(),
-            funds: vec![],
-            msg: to_binary(&ExecuteMsg::ExecutePrize {
-                limit: Some(limit as u32),
-                max_repeats: Some(max_repeats - 1),
-            })?,
-        });
-        msgs.push(repeat_msg);
+        if max_repeats > 0 {
+            // Add a message to repeat calling prize award
+            let repeat_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                funds: vec![],
+                msg: to_binary(&ExecuteMsg::ExecutePrize {
+                    limit: Some(limit as u32),
+                    max_repeats: Some(max_repeats - 1),
+                })?,
+            });
+            msgs.push(repeat_msg);
+        }
     }
 
     // Save the lottery_info

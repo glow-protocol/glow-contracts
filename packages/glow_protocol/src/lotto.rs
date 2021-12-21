@@ -85,10 +85,7 @@ pub enum ExecuteMsg {
     ExecuteLottery {},
     /// Second step (paginated) on the lottery execution. Sets winner sequence and
     /// stores winning sequences
-    ExecutePrize {
-        limit: Option<u32>,
-        max_repeats: Option<u32>,
-    },
+    ExecutePrize { limit: Option<u32> },
     /// Updates rewards emission rate and transfer outstanding reserve to gov
     ExecuteEpochOps {},
 }

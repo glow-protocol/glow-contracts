@@ -175,7 +175,7 @@ fn calc_limit(request: Option<u32>) -> usize {
     request.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize
 }
 
-const MAX_LIMIT: u32 = 100000;
+const MAX_LIMIT: u32 = 10000;
 const DEFAULT_LIMIT: u32 = 50;
 
 pub fn execute_prize(

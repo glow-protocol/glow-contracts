@@ -21,7 +21,7 @@ pub const TICKET_LENGTH: usize = 5;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
 
 // settings for pagination
-const MAX_LIMIT: u32 = 100;
+const MAX_LIMIT: u32 = 10000;
 const DEFAULT_LIMIT: u32 = 10;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

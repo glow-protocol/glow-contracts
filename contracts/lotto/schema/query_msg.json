@@ -192,6 +192,19 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "description": "Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right now.",
+      "type": "object",
+      "required": [
+        "lottery_balance"
+      ],
+      "properties": {
+        "lottery_balance": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
     }
   ]
 }

@@ -8,8 +8,9 @@ use crate::mock_querier::{
 };
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
-    DepositorInfo, LotteryInfo, PrizeInfo, NUM_PRIZE_BUCKETS, STATE, TICKET_LENGTH,
+    DepositorInfo, LotteryInfo, PrizeInfo, STATE,
 };
+use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use lazy_static::lazy_static;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};

@@ -12,7 +12,7 @@ use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rat
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
     store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo,
-    State, CONFIG, NUM_PRIZE_BUCKETS, POOL, PRIZES, STATE, TICKETS, TICKET_LENGTH,
+    State, CONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -28,6 +28,7 @@ use glow_protocol::lotto::{
     InstantiateMsg, LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse,
     PrizeInfoResponse, QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
+use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};

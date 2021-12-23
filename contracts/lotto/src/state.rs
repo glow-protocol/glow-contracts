@@ -17,8 +17,8 @@ pub const STATE: Item<State> = Item::new("state");
 pub const POOL: Item<Pool> = Item::new("pool");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
 pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
-pub const TICKET_LENGTH: usize = 6;
-pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
+
+use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
 // settings for pagination
 const MAX_LIMIT: u32 = 10000;

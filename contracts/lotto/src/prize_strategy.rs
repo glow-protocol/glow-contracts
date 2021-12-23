@@ -1,8 +1,9 @@
 use crate::error::ContractError;
 use crate::querier::{query_exchange_rate, query_oracle};
+
 use crate::state::{
-    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, NUM_PRIZE_BUCKETS, POOL,
-    PRIZES, STATE, TICKETS,
+    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
+    TICKETS,
 };
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
@@ -12,6 +13,7 @@ use cosmwasm_std::{
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
+use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};

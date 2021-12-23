@@ -1,11 +1,10 @@
-use crate::state::TICKET_LENGTH;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, StdError, StdResult, Storage, Uint128};
+use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
 use crate::state::{
     read_depositor_info, store_depositor_info, DepositorInfo, Pool, SponsorInfo, State,
-    NUM_PRIZE_BUCKETS,
 };
 
 /// Compute distributed reward and update global reward index

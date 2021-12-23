@@ -49,6 +49,7 @@ pub enum ExecuteMsg {
         instant_withdrawal_fee: Option<Decimal256>,
         unbonding_period: Option<u64>,
         epoch_interval: Option<u64>,
+        max_holders: Option<u64>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {

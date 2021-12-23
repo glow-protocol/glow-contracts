@@ -202,6 +202,7 @@ pub fn execute(
             instant_withdrawal_fee,
             unbonding_period,
             epoch_interval,
+            max_holders,
         } => execute_update_config(
             deps,
             info,
@@ -211,6 +212,7 @@ pub fn execute(
             instant_withdrawal_fee,
             unbonding_period,
             epoch_interval,
+            max_holders,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -1195,6 +1197,7 @@ pub fn execute_update_config(
     instant_withdrawal_fee: Option<Decimal256>,
     unbonding_period: Option<u64>,
     epoch_interval: Option<u64>,
+    max_holders: Option<u8>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1238,6 +1241,10 @@ pub fn execute_update_config(
         }
 
         config.epoch_interval = Duration::Time(epoch_interval);
+    }
+
+    if let Some(max_holders) = max_holders {
+        config.max_holders = max_holders;
     }
 
     CONFIG.save(deps.storage, &config)?;

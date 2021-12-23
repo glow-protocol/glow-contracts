@@ -250,6 +250,8 @@ pub fn execute_prize(
         .collect::<StdResult<Vec<_>>>()
         .unwrap();
 
+    let mut winning_combos: Vec<(String, usize)> = vec![];
+
     if !winning_tickets.is_empty() {
         // Update pagination for next iterations, if necessary
         if let Some(next) = TICKETS
@@ -269,11 +271,12 @@ pub fn execute_prize(
 
         // Update holders prizes and lottery info number of winners
         winning_tickets.iter().for_each(|sequence| {
+            let winning_combo = str::from_utf8(&*sequence.0).unwrap();
+
+            winning_combos.push((winning_combo.to_string(), sequence.1.len()));
+
             // Get the number of matches between this winning ticket and the perfect winning ticket.
-            let matches = count_seq_matches(
-                &lottery_info.sequence.clone(),
-                str::from_utf8(&*sequence.0).unwrap(),
-            );
+            let matches = count_seq_matches(&lottery_info.sequence.clone(), winning_combo);
             // Increment the number of winners corresponding the number of matches of this ticket
             // by the number of people who hold this ticket.
             lottery_info.number_winners[matches as usize] += sequence.1.len() as u32;
@@ -304,6 +307,9 @@ pub fn execute_prize(
                     .unwrap();
             });
         });
+
+        println!("{:?}", winning_combos);
+        println!("Page size: {}", limit)
     } else {
         // If there are no more winning tickets, then set awarded to true
         lottery_info.awarded = true;
@@ -378,6 +384,7 @@ pub fn execute_prize(
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "execute_prize"),
+        attr("winning_tickets", format!("{:?}", winning_combos)),
         attr("total_awarded_prize", total_awarded_prize.to_string()),
     ]))
 }

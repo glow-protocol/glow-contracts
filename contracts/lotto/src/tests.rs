@@ -307,6 +307,7 @@ fn update_config() {
         unbonding_period: None,
         reserve_factor: None,
         epoch_interval: None,
+        max_holders: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -344,6 +345,7 @@ fn update_config() {
         instant_withdrawal_fee: None,
         unbonding_period: None,
         epoch_interval: None,
+        max_holders: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -363,6 +365,7 @@ fn update_config() {
         instant_withdrawal_fee: None,
         unbonding_period: None,
         epoch_interval: Some(HOUR_TIME * 5),
+        max_holders: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -383,6 +386,7 @@ fn update_config() {
         instant_withdrawal_fee: None,
         unbonding_period: None,
         epoch_interval: Some(HOUR_TIME / 3),
+        max_holders: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -390,6 +394,28 @@ fn update_config() {
         Err(ContractError::InvalidEpochInterval {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
+
+    // Check updating max_owners --------
+
+    // Updating max_holders to 15
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: Some(15),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // check that epoch_interval changed
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
+    assert_eq!(config_response.max_holders, 15);
 
     // check only owner can update config
     let info = mock_info("owner2", &[]);
@@ -400,6 +426,7 @@ fn update_config() {
         instant_withdrawal_fee: None,
         unbonding_period: None,
         epoch_interval: None,
+        max_holders: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);

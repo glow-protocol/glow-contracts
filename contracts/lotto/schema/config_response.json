@@ -60,8 +60,8 @@
       "items": {
         "$ref": "#/definitions/Decimal256"
       },
-      "maxItems": 6,
-      "minItems": 6
+      "maxItems": 7,
+      "minItems": 7
     },
     "reserve_factor": {
       "$ref": "#/definitions/Decimal256"

@@ -3,7 +3,8 @@ use std::env::current_dir;
 use std::fs::create_dir_all;
 
 use glow_protocol::gov::{
-    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollResponse, QueryMsg, StakerResponse,
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollResponse, QueryMsg,
+    StakerResponse, StateResponse,
 };
 
 fn main() {
@@ -18,5 +19,6 @@ fn main() {
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(StakerResponse), &out_dir);
     export_schema(&schema_for!(ConfigResponse), &out_dir);
+    export_schema(&schema_for!(StateResponse), &out_dir);
     export_schema(&schema_for!(PollResponse), &out_dir);
 }

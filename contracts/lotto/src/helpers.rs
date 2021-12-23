@@ -1,3 +1,4 @@
+use crate::state::TICKET_LENGTH;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, StdError, StdResult, Storage, Uint128};
 use sha3::{Digest, Keccak256};
@@ -107,7 +108,7 @@ pub fn pseudo_random_seq(sender_addr: String, tickets: u64, time: u64) -> String
     let mut hasher = Keccak256::new();
     hasher.update(input.as_bytes());
     let result = hasher.finalize();
-    let pseudo_random_hash = &hex::encode(result)[2..7];
+    let pseudo_random_hash = &hex::encode(result)[2..TICKET_LENGTH + 2];
     pseudo_random_hash.to_string()
 }
 

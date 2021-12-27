@@ -397,6 +397,25 @@ fn update_config() {
 
     // Check updating max_owners --------
 
+    // Try decreasing max_holders below floor
+
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: Some(8),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidMaxHoldersOutsideBounds {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
     // Updating max_holders to 15
     let info = mock_info("owner1", &[]);
     let msg = ExecuteMsg::UpdateConfig {
@@ -412,10 +431,46 @@ fn update_config() {
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
-    // check that epoch_interval changed
+    // check that max_holders changed
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.max_holders, 15);
+
+    // try decreasing max_holders
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: Some(14),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidMaxHoldersAttemptedDecrease {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // try increasing above max_holders_cap
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: Some(101),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidMaxHoldersOutsideBounds {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 
     // check only owner can update config
     let info = mock_info("owner2", &[]);

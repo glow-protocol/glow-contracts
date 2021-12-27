@@ -21,7 +21,7 @@ pub struct InstantiateMsg {
     pub round_delta: u64,      // number of rounds of security to get oracle rand
     pub ticket_price: Uint256, // prize of a ticket in stable_denom
     pub max_holders: u8,       // Max number of holders per ticket
-    pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS], // [0, 0, 0.05, 0.15, 0.3, 0.5]
+    pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS], // distribution for awarding prizes to winning tickets
     pub target_award: Uint256, // target award used in deposit rewards computation
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool

@@ -47,12 +47,7 @@ pub struct Config {
 
 impl Config {
     pub fn contracts_registered(&self) -> bool {
-        if self.gov_contract != Addr::unchecked("")
-            && self.distributor_contract != Addr::unchecked("")
-        {
-            return true;
-        }
-        false
+        self.gov_contract != Addr::unchecked("") && self.distributor_contract != Addr::unchecked("")
     }
 }
 

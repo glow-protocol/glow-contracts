@@ -113,6 +113,12 @@ pub enum ContractError {
     #[error("Invalid epoch interval config")]
     InvalidEpochInterval {},
 
+    #[error("Invalid max holders config, outside bounds")]
+    InvalidMaxHoldersOutsideBounds {},
+
+    #[error("Invalid max holders config, can only increase max holders, not decrease")]
+    InvalidMaxHoldersAttemptedDecrease {},
+
     #[error("Invalid lottery interval config")]
     InvalidLotteryInterval {},
 

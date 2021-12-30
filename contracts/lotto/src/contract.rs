@@ -253,9 +253,7 @@ pub fn execute_register_contracts(
     }
 
     // can't be registered twice
-    if config.gov_contract != Addr::unchecked("")
-        || config.distributor_contract != Addr::unchecked("")
-    {
+    if config.contracts_registered() {
         return Err(ContractError::AlreadyRegistered {});
     }
 
@@ -1081,6 +1079,11 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
+    // Validate distributor contract has already been registered
+    if !config.contracts_registered() {
+        return Err(ContractError::NotRegistered {});
+    }
+
     // Get the contract's aust balance
     let contract_a_balance = Uint256::from(query_token_balance(
         &deps.querier,
@@ -1165,6 +1168,11 @@ pub fn execute_claim_rewards(
     let depositor_address = info.sender.as_str();
     let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
     let mut sponsor: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
+
+    // Validate distributor contract has already been registered
+    if !config.contracts_registered() {
+        return Err(ContractError::NotRegistered {});
+    }
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, &pool, env.block.height);

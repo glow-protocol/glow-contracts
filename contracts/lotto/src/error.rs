@@ -14,6 +14,9 @@ pub enum ContractError {
     #[error("Cannot register contracts twice")]
     AlreadyRegistered {},
 
+    #[error("Contract have not been registered yet")]
+    NotRegistered {},
+
     #[error("Invalid deposit amount")]
     ZeroDepositAmount {},
 

@@ -27,8 +27,8 @@
         "format": "uint32",
         "minimum": 0.0
       },
-      "maxItems": 6,
-      "minItems": 6
+      "maxItems": 7,
+      "minItems": 7
     }
   },
   "definitions": {

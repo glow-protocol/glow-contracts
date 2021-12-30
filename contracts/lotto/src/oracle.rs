@@ -1,4 +1,5 @@
 use cosmwasm_std::{Addr, Binary, Env};
+use glow_protocol::lotto::TICKET_LENGTH;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +13,7 @@ pub fn calculate_lottery_rand_round(env: Env, round_delta: u64) -> u64 {
 }
 
 pub fn sequence_from_hash(hash: String) -> String {
-    let seq = &hash[2..7];
+    let seq = &hash[2..TICKET_LENGTH + 2];
     seq.to_string()
 }
 

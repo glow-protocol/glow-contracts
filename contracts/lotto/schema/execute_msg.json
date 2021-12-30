@@ -57,6 +57,14 @@
                 }
               ]
             },
+            "max_holders": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint8",
+              "minimum": 0.0
+            },
             "oracle_addr": {
               "type": [
                 "string",
@@ -126,8 +134,8 @@
               "items": {
                 "$ref": "#/definitions/Decimal256"
               },
-              "maxItems": 6,
-              "minItems": 6
+              "maxItems": 7,
+              "minItems": 7
             },
             "round_delta": {
               "type": [

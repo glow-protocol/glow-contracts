@@ -1,5 +1,6 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, StdError, StdResult, Storage, Uint128};
+use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
 use crate::state::{
@@ -74,12 +75,12 @@ pub fn claim_deposits(
 }
 
 pub fn calculate_winner_prize(
-    lottery_prize_buckets: [Uint256; 6],
-    address_rank: [u32; 6],
-    lottery_winners: [u32; 6],
+    lottery_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    address_rank: [u32; NUM_PRIZE_BUCKETS],
+    lottery_winners: [u32; NUM_PRIZE_BUCKETS],
 ) -> Uint128 {
     let mut to_send: Uint128 = Uint128::zero();
-    for i in 2..6 {
+    for i in 0..NUM_PRIZE_BUCKETS {
         if lottery_winners[i] == 0 {
             continue;
         }
@@ -106,12 +107,12 @@ pub fn pseudo_random_seq(sender_addr: String, tickets: u64, time: u64) -> String
     let mut hasher = Keccak256::new();
     hasher.update(input.as_bytes());
     let result = hasher.finalize();
-    let pseudo_random_hash = &hex::encode(result)[2..7];
+    let pseudo_random_hash = &hex::encode(result)[2..TICKET_LENGTH + 2];
     pseudo_random_hash.to_string()
 }
 
-pub fn is_valid_sequence(sequence: &str, len: u8) -> bool {
-    sequence.len() == (len as usize)
+pub fn is_valid_sequence(sequence: &str, len: usize) -> bool {
+    sequence.len() == len
         && sequence
             .chars()
             .all(|c| c.is_digit(10) || ('a'..='f').contains(&c))

@@ -18,8 +18,10 @@ pub const POOL: Item<Pool> = Item::new("pool");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
 pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
 
+use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
+
 // settings for pagination
-const MAX_LIMIT: u32 = 100;
+const MAX_LIMIT: u32 = 10000;
 const DEFAULT_LIMIT: u32 = 10;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -37,7 +39,7 @@ pub struct Config {
     pub round_delta: u64,
     pub ticket_price: Uint256,
     pub max_holders: u8,
-    pub prize_distribution: [Decimal256; 6],
+    pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
     pub target_award: Uint256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
@@ -49,7 +51,7 @@ pub struct Config {
 pub struct State {
     pub total_tickets: Uint256,
     pub total_reserve: Uint256,
-    pub prize_buckets: [Uint256; 6],
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
@@ -128,15 +130,15 @@ pub struct LotteryInfo {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub prize_buckets: [Uint256; 6],
-    pub number_winners: [u32; 6],
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PrizeInfo {
     pub claimed: bool,
-    pub matches: [u32; 6],
+    pub matches: [u32; NUM_PRIZE_BUCKETS],
 }
 
 pub fn store_lottery_info(
@@ -155,8 +157,8 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             sequence: "".to_string(),
             awarded: false,
             timestamp: 0,
-            prize_buckets: [Uint256::zero(); 6],
-            number_winners: [0; 6],
+            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+            number_winners: [0; NUM_PRIZE_BUCKETS],
             page: "".to_string(),
         },
     }

@@ -1,5 +1,6 @@
 use crate::error::ContractError;
 use crate::querier::{query_exchange_rate, query_oracle};
+
 use crate::state::{
     read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
     TICKETS,
@@ -12,6 +13,7 @@ use cosmwasm_std::{
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
+use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
@@ -53,7 +55,9 @@ pub fn execute_lottery(
 
     // Validate that the next_lottery_time has passed
     if !state.next_lottery_time.is_expired(&env.block) {
-        return Err(ContractError::LotteryNotReady {});
+        return Err(ContractError::LotteryNotReady {
+            next_lottery_time: state.next_lottery_time,
+        });
     }
 
     // Validate that there are a non zero number of tickets
@@ -64,10 +68,16 @@ pub fn execute_lottery(
     // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
-    if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
-        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    let lottery_pool_value =
+        (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
+
+    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
-        return Err(ContractError::InsufficientPoolFunds {});
+        return Err(ContractError::InsufficientPoolFunds {
+            pool_value: lottery_pool_value,
+            total_lottery_deposits: pool.total_user_lottery_deposits
+                + pool.total_sponsor_lottery_deposits,
+        });
     }
 
     // Compute global Glow rewards
@@ -93,8 +103,8 @@ pub fn execute_lottery(
         sequence: "".to_string(),
         awarded: false,
         timestamp: env.block.height,
-        prize_buckets: [Uint256::zero(); 6],
-        number_winners: [0; 6],
+        prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+        number_winners: [0; NUM_PRIZE_BUCKETS],
         page: "".to_string(),
     };
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
@@ -132,7 +142,7 @@ pub fn execute_lottery(
     );
 
     if net_amount.is_zero() {
-        // If aust_to_redeem and award_available are zero, return InsufficientLotteryFunds
+        // If aust_to_redeem and award_available are zero, return error
         return Err(ContractError::InsufficientLotteryFunds {});
     }
 
@@ -280,7 +290,7 @@ pub fn execute_prize(
                                 prize
                             }
                             None => {
-                                let mut winnings = [0; 6];
+                                let mut winnings = [0; NUM_PRIZE_BUCKETS];
                                 winnings[matches as usize] = 1;
                                 PrizeInfo {
                                     claimed: false,

@@ -5,20 +5,23 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
+pub const TICKET_LENGTH: usize = 6;
+pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
-    pub stable_denom: String,                // uusd
-    pub anchor_contract: String,             // anchor money market address
-    pub aterra_contract: String,             // aterra auusd contract address
-    pub oracle_contract: String,             // oracle address
-    pub lottery_interval: u64,               // time between lotteries
-    pub epoch_interval: u64,                 // time between executing epoch operations
-    pub block_time: u64, // number of blocks (or time) lottery is blocked while is executed
-    pub round_delta: u64, // number of rounds of security to get oracle rand
+    pub stable_denom: String,                                // uusd
+    pub anchor_contract: String,                             // anchor money market address
+    pub aterra_contract: String,                             // aterra auusd contract address
+    pub oracle_contract: String,                             // oracle address
+    pub lottery_interval: u64,                               // time between lotteries
+    pub epoch_interval: u64,   // time between executing epoch operations
+    pub block_time: u64,       // number of blocks (or time) lottery is blocked while is executed
+    pub round_delta: u64,      // number of rounds of security to get oracle rand
     pub ticket_price: Uint256, // prize of a ticket in stable_denom
-    pub max_holders: u8, // Max number of holders per ticket
-    pub prize_distribution: [Decimal256; 6], // [0, 0, 0.05, 0.15, 0.3, 0.5]
+    pub max_holders: u8,       // Max number of holders per ticket
+    pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS], // distribution for awarding prizes to winning tickets
     pub target_award: Uint256, // target award used in deposit rewards computation
     pub reserve_factor: Decimal256, // % of the prize that goes to the reserve fund
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
@@ -46,13 +49,14 @@ pub enum ExecuteMsg {
         instant_withdrawal_fee: Option<Decimal256>,
         unbonding_period: Option<u64>,
         epoch_interval: Option<u64>,
+        max_holders: Option<u8>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {
         lottery_interval: Option<u64>,
         block_time: Option<u64>,
         ticket_price: Option<Uint256>,
-        prize_distribution: Option<[Decimal256; 6]>,
+        prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
         round_delta: Option<u64>,
     },
     /// Deposit amount of stable into the pool
@@ -135,7 +139,7 @@ pub struct ConfigResponse {
     pub round_delta: u64,
     pub ticket_price: Uint256,
     pub max_holders: u8,
-    pub prize_distribution: [Decimal256; 6],
+    pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
     pub target_award: Uint256,
     pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
@@ -148,7 +152,7 @@ pub struct ConfigResponse {
 pub struct StateResponse {
     pub total_tickets: Uint256,
     pub total_reserve: Uint256,
-    pub prize_buckets: [Uint256; 6],
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub current_lottery: u64,
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
@@ -174,8 +178,8 @@ pub struct LotteryInfoResponse {
     pub sequence: String,
     pub awarded: bool,
     pub timestamp: u64,
-    pub prize_buckets: [Uint256; 6],
-    pub number_winners: [u32; 6],
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
 }
 
@@ -222,7 +226,7 @@ pub struct PrizeInfoResponse {
     pub holder: Addr,
     pub lottery_id: u64,
     pub claimed: bool,
-    pub matches: [u32; 6],
+    pub matches: [u32; NUM_PRIZE_BUCKETS],
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -28,16 +28,17 @@ use glow_protocol::lotto::{
     InstantiateMsg, LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse,
     PrizeInfoResponse, QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
+use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
 use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
-pub const SEQUENCE_DIGITS: u8 = 5;
-pub const PRIZE_DISTR_LEN: usize = 6;
 pub const MAX_CLAIMS: u8 = 15;
 pub const THIRTY_MINUTE_TIME: u64 = 60 * 30;
+pub const MAX_HOLDERS_FLOOR: u8 = 10;
+pub const MAX_HOLDERS_CAP: u8 = 100;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -54,11 +55,11 @@ pub fn instantiate(
         .unwrap_or_else(Uint128::zero);
 
     if initial_deposit != Uint128::from(INITIAL_DEPOSIT_AMOUNT) {
-        return Err(ContractError::InvalidDepositInstantiation {});
+        return Err(ContractError::InvalidDepositInstantiation(initial_deposit));
     }
 
     // Validate prize distribution
-    if msg.prize_distribution.len() != PRIZE_DISTR_LEN {
+    if msg.prize_distribution.len() != NUM_PRIZE_BUCKETS {
         return Err(ContractError::InvalidPrizeDistribution {});
     }
 
@@ -85,6 +86,11 @@ pub fn instantiate(
     // Validate that epoch_interval is at least 30 minutes
     if msg.epoch_interval < THIRTY_MINUTE_TIME {
         return Err(ContractError::InvalidEpochInterval {});
+    }
+
+    // Validate that max_holders is within the bounds
+    if msg.max_holders < MAX_HOLDERS_FLOOR || MAX_HOLDERS_CAP < msg.max_holders {
+        return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
     }
 
     CONFIG.save(
@@ -122,7 +128,7 @@ pub fn instantiate(
         &State {
             total_tickets: Uint256::zero(),
             total_reserve: Uint256::zero(),
-            prize_buckets: [Uint256::zero(); 6],
+            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
                 msg.initial_lottery_execution,
@@ -203,6 +209,7 @@ pub fn execute(
             instant_withdrawal_fee,
             unbonding_period,
             epoch_interval,
+            max_holders,
         } => execute_update_config(
             deps,
             info,
@@ -212,6 +219,7 @@ pub fn execute(
             instant_withdrawal_fee,
             unbonding_period,
             epoch_interval,
+            max_holders,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -301,16 +309,16 @@ pub fn deposit(
     // Validate that the deposit amount is non zero
     if deposit_amount.is_zero() {
         return if recipient.is_some() {
-            Err(ContractError::InvalidGiftAmount {})
+            Err(ContractError::ZeroGiftAmount {})
         } else {
-            Err(ContractError::InvalidDepositAmount {})
+            Err(ContractError::ZeroDepositAmount {})
         };
     }
 
     // Validate that all sequence combinations are valid
     for combination in combinations.clone() {
-        if !is_valid_sequence(&combination, SEQUENCE_DIGITS) {
-            return Err(ContractError::InvalidSequence {});
+        if !is_valid_sequence(&combination, TICKET_LENGTH) {
+            return Err(ContractError::InvalidSequence(combination));
         }
     }
 
@@ -387,7 +395,7 @@ pub fn deposit(
             .unwrap()
         {
             if holders.len() >= config.max_holders as usize {
-                return Err(ContractError::InvalidHolderSequence {});
+                return Err(ContractError::InvalidHolderSequence(combination));
             }
         }
 
@@ -468,7 +476,7 @@ pub fn execute_gift(
     to: String,
 ) -> Result<Response, ContractError> {
     if to == info.sender {
-        return Err(ContractError::InvalidGift {});
+        return Err(ContractError::GiftToSelf {});
     }
     deposit(deps.branch(), env, info, Some(to), combinations)
 }
@@ -494,7 +502,7 @@ pub fn execute_sponsor(
 
     // validate that the sponsor amount is non zero
     if sponsor_amount.is_zero() {
-        return Err(ContractError::InvalidSponsorshipAmount {});
+        return Err(ContractError::ZeroSponsorshipAmount {});
     }
 
     compute_reward(&mut state, &pool, env.block.height);
@@ -597,10 +605,16 @@ pub fn execute_sponsor_withdraw(
     // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
-    if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
-        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    let lottery_pool_value =
+        (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
+
+    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
-        return Err(ContractError::InsufficientPoolFunds {});
+        return Err(ContractError::InsufficientPoolFunds {
+            pool_value: lottery_pool_value,
+            total_lottery_deposits: pool.total_user_lottery_deposits
+                + pool.total_sponsor_lottery_deposits,
+        });
     }
 
     // Compute Glow depositor rewards
@@ -698,7 +712,7 @@ pub fn execute_withdraw(
 
     // Validate that the user is withdrawing a non zero amount
     if (amount.is_some()) && (amount.unwrap().is_zero()) {
-        return Err(ContractError::SpecifiedWithdrawAmountTooSmall {});
+        return Err(ContractError::SpecifiedWithdrawAmountIsZero {});
     }
 
     // Validate that there isn't a lottery in progress already
@@ -710,10 +724,16 @@ pub fn execute_withdraw(
     // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
-    if (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate
-        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    let lottery_pool_value =
+        (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
+
+    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
-        return Err(ContractError::InsufficientPoolFunds {});
+        return Err(ContractError::InsufficientPoolFunds {
+            pool_value: lottery_pool_value,
+            total_lottery_deposits: pool.total_user_lottery_deposits
+                + pool.total_sponsor_lottery_deposits,
+        });
     }
 
     // Compute GLOW reward
@@ -733,7 +753,10 @@ pub fn execute_withdraw(
     let mut withdraw_ratio = Decimal256::one();
     if let Some(amount) = amount {
         if Uint256::from(amount) > depositor_balance {
-            return Err(ContractError::SpecifiedWithdrawAmountTooBig {});
+            return Err(ContractError::SpecifiedWithdrawAmountTooBig {
+                amount,
+                depositor_balance,
+            });
         } else {
             withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), depositor_balance);
         }
@@ -743,14 +766,17 @@ pub fn execute_withdraw(
     // but from this point forwards everything is based on withdraw_ratio, not amount
 
     // Calculate how many tickets to remove
-    let tickets_amount = depositor.tickets.len() as u128;
+    let num_depositor_tickets = depositor.tickets.len() as u128;
 
     // Get ceiling of withdrawn tickets
     let withdrawn_tickets: u128 =
-        uint256_times_decimal256_ceil(Uint256::from(tickets_amount), withdraw_ratio).into();
+        uint256_times_decimal256_ceil(Uint256::from(num_depositor_tickets), withdraw_ratio).into();
 
-    if withdrawn_tickets > tickets_amount {
-        return Err(ContractError::WithdrawingTooManyTickets {});
+    if withdrawn_tickets > num_depositor_tickets {
+        return Err(ContractError::WithdrawingTooManyTickets {
+            withdrawn_tickets,
+            num_depositor_tickets,
+        });
     }
 
     for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
@@ -916,13 +942,16 @@ pub fn execute_claim_unbonded(
         config.stable_denom.clone(),
     )?;
 
-    let reserved_for_rewards = state
+    let reserved_for_prizes = state
         .prize_buckets
         .iter()
         .fold(Uint256::zero(), |sum, val| sum + *val);
 
-    if net_send > (balance - reserved_for_rewards).into() {
-        return Err(ContractError::InsufficientFunds {});
+    if to_send > (balance - reserved_for_prizes).into() {
+        return Err(ContractError::InsufficientFunds {
+            to_send,
+            available_balance: balance - reserved_for_prizes,
+        });
     }
 
     store_depositor_info(deps.storage, &info.sender, &depositor)?;
@@ -969,16 +998,16 @@ pub fn execute_claim_lottery(
     for lottery_id in lottery_ids.clone() {
         let lottery = read_lottery_info(deps.storage, lottery_id);
         if !lottery.awarded {
-            return Err(ContractError::InvalidClaimLotteryNotAwarded {});
+            return Err(ContractError::InvalidClaimLotteryNotAwarded(lottery_id));
         }
         //Calculate and add to to_send
         let lottery_key: U64Key = U64Key::from(lottery_id);
-        let prizes = PRIZES
+        let prize = PRIZES
             .may_load(deps.storage, (&info.sender, lottery_key.clone()))
             .unwrap();
-        if let Some(prize) = prizes {
+        if let Some(prize) = prize {
             if prize.claimed {
-                return Err(ContractError::InvalidClaimPrizeAlreadyClaimed {});
+                return Err(ContractError::InvalidClaimPrizeAlreadyClaimed(lottery_id));
             }
 
             to_send += calculate_winner_prize(
@@ -1021,8 +1050,11 @@ pub fn execute_claim_lottery(
         config.stable_denom.clone(),
     )?;
 
-    if net_send > balance.into() {
-        return Err(ContractError::InsufficientFunds {});
+    if to_send > balance.into() {
+        return Err(ContractError::InsufficientFunds {
+            to_send,
+            available_balance: balance,
+        });
     }
 
     store_depositor_info(deps.storage, &info.sender, &depositor)?;
@@ -1176,6 +1208,7 @@ pub fn execute_update_config(
     instant_withdrawal_fee: Option<Decimal256>,
     unbonding_period: Option<u64>,
     epoch_interval: Option<u64>,
+    max_holders: Option<u8>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1221,6 +1254,20 @@ pub fn execute_update_config(
         config.epoch_interval = Duration::Time(epoch_interval);
     }
 
+    if let Some(max_holders) = max_holders {
+        // Validate that max_holders is within the bounds
+        if max_holders < MAX_HOLDERS_FLOOR || MAX_HOLDERS_CAP < max_holders {
+            return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
+        }
+
+        // Validate that max_holders is increasing
+        if max_holders < config.max_holders {
+            return Err(ContractError::InvalidMaxHoldersAttemptedDecrease {});
+        }
+
+        config.max_holders = max_holders;
+    }
+
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
@@ -1232,7 +1279,7 @@ pub fn execute_update_lottery_config(
     lottery_interval: Option<u64>,
     block_time: Option<u64>,
     ticket_price: Option<Uint256>,
-    prize_distribution: Option<[Decimal256; 6]>,
+    prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
     round_delta: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
@@ -1259,7 +1306,7 @@ pub fn execute_update_lottery_config(
     }
 
     if let Some(prize_distribution) = prize_distribution {
-        if prize_distribution.len() != PRIZE_DISTR_LEN {
+        if prize_distribution.len() != NUM_PRIZE_BUCKETS {
             return Err(ContractError::InvalidPrizeDistribution {});
         }
 

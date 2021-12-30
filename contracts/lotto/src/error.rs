@@ -1,4 +1,6 @@
-use cosmwasm_std::StdError;
+use cosmwasm_bignumber::Uint256;
+use cosmwasm_std::{StdError, Uint128};
+use cw0::Expiration;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -6,80 +8,86 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
-    #[error("Invalid instantiation deposit amount")]
-    InvalidDepositInstantiation {},
+    #[error("Invalid instantiation deposit amount: {0}")]
+    InvalidDepositInstantiation(Uint128),
 
     #[error("Cannot register contracts twice")]
     AlreadyRegistered {},
 
     #[error("Invalid deposit amount")]
-    InvalidDepositAmount {},
+    ZeroDepositAmount {},
 
     #[error("Insufficient deposit amount for {0} tickets")]
     InsufficientDepositAmount(u64),
 
-    #[error("Sequence must be 5 digits between 0-9")]
-    InvalidSequence {},
+    #[error("Sequence must be 6 digits between 0-f but instead it was: {0}")]
+    InvalidSequence(String),
 
-    #[error("The sender already owns the ticket or the ticket max holder has been reached")]
-    InvalidHolderSequence {},
+    #[error("The ticket max holder limit has been reached for the following ticket: {0}")]
+    InvalidHolderSequence(String),
 
     #[error("Gift tickets to oneself is not allowed")]
-    InvalidGift {},
+    GiftToSelf {},
 
     #[error("Gift ticket amount must be greater than zero")]
-    InvalidGiftAmount {},
+    ZeroGiftAmount {},
 
     #[error("Insufficient gift deposit amount for {0} tickets")]
     InsufficientGiftDepositAmount(u64),
 
     #[error("Sponsorship amount must be greater than zero")]
-    InvalidSponsorshipAmount {},
+    ZeroSponsorshipAmount {},
 
     #[error("Lottery already in progress, wait until the next one begins")]
     LotteryAlreadyStarted {},
 
-    #[error("Lottery is not ready to undergo execution yet, please wait until next_lottery_time")]
-    LotteryNotReady {},
+    #[error("Lottery is not ready to undergo execution yet, please wait until next_lottery_time: {next_lottery_time:?}")]
+    LotteryNotReady { next_lottery_time: Expiration },
 
     #[error("The depositor doesn't have any savings aust so there is nothing to withdraw")]
     NoDepositorSavingsAustToWithdraw {},
 
     #[error("The depositor specified to withdraw zero funds which is too small")]
-    SpecifiedWithdrawAmountTooSmall {},
+    SpecifiedWithdrawAmountIsZero {},
 
-    #[error("The depositor specified to withdraw more funds than they have to withdraw")]
-    SpecifiedWithdrawAmountTooBig {},
+    #[error("The depositor specified to withdraw more funds ({amount:?}) than they have to withdraw ({depositor_balance:?})")]
+    SpecifiedWithdrawAmountTooBig {
+        amount: Uint128,
+        depositor_balance: Uint256,
+    },
 
-    #[error("The number of tickets to be withdrawn is more tickets than the depositor owns")]
-    WithdrawingTooManyTickets {},
+    #[error("The number of tickets to be withdrawn ({withdrawn_tickets}) is more tickets than the depositor owns ({num_depositor_tickets})")]
+    WithdrawingTooManyTickets {
+        withdrawn_tickets: u128,
+        num_depositor_tickets: u128,
+    },
 
-    #[error("There are no enough funds in the contract for that operation")]
-    InsufficientFunds {},
+    #[error("There are no enough funds in the contract for that operation. Amount to send: {to_send}. Available balance: {available_balance}")]
+    InsufficientFunds {
+        to_send: Uint128,
+        available_balance: Uint256,
+    },
 
     #[error("The sponsor doesn't have any lottery deposits so there is nothing to withdraw")]
     NoSponsorLotteryDeposit {},
 
-    #[error("The Anchor Sponsor Pool is smaller than total sponsors, no withdraws allowed")]
-    InsufficientSponsorFunds {},
+    #[error("The lottery pool ({pool_value}) is smaller than total lottery deposits ({total_lottery_deposits}), no redeem stable allowed")]
+    InsufficientPoolFunds {
+        pool_value: Uint256,
+        total_lottery_deposits: Uint256,
+    },
 
-    #[error("The Anchor Pool is smaller than total deposits, no withdraws allowed")]
-    InsufficientPoolFunds {},
-
-    #[error("There are no funds to run the lottery")]
+    #[error("There are not enough funds to run the lottery")]
     InsufficientLotteryFunds {},
-
-    #[error("Invalid claim amount")]
-    InvalidClaimAmount {},
 
     #[error("Max number of concurrent unbonding claims for this users has been reached")]
     MaxUnbondingClaims {},
 
-    #[error("Lottery claim is invalid, as lottery has not being awarded yet")]
-    InvalidClaimLotteryNotAwarded {},
+    #[error("Lottery claim is invalid, as lottery #{0} has not being awarded yet")]
+    InvalidClaimLotteryNotAwarded(u64),
 
-    #[error("Lottery claim is invalid, as prize has already been claimed")]
-    InvalidClaimPrizeAlreadyClaimed {},
+    #[error("Lottery claim is invalid, as prize has already been claimed for lottery #")]
+    InvalidClaimPrizeAlreadyClaimed(u64),
 
     #[error("There not enough claimable funds for the given user")]
     InsufficientClaimableFunds {},
@@ -105,20 +113,17 @@ pub enum ContractError {
     #[error("Invalid epoch interval config")]
     InvalidEpochInterval {},
 
+    #[error("Invalid max holders config, outside bounds")]
+    InvalidMaxHoldersOutsideBounds {},
+
+    #[error("Invalid max holders config, can only increase max holders, not decrease")]
+    InvalidMaxHoldersAttemptedDecrease {},
+
     #[error("Invalid lottery interval config")]
     InvalidLotteryInterval {},
 
     #[error("Invalid lottery next time")]
     InvalidLotteryNextTime {},
-
-    #[error("Invalid execution of the lottery. Funds cannot be sent.")]
-    InvalidLotteryFundsExecution {},
-
-    #[error("Invalid execution of the lottery. There are no playing tickets.")]
-    InvalidLotteryTicketsExecution {},
-
-    #[error("Invalid execution of the lottery. Execute lottery already been called.")]
-    InvalidLotteryExecution {},
 
     #[error("Invalid execution of the lottery. No sent funds allowed.")]
     InvalidLotteryExecutionFunds {},

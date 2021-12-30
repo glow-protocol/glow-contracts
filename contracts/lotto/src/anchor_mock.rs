@@ -16,6 +16,7 @@ use terra_multi_test::{Contract, ContractWrapper};
 
 // This lazy static use allows you the dev to set the aust token addr before you use the anchor mock so that you can mock out AUST as needed.
 lazy_static! {
+
     // This lazily made static uses a ReadWrite lock to ensure some form of safety on setting/getting values and means you dont need to wrap the code in an unsafe block which looks icky
     static ref AUST_ADDR_MOCK: RwLock<String> = RwLock::new("anchor".to_string());
 }

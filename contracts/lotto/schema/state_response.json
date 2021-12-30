@@ -45,8 +45,8 @@
       "items": {
         "$ref": "#/definitions/Uint256"
       },
-      "maxItems": 6,
-      "minItems": 6
+      "maxItems": 7,
+      "minItems": 7
     },
     "total_reserve": {
       "$ref": "#/definitions/Uint256"

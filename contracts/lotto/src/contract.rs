@@ -37,6 +37,8 @@ use terraswap::querier::query_token_balance;
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
 pub const MAX_CLAIMS: u8 = 15;
 pub const THIRTY_MINUTE_TIME: u64 = 60 * 30;
+pub const MAX_HOLDERS_FLOOR: u8 = 10;
+pub const MAX_HOLDERS_CAP: u8 = 100;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -84,6 +86,11 @@ pub fn instantiate(
     // Validate that epoch_interval is at least 30 minutes
     if msg.epoch_interval < THIRTY_MINUTE_TIME {
         return Err(ContractError::InvalidEpochInterval {});
+    }
+
+    // Validate that max_holders is within the bounds
+    if msg.max_holders < MAX_HOLDERS_FLOOR || MAX_HOLDERS_CAP < msg.max_holders {
+        return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
     }
 
     CONFIG.save(
@@ -202,6 +209,7 @@ pub fn execute(
             instant_withdrawal_fee,
             unbonding_period,
             epoch_interval,
+            max_holders,
         } => execute_update_config(
             deps,
             info,
@@ -211,6 +219,7 @@ pub fn execute(
             instant_withdrawal_fee,
             unbonding_period,
             epoch_interval,
+            max_holders,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -1199,6 +1208,7 @@ pub fn execute_update_config(
     instant_withdrawal_fee: Option<Decimal256>,
     unbonding_period: Option<u64>,
     epoch_interval: Option<u64>,
+    max_holders: Option<u8>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1242,6 +1252,20 @@ pub fn execute_update_config(
         }
 
         config.epoch_interval = Duration::Time(epoch_interval);
+    }
+
+    if let Some(max_holders) = max_holders {
+        // Validate that max_holders is within the bounds
+        if max_holders < MAX_HOLDERS_FLOOR || MAX_HOLDERS_CAP < max_holders {
+            return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
+        }
+
+        // Validate that max_holders is increasing
+        if max_holders < config.max_holders {
+            return Err(ContractError::InvalidMaxHoldersAttemptedDecrease {});
+        }
+
+        config.max_holders = max_holders;
     }
 
     CONFIG.save(deps.storage, &config)?;

@@ -5,7 +5,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
-pub const TICKET_LENGTH: usize = 5;
+pub const TICKET_LENGTH: usize = 6;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -49,6 +49,7 @@ pub enum ExecuteMsg {
         instant_withdrawal_fee: Option<Decimal256>,
         unbonding_period: Option<u64>,
         epoch_interval: Option<u64>,
+        max_holders: Option<u8>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {

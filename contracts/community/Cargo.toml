@@ -1,9 +1,9 @@
 [package]
 name = "glow-community"
-version = "1.1.0"
-authors = ["Terraform Labs, PTE."]
+version = "1.0.0"
+authors = ["Glow Protocol Ltd."]
 edition = "2018"
-description = "A Community contract for Anchor Protocol - Keeps premined ANC token which can be used through Gov proposal"
+description = "The Glow Ecosystem Fund for Glow Protocol - Keeps premined Glow tokens which can be used through Gov proposal for community initiatives"
 license = "Apache-2.0"
 
 exclude = [
@@ -37,7 +37,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 cw20 = "0.8.0"
 cosmwasm-std = "0.16.0"
 cosmwasm-storage = "0.16.0"
-glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
+glow-protocol = { version = "1.0.0", path = "../../packages/glow_protocol" }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.20"}

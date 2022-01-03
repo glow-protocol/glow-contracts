@@ -1,13 +1,13 @@
 [package]
 name = "glow-protocol"
-version = "0.2.0"
-authors = ["Glow Savings"]
+version = "1.0.0"
+authors = ["Glow Protocol"]
 edition = "2018"
 description = "Common helpers for Glow protocol"
 license = "Apache-2.0"
 repository = ""
-homepage = "https://joinglow.com"
-documentation = "https://docs.joinglow.com"
+homepage = "https://glowyield.com"
+documentation = "https://docs.glowyield.com"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -1,7 +1,7 @@
 [package]
 name = "glow-vesting"
-version = "1.1.0"
-authors = ["Terraform Labs, PTE."]
+version = "1.0.0"
+authors = ["Glow Protocol Ltd."]
 edition = "2018"
 
 [lib]
@@ -29,7 +29,7 @@ cosmwasm-std = "0.16.0"
 cosmwasm-storage = "0.16.0"
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
+glow-protocol = { version = "1.0.0", path = "../../packages/glow_protocol" }
 
 [dev-dependencies]
 cosmwasm-schema = { version = "0.16.0", default-features = false  }

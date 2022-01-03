@@ -1,9 +1,9 @@
 [package]
 name = "glow-distributor"
-version = "0.2.0"
-authors = ["Terraform Labs, PTE."]
+version = "1.0.0"
+authors = ["Glow Protocol Ltd."]
 edition = "2018"
-description = "A Faucet contract for Anchor Protocol - provides claim interface only from the whitelisted contract"
+description = "A Faucet contract for Glow Protocol - provides claim interface only from the whitelisted contract"
 license = "Apache-2.0"
 
 exclude = [
@@ -38,7 +38,7 @@ cw20 = "0.8.0"
 cosmwasm-std = "0.16.0"
 cosmwasm-storage = "0.16.0"
 cosmwasm-bignumber = "2.2.0"
-glow-protocol = { version = "0.2.0", path = "../../packages/glow_protocol" }
+glow-protocol = { version = "1.0.0", path = "../../packages/glow_protocol" }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 

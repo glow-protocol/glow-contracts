@@ -2,7 +2,7 @@
 
 This monorepository contains the source code for the core smart contracts implementing Glow Protocol on the [Terra](https://terra.money) blockchain.
 
-You can find information about the architecture, usage, and function of the smart contracts on the official Glow documentation [site](https://docs.joinglow.com/).
+You can find information about the architecture, usage, and function of the smart contracts on the official Glow documentation [site](https://docs.glowyield.com/).
 
 ### Dependencies
 
@@ -10,15 +10,15 @@ Glow depends on [Anchor Protocol](https://anchorprotocol.com) and [Terraswap](ht
 
 ## Contracts
 
-| Contract                                            | Reference                                              | Description                                                                                                                        |
-| --------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [`lotto`](./contracts/lotto)  | [doc](https://docs.joinglow.com/contracts/collector) | Glow Lotto protocol, prize-linked savings accounts built on top of Anchor money-market                                          |
-| [`community`](../contracts/community) | [doc](https://docs.joinglow.com/contracts/community) | Manages the Glow Ecosystem Fund (GEF)                                                                                                 |
-| [`gov`](./contracts/gov)              | [doc](https://docs.joinglow.com/contracts/gov)       | Allows Glow contracts to be controlled by decentralized governance and distributes protocol revenues to GLOW stakers |
-| [`staking`](./contracts/staking)      | [doc](https://docs.joinglow.com/contracts/staking)   | Distributes GLOW rewards to to LP stakers                                                                            |
-| [`distibutor`](./contracts/distributor)      | [doc](https://joinglow.com/contracts/staking)   | Distributes GLOW rewards to users of Glow protocol based on a dynamic emission rate algorithm                                                                           |
-| [`airdrop`](./contracts/airdrop)      | [doc](https://joinglow.com/contracts/staking)   | Distributes GLOW to selected addresses at the token genesis event                                                                           |
-| [`vesting`](./contracts/vesting)      | [doc](https://joinglow.com/contracts/staking)   | Distributes GLOW over time to founding team, investors and contributors                                                                        |
+| Contract                                            | Reference                                               | Description                                                                                                          |
+| --------------------------------------------------- |---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| [`lotto`](./contracts/lotto)  | [doc](https://docs.glowyield.com/contracts/lotto)       | Glow Lotto, a prize-linked savings accounts built on top of Anchor money-market                                      |
+| [`community`](./contracts/community) | [doc](https://docs.glowyield.com/contracts/community)   | Manages the Glow Ecosystem Fund (GEF)                                                                                |
+| [`gov`](./contracts/gov)              | [doc](https://docs.glowyield.com/contracts/gov)         | Allows Glow contracts to be controlled by decentralized governance and distributes protocol revenues to GLOW stakers |
+| [`staking`](./contracts/staking)      | [doc](https://docs.glowyield.com/contracts/staking)     | Distributes GLOW rewards to to LP stakers                                                                            |
+| [`distibutor`](./contracts/distributor)      | [doc](https://docs.glowyield.com/contracts/distributor) | Distributes GLOW rewards to users of Glow protocol based on a dynamic emission rate algorithm                        |
+| [`airdrop`](./contracts/airdrop)      | [doc](https://docs.glowyield.com/contracts/airdrop)     | Distributes GLOW to selected addresses at the token genesis event                                                    |
+| [`vesting`](./contracts/vesting)      | [doc](https://docs.glowyield.com/contracts/vesting)               | Distributes GLOW over time to founding team, investors and contributors                                              |
 
 ## Development
 
@@ -75,7 +75,7 @@ This performs several optimizations which can significantly reduce the final siz
 
 ## License
 
-Copyright 2021 Eleven Yellow
+Copyright 2021 Glow Protocol Ltd.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 

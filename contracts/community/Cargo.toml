@@ -1,9 +1,9 @@
 [package]
 name = "glow-community"
 version = "1.1.0"
-authors = ["Terraform Labs, PTE."]
+authors = ["Glow Protocol Ltd."]
 edition = "2018"
-description = "A Community contract for Anchor Protocol - Keeps premined ANC token which can be used through Gov proposal"
+description = "The Glow Ecosystem Fund for Glow Protocol - Keeps premined Glow tokens which can be used through Gov proposal for community initiatives"
 license = "Apache-2.0"
 
 exclude = [

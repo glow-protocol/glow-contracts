@@ -1,9 +1,9 @@
 [package]
 name = "glow-distributor"
 version = "0.2.0"
-authors = ["Terraform Labs, PTE."]
+authors = ["Glow Protocol Ltd."]
 edition = "2018"
-description = "A Faucet contract for Anchor Protocol - provides claim interface only from the whitelisted contract"
+description = "A Faucet contract for Glow Protocol - provides claim interface only from the whitelisted contract"
 license = "Apache-2.0"
 
 exclude = [

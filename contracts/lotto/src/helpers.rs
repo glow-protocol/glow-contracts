@@ -155,8 +155,9 @@ pub fn get_minimum_matches_for_winning_ticket(
         }
     }
     // Should never happen, but if all of the fractions are 0,
-    // return the length of the prize distribution
-    return NUM_PRIZE_BUCKETS - 1;
+    // return the length of a ticket
+    // (so minimum matches is a perfect winning ticket)
+    TICKET_LENGTH
 }
 
 pub fn calculate_lottery_balance(

@@ -16,7 +16,9 @@ use cw_storage_plus::{Bound, U64Key};
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 use terraswap::querier::query_token_balance;
 
-use crate::helpers::{calculate_max_bound, compute_reward, count_seq_matches};
+use crate::helpers::{
+    calculate_max_bound, compute_reward, count_seq_matches, get_minimum_matches_for_winning_ticket,
+};
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::Cw20HookMsg;
@@ -228,13 +230,16 @@ pub fn execute_prize(
     // Min bound is either the string of the first two characters of the winning sequence
     // or the page specified by lottery_info
     let min_bound: &str = if lottery_info.page.is_empty() {
-        &lottery_info.sequence[..2]
+        &lottery_info.sequence[..get_minimum_matches_for_winning_ticket(config.prize_distribution)]
     } else {
         &lottery_info.page
     };
 
     // Get max bounds
-    let max_bound = calculate_max_bound(min_bound);
+    let max_bound = calculate_max_bound(
+        min_bound,
+        get_minimum_matches_for_winning_ticket(config.prize_distribution),
+    );
 
     // Get winning tickets
     let winning_tickets: Vec<_> = TICKETS

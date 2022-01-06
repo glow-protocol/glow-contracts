@@ -225,20 +225,19 @@ pub fn execute_prize(
 
     // Calculate pagination bounds
     let limit = calc_limit(limit);
+    let minimum_matches_for_winning_ticket =
+        get_minimum_matches_for_winning_ticket(config.prize_distribution);
 
     // Min bound is either the string of the first two characters of the winning sequence
     // or the page specified by lottery_info
     let min_bound: &str = if lottery_info.page.is_empty() {
-        &lottery_info.sequence[..get_minimum_matches_for_winning_ticket(config.prize_distribution)]
+        &lottery_info.sequence[..minimum_matches_for_winning_ticket]
     } else {
         &lottery_info.page
     };
 
     // Get max bounds
-    let max_bound = calculate_max_bound(
-        min_bound,
-        get_minimum_matches_for_winning_ticket(config.prize_distribution),
-    );
+    let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
     // Get winning tickets
     let winning_tickets: Vec<_> = TICKETS

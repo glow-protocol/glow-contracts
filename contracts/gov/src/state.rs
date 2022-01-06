@@ -139,7 +139,7 @@ pub fn read_poll_voters<'a>(
     limit: Option<u32>,
     order_by: Option<OrderBy>,
 ) -> StdResult<Vec<(CanonicalAddr, VoterInfo)>> {
-    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let (start, end, order_by) = match order_by {
         Some(OrderBy::Asc) => (calc_range_start_addr(start_after), None, OrderBy::Asc),
         _ => (None, calc_range_end_addr(start_after), OrderBy::Desc),
@@ -157,6 +157,7 @@ pub fn read_poll_voters<'a>(
         .collect()
 }
 
+const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 pub fn read_polls<'a>(
     storage: &'a dyn Storage,
@@ -165,7 +166,7 @@ pub fn read_polls<'a>(
     limit: Option<u32>,
     order_by: Option<OrderBy>,
 ) -> StdResult<Vec<Poll>> {
-    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let (start, end, order_by) = match order_by {
         Some(OrderBy::Asc) => (calc_range_start(start_after), None, OrderBy::Asc),
         _ => (None, calc_range_end(start_after), OrderBy::Desc),

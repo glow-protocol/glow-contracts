@@ -17,7 +17,7 @@ use crate::state::{
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
+    Response, StdResult, Timestamp, Uint128, WasmMsg,
 };
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
@@ -135,7 +135,7 @@ pub fn instantiate(
             )),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
-            last_reward_updated: 0,
+            last_reward_updated: msg.start_rewards,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,
         },
@@ -1414,12 +1414,6 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
     } else {
         env.block.height
     };
-
-    if block_height < state.last_reward_updated {
-        return Err(StdError::generic_err(
-            "Block_height must be greater than last_reward_updated",
-        ));
-    }
 
     // Compute reward rate with given block height
     compute_reward(&mut state, &pool, block_height);

@@ -19,6 +19,7 @@
     "round_delta",
     "split_factor",
     "stable_denom",
+    "start_rewards",
     "target_award",
     "ticket_price",
     "unbonding_period"
@@ -88,6 +89,11 @@
     },
     "stable_denom": {
       "type": "string"
+    },
+    "start_rewards": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "target_award": {
       "$ref": "#/definitions/Uint256"

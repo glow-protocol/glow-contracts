@@ -59,6 +59,7 @@ const MAX_HOLDERS: u8 = 10;
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
+const START_REWARDS_BLOCK: u64 = 12_345;
 const FIRST_LOTTO_TIME: u64 = 1595961494; // timestamp between deployment and 1 week after
 const SIX_MATCH_SEQUENCE: &str = "be1ce9";
 const FOUR_MATCH_SEQUENCE: &str = "be1c79";
@@ -107,6 +108,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
+        start_rewards: START_REWARDS_BLOCK,
         initial_lottery_execution: FIRST_LOTTO_TIME,
     }
 }
@@ -131,6 +133,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
+        start_rewards: START_REWARDS_BLOCK,
         initial_lottery_execution: FIRST_LOTTO_TIME,
     }
 }

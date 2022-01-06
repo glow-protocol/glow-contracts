@@ -21,7 +21,6 @@ pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
 // settings for pagination
-const MAX_LIMIT: u32 = 10000;
 const DEFAULT_LIMIT: u32 = 10;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -218,7 +217,7 @@ pub fn read_depositors(
 ) -> StdResult<Vec<DepositorInfoResponse>> {
     let liability_bucket: ReadonlyBucket<DepositorInfo> = bucket_read(deps.storage, PREFIX_DEPOSIT);
 
-    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
     let start = calc_range_start(start_after);
 
     liability_bucket

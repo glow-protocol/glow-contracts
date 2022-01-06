@@ -96,8 +96,12 @@ pub fn calculate_winner_prize(
 }
 
 // Get max bounds
-pub fn calculate_max_bound(min_bound: &str) -> String {
-    format!("{}fff", min_bound[..2].to_string())
+pub fn calculate_max_bound(min_bound: &str, minimum_matches_for_winning_ticket: usize) -> String {
+    format!(
+        "{:f<length$}",
+        min_bound[..minimum_matches_for_winning_ticket].to_string(),
+        length = TICKET_LENGTH
+    )
 }
 
 pub fn pseudo_random_seq(sender_addr: String, tickets: u64, time: u64) -> String {
@@ -140,6 +144,22 @@ pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
     } else {
         rounded_output
     }
+}
+
+pub fn get_minimum_matches_for_winning_ticket(
+    prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
+) -> StdResult<usize> {
+    for (index, fraction_of_prize) in prize_distribution.iter().enumerate() {
+        if *fraction_of_prize != Decimal256::zero() {
+            return Ok(index);
+        }
+    }
+
+    // Should never happen because one of the prize distribution values should be greater than 0,
+    // throw an error
+    Err(StdError::generic_err(
+        "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
+    ))
 }
 
 pub fn calculate_lottery_balance(

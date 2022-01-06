@@ -3,6 +3,9 @@ pub mod state;
 
 #[cfg(test)]
 mod anchor_mock;
+#[cfg(test)]
+mod test_helpers;
+
 mod error;
 mod helpers;
 #[cfg(test)]

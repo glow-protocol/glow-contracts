@@ -2,7 +2,10 @@ use crate::contract::{
     execute, instantiate, query, query_config, query_pool, query_state, query_ticket_info,
     INITIAL_DEPOSIT_AMOUNT,
 };
-use crate::helpers::{calculate_winner_prize, uint256_times_decimal256_ceil};
+use crate::helpers::{
+    calculate_max_bound, calculate_winner_prize, get_minimum_matches_for_winning_ticket,
+    uint256_times_decimal256_ceil,
+};
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
 };
@@ -10,14 +13,18 @@ use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
     DepositorInfo, LotteryInfo, PrizeInfo, STATE,
 };
+use crate::test_helpers::{
+    calculate_lottery_prize_buckets, calculate_prize_buckets,
+    calculate_remaining_state_prize_buckets,
+};
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use lazy_static::lazy_static;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::MockApi;
 use cosmwasm_std::{
-    attr, coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, MemoryStorage, OwnedDeps, Response, SubMsg, Timestamp, Uint128, WasmMsg,
+    attr, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env,
+    MemoryStorage, OwnedDeps, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -30,17 +37,16 @@ use crate::error::ContractError;
 use cw0::{Duration, Expiration, HOUR, WEEK};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use std::convert::TryInto;
 use std::ops::{Add, Mul, Sub};
 use std::str::FromStr;
 
-const TEST_CREATOR: &str = "creator";
-const ANCHOR: &str = "anchor";
-const A_UST: &str = "aterra-ust";
-const DENOM: &str = "uusd";
-const GOV_ADDR: &str = "gov";
-const DISTRIBUTOR_ADDR: &str = "distributor";
-const ORACLE_ADDR: &str = "oracle";
+pub const TEST_CREATOR: &str = "creator";
+pub const ANCHOR: &str = "anchor";
+pub const A_UST: &str = "aterra-ust";
+pub const DENOM: &str = "uusd";
+pub const GOV_ADDR: &str = "gov";
+pub const DISTRIBUTOR_ADDR: &str = "distributor";
+pub const ORACLE_ADDR: &str = "oracle";
 
 pub const RATE: u64 = 1023; // as a permille
 const SMALL_TICKET_PRICE: u64 = 10;
@@ -5150,75 +5156,97 @@ pub fn ceil_helper_function() {
     assert_eq!(res, Uint256::from(1u128));
 }
 
-fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
-    let pool = query_pool(deps).unwrap();
-    let config = query_config(deps).unwrap();
-    let state = STATE.load(deps.storage).unwrap();
+#[test]
+pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
+    let ticket = "abcdea";
 
-    let contract_a_balance = query_token_balance(
-        deps,
-        Addr::unchecked(A_UST),
-        Addr::unchecked(MOCK_CONTRACT_ADDR),
-    )
-    .unwrap();
+    // Test with prize distribution with zeros for the two first buckets
 
-    // Lottery balance equals aust_balance - total_user_savings_aust
-    let aust_lottery_balance = contract_a_balance - pool.total_user_savings_aust;
+    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::percent(20),
+        Decimal256::percent(20),
+        Decimal256::percent(20),
+        Decimal256::percent(20),
+        Decimal256::percent(20),
+    ];
 
-    // Get the value of the lottery balance
-    let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
+    let minimum_matches_for_winning_ticket =
+        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
-    // Calculate the amount of ust to be redeemed for the lottery
-    let amount_to_redeem = pooled_lottery_deposits
-        - pool.total_user_lottery_deposits
-        - pool.total_sponsor_lottery_deposits;
+    assert_eq!(minimum_matches_for_winning_ticket, 2);
 
-    // Calculate the corresponding amount of aust to redeem
-    let aust_to_redeem = amount_to_redeem / Decimal256::permille(RATE);
+    let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
-    // Get the value of the redeemed aust after accounting for rounding errors
-    let aust_to_redeem_value = aust_to_redeem * Decimal256::permille(RATE);
+    let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
-    // Get the post tax amount
-    let net_amount = Uint256::from(
-        deduct_tax(deps, coin((aust_to_redeem_value).into(), "uusd"))
-            .unwrap()
-            .amount,
-    );
+    assert_eq!(max_bound, "abffff");
 
-    let mut prize_buckets = state.prize_buckets;
+    // Test with prize distribution with zeros for the first buckets
 
-    for index in 0..state.prize_buckets.len() {
-        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
-        prize_buckets[index] += net_amount * config.prize_distribution[index];
-    }
+    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+        Decimal256::zero(),
+        Decimal256::percent(1),
+        Decimal256::percent(19),
+        Decimal256::percent(20),
+        Decimal256::percent(20),
+        Decimal256::percent(20),
+        Decimal256::percent(20),
+    ];
 
-    // Return the initial balance plus the post tax redeemed aust value
-    prize_buckets
-}
+    let minimum_matches_for_winning_ticket =
+        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
-pub fn calculate_lottery_prize_buckets(
-    state_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    number_winners: [u32; NUM_PRIZE_BUCKETS],
-) -> [Uint256; NUM_PRIZE_BUCKETS] {
-    state_prize_buckets
-        .iter()
-        .zip(&number_winners)
-        .map(|(a, b)| if *b == 0 { Uint256::zero() } else { *a })
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap()
-}
+    assert_eq!(minimum_matches_for_winning_ticket, 1);
 
-pub fn calculate_remaining_state_prize_buckets(
-    state_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    number_winners: [u32; NUM_PRIZE_BUCKETS],
-) -> [Uint256; NUM_PRIZE_BUCKETS] {
-    state_prize_buckets
-        .iter()
-        .zip(&number_winners)
-        .map(|(a, b)| if *b == 0 { *a } else { Uint256::zero() })
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap()
+    let min_bound = &ticket[..minimum_matches_for_winning_ticket];
+
+    let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
+
+    assert_eq!(max_bound, "afffff");
+
+    // Test with prize distribution with zeros until the last bucket
+
+    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::percent(100),
+    ];
+
+    let minimum_matches_for_winning_ticket =
+        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
+
+    assert_eq!(minimum_matches_for_winning_ticket, 6);
+
+    let min_bound = &ticket[..minimum_matches_for_winning_ticket];
+
+    let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
+
+    assert_eq!(max_bound, "abcdea");
+
+    // Expect an error when prize distribution is all zeros
+
+    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+    ];
+
+    let minimum_matches_for_winning_ticket =
+        get_minimum_matches_for_winning_ticket(prize_distribution);
+
+    let err = Err(StdError::generic_err(
+        "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
+    ));
+
+    assert_eq!(minimum_matches_for_winning_ticket, err);
 }

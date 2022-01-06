@@ -148,16 +148,18 @@ pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
 
 pub fn get_minimum_matches_for_winning_ticket(
     prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
-) -> usize {
+) -> StdResult<usize> {
     for (index, fraction_of_prize) in prize_distribution.iter().enumerate() {
         if *fraction_of_prize != Decimal256::zero() {
-            return index;
+            return Ok(index);
         }
     }
-    // Should never happen, but if all of the fractions are 0,
-    // return the length of a ticket
-    // (so minimum matches is a perfect winning ticket)
-    TICKET_LENGTH
+
+    // Should never happen because one of the prize distribution values should be greater than 0,
+    // throw an error
+    Err(StdError::generic_err(
+        "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
+    ))
 }
 
 pub fn calculate_lottery_balance(

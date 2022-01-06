@@ -24,7 +24,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::testing::MockApi;
 use cosmwasm_std::{
     attr, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env,
-    MemoryStorage, OwnedDeps, Response, SubMsg, Timestamp, Uint128, WasmMsg,
+    MemoryStorage, OwnedDeps, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
@@ -5173,7 +5173,7 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     ];
 
     let minimum_matches_for_winning_ticket =
-        get_minimum_matches_for_winning_ticket(prize_distribution);
+        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
     assert_eq!(minimum_matches_for_winning_ticket, 2);
 
@@ -5196,7 +5196,7 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     ];
 
     let minimum_matches_for_winning_ticket =
-        get_minimum_matches_for_winning_ticket(prize_distribution);
+        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
     assert_eq!(minimum_matches_for_winning_ticket, 1);
 
@@ -5219,7 +5219,7 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     ];
 
     let minimum_matches_for_winning_ticket =
-        get_minimum_matches_for_winning_ticket(prize_distribution);
+        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
     assert_eq!(minimum_matches_for_winning_ticket, 6);
 
@@ -5228,4 +5228,25 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
     assert_eq!(max_bound, "abcdea");
+
+    // Expect an error when prize distribution is all zeros
+
+    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+        Decimal256::zero(),
+    ];
+
+    let minimum_matches_for_winning_ticket =
+        get_minimum_matches_for_winning_ticket(prize_distribution);
+
+    let err = Err(StdError::generic_err(
+        "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
+    ));
+
+    assert_eq!(minimum_matches_for_winning_ticket, err);
 }

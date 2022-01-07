@@ -106,6 +106,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
+        initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
     }
 }
@@ -129,6 +130,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
+        initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
     }
 }

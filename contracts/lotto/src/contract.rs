@@ -137,7 +137,7 @@ pub fn instantiate(
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
             last_reward_updated: env.block.height,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            glow_emission_rate: msg.initial_emission_rate,
         },
     )?;
 

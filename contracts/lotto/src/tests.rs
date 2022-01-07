@@ -1147,6 +1147,134 @@ fn sponsor() {
 }
 
 #[test]
+fn instant_sponsor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    let sponsor_amount = 100_000_000u128;
+
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::from(1_000_000u128))],
+    );
+
+    // Address sponsor
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(sponsor_amount),
+        }],
+    );
+
+    // Test sponsoring with the default prize distribution
+
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(true),
+        prize_distribution: None,
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    println!("{:?}", _res);
+
+    // Check that the prize buckets were updated
+
+    let mut prize_buckets = [Uint256::zero(); NUM_PRIZE_BUCKETS];
+
+    // Distribute the sponsorship to the prize buckets according to the prize distribution
+    for (index, fraction_of_prize) in PRIZE_DISTRIBUTION.iter().enumerate() {
+        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+        prize_buckets[index] += Uint256::from(sponsor_amount) * *fraction_of_prize
+    }
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, prize_buckets);
+
+    // Check that the sponsor doesn't exist in the db
+
+    let sponsor_info = read_sponsor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0001").unwrap(),
+    );
+
+    assert_eq!(sponsor_info.lottery_deposit, Uint256::zero());
+
+    // Check that the pool sponsor deposits are zero
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+    assert_eq!(pool.total_sponsor_lottery_deposits, Uint256::zero());
+
+    // Test sponsoring with a custom prize distribution
+
+    let custom_prize_distribution = [
+        Decimal256::zero(),
+        Decimal256::percent(5),
+        Decimal256::percent(5),
+        Decimal256::percent(15),
+        Decimal256::percent(25),
+        Decimal256::percent(30),
+        Decimal256::percent(20),
+    ];
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(true),
+        prize_distribution: Some(custom_prize_distribution),
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    println!("{:?}", _res);
+
+    // Check that the prize buckets were updated
+
+    // Distribute the sponsorship to the prize buckets according to the prize distribution
+    for (index, fraction_of_prize) in custom_prize_distribution.iter().enumerate() {
+        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+        prize_buckets[index] += Uint256::from(sponsor_amount) * *fraction_of_prize
+    }
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, prize_buckets);
+
+    // Check that the sponsor doesn't exist in the db
+
+    let sponsor_info = read_sponsor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0001").unwrap(),
+    );
+
+    assert_eq!(sponsor_info.lottery_deposit, Uint256::zero());
+
+    // Check that the pool sponsor deposits are zero
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+    assert_eq!(pool.total_sponsor_lottery_deposits, Uint256::zero());
+
+    // Test sponsoring with a prize distribution that doesn't sum to 1
+
+    let custom_prize_distribution = [
+        Decimal256::zero(),
+        Decimal256::percent(10),
+        Decimal256::percent(10),
+        Decimal256::percent(15),
+        Decimal256::percent(25),
+        Decimal256::percent(30),
+        Decimal256::percent(20),
+    ];
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(true),
+        prize_distribution: Some(custom_prize_distribution),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidPrizeDistribution {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+}
+
+#[test]
 fn withdraw() {
     // Initialize contract
     let mut deps = mock_dependencies(&[Coin {

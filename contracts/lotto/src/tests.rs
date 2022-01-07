@@ -249,6 +249,11 @@ fn proper_initialization() {
         }
     );
 
+    // Check that the glow_emission_rate and last_block_updated are set correctly
+    let state = STATE.load(deps.as_ref().storage).unwrap();
+    assert_eq!(state.glow_emission_rate, Decimal256::zero());
+    assert_eq!(state.last_reward_updated, mock_env().block.height);
+
     // Register contracts
     let msg = ExecuteMsg::RegisterContracts {
         gov_contract: GOV_ADDR.to_string(),
@@ -1101,7 +1106,10 @@ fn sponsor() {
         }],
     );
 
-    let msg = ExecuteMsg::Sponsor { award: None };
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
+    };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg);
     println!("{:?}", _res);
@@ -1138,6 +1146,134 @@ fn sponsor() {
 
     assert_eq!(sponsor_info.lottery_deposit, Uint256::zero());
     assert_eq!(pool.total_sponsor_lottery_deposits, Uint256::zero());
+}
+
+#[test]
+fn instant_sponsor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    let sponsor_amount = 100_000_000u128;
+
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::from(1_000_000u128))],
+    );
+
+    // Address sponsor
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(sponsor_amount),
+        }],
+    );
+
+    // Test sponsoring with the default prize distribution
+
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(true),
+        prize_distribution: None,
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    println!("{:?}", _res);
+
+    // Check that the prize buckets were updated
+
+    let mut prize_buckets = [Uint256::zero(); NUM_PRIZE_BUCKETS];
+
+    // Distribute the sponsorship to the prize buckets according to the prize distribution
+    for (index, fraction_of_prize) in PRIZE_DISTRIBUTION.iter().enumerate() {
+        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+        prize_buckets[index] += Uint256::from(sponsor_amount) * *fraction_of_prize
+    }
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, prize_buckets);
+
+    // Check that the sponsor doesn't exist in the db
+
+    let sponsor_info = read_sponsor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0001").unwrap(),
+    );
+
+    assert_eq!(sponsor_info.lottery_deposit, Uint256::zero());
+
+    // Check that the pool sponsor deposits are zero
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+    assert_eq!(pool.total_sponsor_lottery_deposits, Uint256::zero());
+
+    // Test sponsoring with a custom prize distribution
+
+    let custom_prize_distribution = [
+        Decimal256::zero(),
+        Decimal256::percent(5),
+        Decimal256::percent(5),
+        Decimal256::percent(15),
+        Decimal256::percent(25),
+        Decimal256::percent(30),
+        Decimal256::percent(20),
+    ];
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(true),
+        prize_distribution: Some(custom_prize_distribution),
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    println!("{:?}", _res);
+
+    // Check that the prize buckets were updated
+
+    // Distribute the sponsorship to the prize buckets according to the prize distribution
+    for (index, fraction_of_prize) in custom_prize_distribution.iter().enumerate() {
+        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+        prize_buckets[index] += Uint256::from(sponsor_amount) * *fraction_of_prize
+    }
+
+    let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
+    assert_eq!(state.prize_buckets, prize_buckets);
+
+    // Check that the sponsor doesn't exist in the db
+
+    let sponsor_info = read_sponsor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr0001").unwrap(),
+    );
+
+    assert_eq!(sponsor_info.lottery_deposit, Uint256::zero());
+
+    // Check that the pool sponsor deposits are zero
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+    assert_eq!(pool.total_sponsor_lottery_deposits, Uint256::zero());
+
+    // Test sponsoring with a prize distribution that doesn't sum to 1
+
+    let custom_prize_distribution = [
+        Decimal256::zero(),
+        Decimal256::percent(10),
+        Decimal256::percent(10),
+        Decimal256::percent(15),
+        Decimal256::percent(25),
+        Decimal256::percent(30),
+        Decimal256::percent(20),
+    ];
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(true),
+        prize_distribution: Some(custom_prize_distribution),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::InvalidPrizeDistribution {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }
 
 #[test]
@@ -3406,6 +3542,145 @@ fn execute_prize_pagination() {
 }
 
 #[test]
+fn test_premature_emissions() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    let mut env = mock_env();
+
+    mock_instantiate(&mut deps);
+    // don't mock_register_contracts
+
+    let info = mock_info("addr0000", &[]);
+
+    // Try running epoch_operations, it should because contracts aren't registered
+
+    if let Duration::Time(time) = WEEK {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+    let msg = ExecuteMsg::ExecuteEpochOps {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    match res {
+        Err(ContractError::NotRegistered {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Contracts not registered, so claiming rewards is an error
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
+
+    match res {
+        Err(ContractError::NotRegistered {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Deposit of 20_000_000 uusd
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![
+            String::from(ZERO_MATCH_SEQUENCE),
+            String::from(ONE_MATCH_SEQUENCE),
+        ],
+    };
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
+        }],
+    );
+
+    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+
+    // Get the number of minted aust
+    let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+
+    // Get the number of minted aust that will go towards savings
+    let _minted_savings_aust = minted_aust - minted_aust * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the number of minted aust that will go towards the lottery
+    let minted_lottery_aust = minted_aust * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the value of minted aust going towards the lottery
+    let minted_lottery_aust_value = minted_lottery_aust * Decimal256::permille(RATE);
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
+    )]);
+
+    // After 100 blocks
+    env.block.height += 100;
+
+    // Assert that the global_reward_index is still 0
+    let state = query_state(deps.as_ref(), env.clone(), Some(env.block.height)).unwrap();
+    assert_eq!(Decimal256::zero(), state.global_reward_index);
+
+    // Register contracts
+    mock_register_contracts(deps.as_mut());
+
+    // Execute epoch ops
+
+    let msg = ExecuteMsg::ExecuteEpochOps {};
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
+    assert_eq!(state.last_reward_updated, env.block.height);
+
+    let state = query_state(deps.as_ref(), env.clone(), Some(env.block.height)).unwrap();
+    assert_eq!(Decimal256::zero(), state.global_reward_index);
+
+    // Increase glow emission rate
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
+    state.glow_emission_rate = Decimal256::one();
+    STATE.save(deps.as_mut().storage, &state).unwrap();
+
+    // User has deposits but zero blocks have passed, so no rewards accrued
+    let info = mock_info("addr0000", &[]);
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // After 100 blocks from this point, the user earns some emissions
+    env.block.height += 100;
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: DISTRIBUTOR_ADDR.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: "addr0000".to_string(),
+                amount: (Decimal256::from_str("100").unwrap()
+                    / Decimal256::from_uint256(minted_lottery_aust_value)
+                    * Decimal256::from_uint256(minted_lottery_aust_value)
+                    * Uint256::one())
+                .into(),
+            })
+            .unwrap(),
+        }))]
+    );
+
+    let res: DepositorInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            env,
+            QueryMsg::Depositor {
+                address: "addr0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+    assert_eq!(
+        res.reward_index,
+        (Decimal256::from_str("100").unwrap()
+            / Decimal256::from_uint256(minted_lottery_aust_value))
+    );
+}
+
+#[test]
 fn claim_rewards_one_depositor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
@@ -3687,7 +3962,10 @@ fn claim_rewards_depositor_and_sponsor() {
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Sponsor deposits 20_000_000 uusd ------------------------------
-    let msg = ExecuteMsg::Sponsor { award: Some(false) };
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(false),
+        prize_distribution: None,
+    };
 
     let info = mock_info(
         "addr1111",
@@ -4639,7 +4917,10 @@ pub fn simulate_many_lotteries_with_one_sponsor() {
             amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
-    let msg = ExecuteMsg::Sponsor { award: None };
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
+    };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Calculate the number of minted_aust
@@ -4783,7 +5064,10 @@ pub fn simulate_many_lotteries_with_one_depositor_and_sponsor() {
             amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
-    let msg = ExecuteMsg::Sponsor { award: None };
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
+    };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Calculate the number of minted_aust
@@ -5179,6 +5463,8 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
 
     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
+    assert_eq!(min_bound, "ab");
+
     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
     assert_eq!(max_bound, "abffff");
@@ -5202,6 +5488,8 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
 
     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
+    assert_eq!(min_bound, "a");
+
     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
     assert_eq!(max_bound, "afffff");
@@ -5224,6 +5512,8 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     assert_eq!(minimum_matches_for_winning_ticket, 6);
 
     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
+
+    assert_eq!(min_bound, "abcdea");
 
     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 

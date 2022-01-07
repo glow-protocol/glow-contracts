@@ -135,7 +135,7 @@ pub fn instantiate(
             )),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
-            last_reward_updated: 0,
+            last_reward_updated: env.block.height,
             global_reward_index: Decimal256::zero(),
             glow_emission_rate: msg.initial_emission_rate,
         },
@@ -189,7 +189,10 @@ pub fn execute(
             combinations,
             recipient,
         } => execute_gift(deps, env, info, combinations, recipient),
-        ExecuteMsg::Sponsor { award } => execute_sponsor(deps, env, info, award),
+        ExecuteMsg::Sponsor {
+            award,
+            prize_distribution,
+        } => execute_sponsor(deps, env, info, award, prize_distribution),
         ExecuteMsg::SponsorWithdraw {} => execute_sponsor_withdraw(deps, env, info),
         ExecuteMsg::Withdraw { amount, instant } => {
             execute_withdraw(deps, env, info, amount, instant)
@@ -485,6 +488,7 @@ pub fn execute_sponsor(
     env: Env,
     info: MessageInfo,
     award: Option<bool>,
+    prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
@@ -505,16 +509,18 @@ pub fn execute_sponsor(
 
     compute_reward(&mut state, &pool, env.block.height);
 
-    // Deduct taxes that will be payed when transferring to anchor
-    let net_sponsor_amount = Uint256::from(
-        deduct_tax(
-            deps.as_ref(),
-            coin(sponsor_amount.into(), config.stable_denom.clone()),
-        )?
-        .amount,
-    );
+    let mut msgs: Vec<CosmosMsg> = vec![];
 
     if let None | Some(false) = award {
+        // Deduct taxes that will be payed when transferring to anchor
+        let net_sponsor_amount = Uint256::from(
+            deduct_tax(
+                deps.as_ref(),
+                coin(sponsor_amount.into(), config.stable_denom.clone()),
+            )?
+            .amount,
+        );
+
         // query exchange_rate from anchor money market
         let epoch_state: EpochStateResponse = query_exchange_rate(
             deps.as_ref(),
@@ -532,7 +538,6 @@ pub fn execute_sponsor(
         let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
         // update sponsor sponsor rewards
-        compute_reward(&mut state, &pool, env.block.height);
         compute_sponsor_reward(&state, &mut sponsor_info);
 
         // add sponsor_amount to depositor
@@ -542,21 +547,48 @@ pub fn execute_sponsor(
         // update pool
         pool.total_sponsor_lottery_deposits =
             pool.total_sponsor_lottery_deposits.add(minted_aust_value);
-    }
 
-    let messages: Vec<CosmosMsg> = vec![CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.anchor_contract.to_string(),
-        funds: vec![Coin {
-            denom: config.stable_denom,
-            amount: net_sponsor_amount.into(),
-        }],
-        msg: to_binary(&AnchorMsg::DepositStable {})?,
-    })];
+        // Push message to deposit stable coins into anchor
+        msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.anchor_contract.to_string(),
+            funds: vec![Coin {
+                denom: config.stable_denom,
+                amount: net_sponsor_amount.into(),
+            }],
+            msg: to_binary(&AnchorMsg::DepositStable {})?,
+        }));
+    } else {
+        // Award is instant
+
+        // Get the prize_distribution or the prize_distribution in the config
+        let prize_distribution = prize_distribution.unwrap_or(config.prize_distribution);
+
+        // Validate that the prize_distribution is of length NUM_PRIZE_BUCKETS
+        if prize_distribution.len() != NUM_PRIZE_BUCKETS {
+            return Err(ContractError::InvalidPrizeDistribution {});
+        }
+
+        // Validate that the prize_distributions sums to 1
+        let mut sum = Decimal256::zero();
+        for item in prize_distribution.iter() {
+            sum += *item;
+        }
+
+        if sum != Decimal256::one() {
+            return Err(ContractError::InvalidPrizeDistribution {});
+        }
+
+        // Distribute the sponsorship to the prize buckets according to the prize distribution
+        for (index, fraction_of_prize) in prize_distribution.iter().enumerate() {
+            // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+            state.prize_buckets[index] += sponsor_amount * *fraction_of_prize
+        }
+    }
 
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
-    Ok(Response::new().add_messages(messages).add_attributes(vec![
+    Ok(Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "sponsorship"),
         attr("sponsor", info.sender.to_string()),
         attr("sponsorship_amount", sponsor_amount),

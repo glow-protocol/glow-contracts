@@ -67,7 +67,10 @@ pub enum ExecuteMsg {
         recipient: String,
     },
     /// Sponsor the pool. If award is true, sponsor the award available directly
-    Sponsor { award: Option<bool> },
+    Sponsor {
+        award: Option<bool>,
+        prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
+    },
     /// Withdraws the sponsorship of the sender
     SponsorWithdraw {},
     /// Withdraws amount from the pool. If amount is None, it tries to withdraw all

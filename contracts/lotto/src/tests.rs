@@ -106,7 +106,6 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
-        initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
     }
 }
@@ -130,7 +129,6 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
-        initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
     }
 }
@@ -248,6 +246,11 @@ fn proper_initialization() {
             unbonding_period: WEEK
         }
     );
+
+    // Check that the glow_emission_rate and last_block_updated are set correctly
+    let state = STATE.load(deps.as_ref().storage).unwrap();
+    assert_eq!(state.glow_emission_rate, Decimal256::zero());
+    assert_eq!(state.last_reward_updated, mock_env().block.height);
 
     // Register contracts
     let msg = ExecuteMsg::RegisterContracts {
@@ -5179,6 +5182,8 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
 
     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
+    assert_eq!(min_bound, "ab");
+
     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
     assert_eq!(max_bound, "abffff");
@@ -5202,6 +5207,8 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
 
     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
+    assert_eq!(min_bound, "a");
+
     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
     assert_eq!(max_bound, "afffff");
@@ -5224,6 +5231,8 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     assert_eq!(minimum_matches_for_winning_ticket, 6);
 
     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
+
+    assert_eq!(min_bound, "abcdea");
 
     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 

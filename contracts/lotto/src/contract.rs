@@ -135,9 +135,9 @@ pub fn instantiate(
             )),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
-            last_reward_updated: 0,
+            last_reward_updated: env.block.height,
             global_reward_index: Decimal256::zero(),
-            glow_emission_rate: msg.initial_emission_rate,
+            glow_emission_rate: Decimal256::zero(),
         },
     )?;
 
@@ -532,7 +532,6 @@ pub fn execute_sponsor(
         let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
         // update sponsor sponsor rewards
-        compute_reward(&mut state, &pool, env.block.height);
         compute_sponsor_reward(&state, &mut sponsor_info);
 
         // add sponsor_amount to depositor

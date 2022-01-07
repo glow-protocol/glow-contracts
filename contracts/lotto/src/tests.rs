@@ -1104,7 +1104,10 @@ fn sponsor() {
         }],
     );
 
-    let msg = ExecuteMsg::Sponsor { award: None };
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
+    };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg);
     println!("{:?}", _res);
@@ -3690,7 +3693,10 @@ fn claim_rewards_depositor_and_sponsor() {
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Sponsor deposits 20_000_000 uusd ------------------------------
-    let msg = ExecuteMsg::Sponsor { award: Some(false) };
+    let msg = ExecuteMsg::Sponsor {
+        award: Some(false),
+        prize_distribution: None,
+    };
 
     let info = mock_info(
         "addr1111",
@@ -4642,7 +4648,10 @@ pub fn simulate_many_lotteries_with_one_sponsor() {
             amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
-    let msg = ExecuteMsg::Sponsor { award: None };
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
+    };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Calculate the number of minted_aust
@@ -4786,7 +4795,10 @@ pub fn simulate_many_lotteries_with_one_depositor_and_sponsor() {
             amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
-    let msg = ExecuteMsg::Sponsor { award: None };
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
+    };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Calculate the number of minted_aust

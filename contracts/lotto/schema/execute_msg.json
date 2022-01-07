@@ -227,6 +227,17 @@
                 "boolean",
                 "null"
               ]
+            },
+            "prize_distribution": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/definitions/Decimal256"
+              },
+              "maxItems": 7,
+              "minItems": 7
             }
           }
         }

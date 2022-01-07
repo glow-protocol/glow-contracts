@@ -171,11 +171,11 @@ pub fn calculate_lottery_balance(
     // Validate that the value of the contract's lottery aust is always at least the
     // sum of the value of the user savings aust and lottery deposits.
     // This check should never fail but is in place as an extra safety measure.
-    if (contract_a_balance - pool.total_user_savings_aust) * rate
-        < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    let lottery_pool_value = (contract_a_balance - pool.total_user_savings_aust) * rate;
+    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
     {
         return Err(StdError::generic_err(
-            "Value of lottery pool must be greater than the value of lottery deposits",
+            format!("Value of lottery pool must be greater than the value of lottery deposits. Pool value: {}. Lottery deposits: {}", lottery_pool_value,pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
         ));
     }
 

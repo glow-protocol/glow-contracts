@@ -3540,6 +3540,145 @@ fn execute_prize_pagination() {
 }
 
 #[test]
+fn test_premature_emissions() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    let mut env = mock_env();
+
+    mock_instantiate(&mut deps);
+    // don't mock_register_contracts
+
+    let info = mock_info("addr0000", &[]);
+
+    // Try running epoch_operations, it should because contracts aren't registered
+
+    if let Duration::Time(time) = WEEK {
+        env.block.time = env.block.time.plus_seconds(time);
+    }
+    let msg = ExecuteMsg::ExecuteEpochOps {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    match res {
+        Err(ContractError::NotRegistered {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Contracts not registered, so claiming rewards is an error
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
+
+    match res {
+        Err(ContractError::NotRegistered {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Deposit of 20_000_000 uusd
+    let msg = ExecuteMsg::Deposit {
+        combinations: vec![
+            String::from(ZERO_MATCH_SEQUENCE),
+            String::from(ONE_MATCH_SEQUENCE),
+        ],
+    };
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
+        }],
+    );
+
+    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+
+    // Get the number of minted aust
+    let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+
+    // Get the number of minted aust that will go towards savings
+    let _minted_savings_aust = minted_aust - minted_aust * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the number of minted aust that will go towards the lottery
+    let minted_lottery_aust = minted_aust * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the value of minted aust going towards the lottery
+    let minted_lottery_aust_value = minted_lottery_aust * Decimal256::permille(RATE);
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
+    )]);
+
+    // After 100 blocks
+    env.block.height += 100;
+
+    // Assert that the global_reward_index is still 0
+    let state = query_state(deps.as_ref(), env.clone(), Some(env.block.height)).unwrap();
+    assert_eq!(Decimal256::zero(), state.global_reward_index);
+
+    // Register contracts
+    mock_register_contracts(deps.as_mut());
+
+    // Execute epoch ops
+
+    let msg = ExecuteMsg::ExecuteEpochOps {};
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
+    assert_eq!(state.last_reward_updated, env.block.height);
+
+    let state = query_state(deps.as_ref(), env.clone(), Some(env.block.height)).unwrap();
+    assert_eq!(Decimal256::zero(), state.global_reward_index);
+
+    // Increase glow emission rate
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
+    state.glow_emission_rate = Decimal256::one();
+    STATE.save(deps.as_mut().storage, &state).unwrap();
+
+    // User has deposits but zero blocks have passed, so no rewards accrued
+    let info = mock_info("addr0000", &[]);
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // After 100 blocks from this point, the user earns some emissions
+    env.block.height += 100;
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: DISTRIBUTOR_ADDR.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: "addr0000".to_string(),
+                amount: (Decimal256::from_str("100").unwrap()
+                    / Decimal256::from_uint256(minted_lottery_aust_value)
+                    * Decimal256::from_uint256(minted_lottery_aust_value)
+                    * Uint256::one())
+                .into(),
+            })
+            .unwrap(),
+        }))]
+    );
+
+    let res: DepositorInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            env,
+            QueryMsg::Depositor {
+                address: "addr0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+    assert_eq!(
+        res.reward_index,
+        (Decimal256::from_str("100").unwrap()
+            / Decimal256::from_uint256(minted_lottery_aust_value))
+    );
+}
+
+#[test]
 fn claim_rewards_one_depositor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);

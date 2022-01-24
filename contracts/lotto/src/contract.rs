@@ -115,6 +115,7 @@ pub fn instantiate(
             split_factor: msg.split_factor,
             instant_withdrawal_fee: msg.instant_withdrawal_fee,
             unbonding_period: Duration::Time(msg.unbonding_period),
+            max_tickets_per_depositor: msg.max_tickets_per_depositor,
         },
     )?;
 
@@ -213,6 +214,7 @@ pub fn execute(
             unbonding_period,
             epoch_interval,
             max_holders,
+            max_tickets_per_depositor,
         } => execute_update_config(
             deps,
             info,
@@ -223,6 +225,7 @@ pub fn execute(
             unbonding_period,
             epoch_interval,
             max_holders,
+            max_tickets_per_depositor,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -1249,6 +1252,7 @@ pub fn execute_update_config(
     unbonding_period: Option<u64>,
     epoch_interval: Option<u64>,
     max_holders: Option<u8>,
+    max_tickets_per_depositor: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1306,6 +1310,10 @@ pub fn execute_update_config(
         }
 
         config.max_holders = max_holders;
+    }
+
+    if let Some(max_tickets_per_depositor) = max_tickets_per_depositor {
+        config.max_tickets_per_depositor = max_tickets_per_depositor;
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -1434,6 +1442,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         split_factor: config.split_factor,
         instant_withdrawal_fee: config.instant_withdrawal_fee,
         unbonding_period: config.unbonding_period,
+        max_tickets_per_depositor: config.max_tickets_per_depositor,
     })
 }
 

@@ -60,6 +60,8 @@ const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
 const FIRST_LOTTO_TIME: u64 = 1595961494; // timestamp between deployment and 1 week after
+const MAX_TICKETS_PER_DEPOSITOR: u64 = 12000;
+
 const SIX_MATCH_SEQUENCE: &str = "be1ce9";
 const FOUR_MATCH_SEQUENCE: &str = "be1c79";
 const FOUR_MATCH_SEQUENCE_2: &str = "be1c89";
@@ -108,6 +110,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
+        max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
     }
 }
 
@@ -132,6 +135,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
+        max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
     }
 }
 
@@ -245,7 +249,8 @@ fn proper_initialization() {
             reserve_factor: Decimal256::percent(RESERVE_FACTOR),
             split_factor: Decimal256::percent(SPLIT_FACTOR),
             instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
-            unbonding_period: WEEK
+            unbonding_period: WEEK,
+            max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR
         }
     );
 
@@ -319,6 +324,7 @@ fn update_config() {
         reserve_factor: None,
         epoch_interval: None,
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -357,6 +363,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -377,6 +384,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: Some(HOUR_TIME * 5),
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -398,6 +406,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: Some(HOUR_TIME / 3),
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -419,6 +428,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(8),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -437,6 +447,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(15),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -457,6 +468,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(14),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -475,6 +487,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(101),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -482,6 +495,27 @@ fn update_config() {
         Err(ContractError::InvalidMaxHoldersOutsideBounds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
+
+    // Update the max_tickets_per_depositor
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: Some(100),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // check reserve_factor has changed
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
+    assert_eq!(config_response.max_tickets_per_depositor, 100);
 
     // check only owner can update config
     let info = mock_info("owner2", &[]);
@@ -493,6 +527,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);

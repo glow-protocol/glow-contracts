@@ -44,6 +44,7 @@ pub struct Config {
     pub split_factor: Decimal256,
     pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
+    pub max_tickets_per_depositor: u64,
 }
 
 impl Config {

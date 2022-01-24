@@ -4,8 +4,8 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     calculate_lottery_balance, calculate_winner_prize, claim_deposits, compute_depositor_reward,
-    compute_reward, compute_sponsor_reward, is_valid_sequence, pseudo_random_seq,
-    uint256_times_decimal256_ceil,
+    compute_reward, compute_sponsor_reward, encoded_tickets_to_combinations, is_valid_sequence,
+    pseudo_random_seq, uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -185,11 +185,13 @@ pub fn execute(
             gov_contract,
             distributor_contract,
         } => execute_register_contracts(deps, info, gov_contract, distributor_contract),
-        ExecuteMsg::Deposit { combinations } => execute_deposit(deps, env, info, combinations),
+        ExecuteMsg::Deposit { encoded_tickets } => {
+            execute_deposit(deps, env, info, encoded_tickets)
+        }
         ExecuteMsg::Gift {
-            combinations,
+            encoded_tickets,
             recipient,
-        } => execute_gift(deps, env, info, combinations, recipient),
+        } => execute_gift(deps, env, info, encoded_tickets, recipient),
         ExecuteMsg::Sponsor {
             award,
             prize_distribution,
@@ -275,7 +277,7 @@ pub fn deposit(
     env: Env,
     info: MessageInfo,
     recipient: Option<String>,
-    combinations: Vec<String>,
+    encoded_tickets: String,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
@@ -296,6 +298,9 @@ pub fn deposit(
         .find(|c| c.denom == config.stable_denom)
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
+
+    // Get combinations from encoded tickets
+    let combinations = encoded_tickets_to_combinations(encoded_tickets)?;
 
     // Get the depositor info
     // depositor being either the message sender
@@ -478,9 +483,9 @@ pub fn execute_deposit(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    combinations: Vec<String>,
+    encoded_tickets: String,
 ) -> Result<Response, ContractError> {
-    deposit(deps.branch(), env, info, None, combinations)
+    deposit(deps.branch(), env, info, None, encoded_tickets)
 }
 
 // Gift several tickets at once to a given address
@@ -488,13 +493,13 @@ pub fn execute_gift(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    combinations: Vec<String>,
+    encoded_tickets: String,
     to: String,
 ) -> Result<Response, ContractError> {
     if to == info.sender {
         return Err(ContractError::GiftToSelf {});
     }
-    deposit(deps.branch(), env, info, Some(to), combinations)
+    deposit(deps.branch(), env, info, Some(to), encoded_tickets)
 }
 
 // Make a donation deposit to the lottery pool

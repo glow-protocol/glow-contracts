@@ -94,14 +94,16 @@ pub fn combinations_to_encoded_tickets(combinations: Vec<String>) -> String {
     // but each char only holds 4 bits of information
     // convert it to just 4 bits, but then thats u4 not u8. u8 is 256
 
+    let binary_data = combinations
+        // Iterate over combinations
+        .iter()
+        // Take each combination and hex decode it
+        .flat_map(|s| hex::decode(s).unwrap())
+        // Then collect the flat map into a vec of u8
+        .collect::<Vec<u8>>();
+
+    // println!("{:?}", binary_data);
+
     // Encode the vec of u8 with base64
-    base64::encode(
-        combinations
-            // Iterate over combinations
-            .iter()
-            // Take each combination and hex decode it
-            .flat_map(|s| hex::decode(s).unwrap())
-            // Then collect the flat map into a vec of u8
-            .collect::<Vec<u8>>(),
-    )
+    base64::encode(binary_data)
 }

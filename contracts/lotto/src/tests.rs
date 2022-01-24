@@ -3,8 +3,8 @@ use crate::contract::{
     INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::helpers::{
-    calculate_max_bound, calculate_winner_prize, get_minimum_matches_for_winning_ticket,
-    uint256_times_decimal256_ceil,
+    calculate_max_bound, calculate_winner_prize, encoded_tickets_to_combinations,
+    get_minimum_matches_for_winning_ticket, uint256_times_decimal256_ceil,
 };
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
@@ -5706,4 +5706,42 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     ));
 
     assert_eq!(minimum_matches_for_winning_ticket, err);
+}
+
+#[test]
+pub fn test_ticket_encoding_and_decoding() {
+    // Test inverse functionality #1
+    let combinations = vec![
+        String::from(THREE_MATCH_SEQUENCE),
+        String::from(ZERO_MATCH_SEQUENCE),
+    ];
+    let encoded_tickets = combinations_to_encoded_tickets(combinations.clone());
+    println!("{}", encoded_tickets);
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets).unwrap();
+    println!("{:?}", decoded_combinations);
+    assert_eq!(combinations, decoded_combinations);
+
+    // Test inverse functionality #2
+    let combinations = vec![String::from("000000")];
+    // TODO Understand why I have to clone in the following line
+    let encoded_tickets = combinations_to_encoded_tickets(combinations.clone());
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets).unwrap();
+    println!("{:?}", decoded_combinations);
+    assert_eq!(combinations, decoded_combinations);
+
+    // Test giving random data
+    let encoded_tickets = String::from("aowief");
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets);
+    match decoded_combinations {
+        Err(_) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Test giving data with wrong ticket length
+    let encoded_tickets = String::from("EjRWeA==");
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets);
+    match decoded_combinations {
+        Err(_) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }

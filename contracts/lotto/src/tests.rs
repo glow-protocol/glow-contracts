@@ -559,7 +559,7 @@ fn test_max_tickets_per_depositor() {
     let msg = ExecuteMsg::Deposit {
         combinations: too_many_combinations,
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
         Err(ContractError::MaxTicketsPerDepositorExceeded {
             max_tickets_per_depositor,
@@ -582,7 +582,7 @@ fn test_max_tickets_per_depositor() {
     let msg = ExecuteMsg::Deposit {
         combinations: too_many_combinations,
     };
-    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // Depositing one more ticket fails because it goes over the limit
 
@@ -590,7 +590,7 @@ fn test_max_tickets_per_depositor() {
         "addr1000",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: Uint256::from((1) * TICKET_PRICE).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
     let too_many_combinations = generate_sequential_ticket_combinations(1);
@@ -598,7 +598,7 @@ fn test_max_tickets_per_depositor() {
     let msg = ExecuteMsg::Deposit {
         combinations: too_many_combinations,
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
 
     match res {
         Err(ContractError::MaxTicketsPerDepositorExceeded {
@@ -632,7 +632,7 @@ fn test_max_tickets_per_depositor() {
         "addr1000",
         &[Coin {
             denom: DENOM.to_string(),
-            amount: Uint256::from((1) * TICKET_PRICE).into(),
+            amount: Uint256::from(TICKET_PRICE).into(),
         }],
     );
     let too_many_combinations = generate_sequential_ticket_combinations(1);
@@ -640,7 +640,7 @@ fn test_max_tickets_per_depositor() {
     let msg = ExecuteMsg::Deposit {
         combinations: too_many_combinations,
     };
-    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 }
 
 #[test]

@@ -211,13 +211,22 @@ pub fn calculate_depositor_balance(depositor: DepositorInfo, rate: Decimal256) -
 
 pub fn encoded_tickets_to_combinations(encoded_tickets: String) -> StdResult<Vec<String>> {
     // Encoded_tickets to binary
-    let decoded_binary_tickets = base64::decode(encoded_tickets).expect("Couldn't base64 decode");
+    let decoded_binary_tickets = match base64::decode(encoded_tickets) {
+        Ok(decoded_binary_tickets) => decoded_binary_tickets,
+        Err(e) => {
+            return Err(StdError::generic_err(format!(
+                "Couldn't base64 decode the encoded tickets. Error: {}",
+                e
+            )));
+        }
+    };
 
     // Validate that the decoded value is the right length
     if decoded_binary_tickets.len() % 3 != 0 {
-        return Err(StdError::generic_err("Decoded tickets wrong length"));
+        return Err(StdError::generic_err("Decoded tickets wrong length."));
     };
 
+    // Will always return a Vec of 6 character hex strings
     Ok(decoded_binary_tickets
         .chunks(3)
         .map(hex::encode)

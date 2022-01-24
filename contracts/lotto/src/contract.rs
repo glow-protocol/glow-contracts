@@ -366,7 +366,7 @@ pub fn deposit(
     // Get the value of minted aust going towards the lottery
     let minted_lottery_aust_value = minted_lottery_aust * rate;
 
-    // Get the number of tickets the user would have post transaction
+    // Get the number of tickets the user would have post transaction (without accounting for round up)
     let raw_post_transaction_num_depositor_tickets =
         Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
 
@@ -390,6 +390,18 @@ pub fn deposit(
 
         new_combinations.push(sequence);
         amount_tickets += 1;
+    }
+
+    // Get the number of tickets the user would have post transaction (accounting for roundup)
+    let post_transaction_num_depositor_tickets =
+        depositor_info.tickets.len() as u64 + amount_tickets;
+
+    // Validate that the depositor won't go over max_tickets_per_depositor
+    if post_transaction_num_depositor_tickets > config.max_tickets_per_depositor {
+        return Err(ContractError::MaxTicketsPerDepositorExceeded {
+            max_tickets_per_depositor: config.max_tickets_per_depositor,
+            post_transaction_num_depositor_tickets,
+        });
     }
 
     for combination in new_combinations {

@@ -15,7 +15,7 @@ use crate::state::{
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
-    calculate_remaining_state_prize_buckets,
+    calculate_remaining_state_prize_buckets, generate_sequential_ticket_combinations,
 };
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use lazy_static::lazy_static;
@@ -512,7 +512,7 @@ fn update_config() {
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
 
-    // check reserve_factor has changed
+    // check max_tickets_per_depositor has changed
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.max_tickets_per_depositor, 100);
@@ -535,6 +535,112 @@ fn update_config() {
         Err(ContractError::Unauthorized {}) => {}
         _ => panic!("Must return unauthorized error"),
     }
+}
+
+#[test]
+fn test_max_tickets_per_depositor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    // Invalid deposit - exceeds max_tickets_per_depositor
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from((MAX_TICKETS_PER_DEPOSITOR + 1) * TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations =
+        generate_sequential_ticket_combinations(MAX_TICKETS_PER_DEPOSITOR + 1);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: too_many_combinations,
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    match res {
+        Err(ContractError::MaxTicketsPerDepositorExceeded {
+            max_tickets_per_depositor,
+            post_transaction_num_depositor_tickets,
+        }) if max_tickets_per_depositor == MAX_TICKETS_PER_DEPOSITOR
+            && post_transaction_num_depositor_tickets == MAX_TICKETS_PER_DEPOSITOR + 1 => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Deposit at the limit successfully
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from((MAX_TICKETS_PER_DEPOSITOR) * TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations = generate_sequential_ticket_combinations(MAX_TICKETS_PER_DEPOSITOR);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: too_many_combinations,
+    };
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // Depositing one more ticket fails because it goes over the limit
+
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from((1) * TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations = generate_sequential_ticket_combinations(1);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: too_many_combinations,
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+
+    match res {
+        Err(ContractError::MaxTicketsPerDepositorExceeded {
+            max_tickets_per_depositor,
+            post_transaction_num_depositor_tickets,
+        }) if max_tickets_per_depositor == MAX_TICKETS_PER_DEPOSITOR
+            && post_transaction_num_depositor_tickets == MAX_TICKETS_PER_DEPOSITOR + 1 => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // If we increase the limit than we can deposit again
+
+    // Update the max_tickets_per_depositor
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: Some(MAX_TICKETS_PER_DEPOSITOR + 1),
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Depositing one more ticket now succeeds
+
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from((1) * TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations = generate_sequential_ticket_combinations(1);
+
+    let msg = ExecuteMsg::Deposit {
+        combinations: too_many_combinations,
+    };
+    let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 }
 
 #[test]

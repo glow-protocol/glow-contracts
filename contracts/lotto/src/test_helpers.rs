@@ -81,3 +81,9 @@ pub fn calculate_remaining_state_prize_buckets(
         .try_into()
         .unwrap()
 }
+
+pub fn generate_sequential_ticket_combinations(num_combinations: u64) -> Vec<String> {
+    (0..num_combinations)
+        .map(|x: u64| format!("{:06x}", x))
+        .collect::<Vec<String>>()
+}

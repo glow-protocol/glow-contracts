@@ -170,6 +170,19 @@ pub struct LotteryInfo {
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
+    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub block_height: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldLotteryInfo {
+    pub rand_round: u64,
+    pub sequence: String,
+    pub awarded: bool,
+    pub timestamp: u64,
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
+    pub page: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
@@ -197,6 +210,8 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             number_winners: [0; NUM_PRIZE_BUCKETS],
             page: "".to_string(),
+            glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+            block_height: 0,
         },
     }
 }

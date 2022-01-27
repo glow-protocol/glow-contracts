@@ -1034,7 +1034,9 @@ pub fn execute_claim_lottery(
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let mut to_send = Uint128::zero();
+    let mut ust_to_send = Uint128::zero();
+    let mut glow_to_send = Uint128::zero();
+
     let mut depositor = read_depositor_info(deps.storage, &info.sender);
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
@@ -1047,8 +1049,8 @@ pub fn execute_claim_lottery(
     compute_depositor_reward(&state, &mut depositor);
 
     for lottery_id in lottery_ids.clone() {
-        let lottery = read_lottery_info(deps.storage, lottery_id);
-        if !lottery.awarded {
+        let lottery_info = read_lottery_info(deps.storage, lottery_id);
+        if !lottery_info.awarded {
             return Err(ContractError::InvalidClaimLotteryNotAwarded(lottery_id));
         }
         //Calculate and add to to_send
@@ -1061,11 +1063,19 @@ pub fn execute_claim_lottery(
                 return Err(ContractError::InvalidClaimPrizeAlreadyClaimed(lottery_id));
             }
 
-            to_send += calculate_winner_prize(
-                lottery.prize_buckets,
-                prize.matches,
-                lottery.number_winners,
-            );
+            let (local_ust_to_send, local_glow_to_send): (Uint128, Uint128) =
+                calculate_winner_prize(
+                    &deps.querier,
+                    &config,
+                    &pool,
+                    &prize,
+                    &lottery_info,
+                    &depositor,
+                    &info.sender,
+                )?;
+
+            ust_to_send += local_ust_to_send;
+            glow_to_send += local_glow_to_send;
 
             PRIZES.save(
                 deps.storage,
@@ -1078,19 +1088,25 @@ pub fn execute_claim_lottery(
         }
     }
 
-    if to_send == Uint128::zero() {
+    // If ust_to_send is zero, don't send anything even if glow_to_send is positive.
+    // It should never be the case that ust_to_send is 0 and glow_to_send is positive.
+    if ust_to_send == Uint128::zero() {
         return Err(ContractError::InsufficientClaimableFunds {});
     }
 
+    let mut msgs: Vec<CosmosMsg> = vec![];
+
+    // ust_to_send calculations
+
     // Deduct reserve fee
-    let reserve_fee = Uint256::from(to_send) * config.reserve_factor;
-    to_send -= Uint128::from(reserve_fee);
+    let reserve_fee = Uint256::from(ust_to_send) * config.reserve_factor;
+    ust_to_send -= Uint128::from(reserve_fee);
     state.total_reserve += reserve_fee;
 
     // Deduct taxes on the claim
     let net_send = deduct_tax(
         deps.as_ref(),
-        coin(to_send.into(), config.stable_denom.clone()),
+        coin(ust_to_send.into(), config.stable_denom.clone()),
     )?
     .amount;
 
@@ -1101,30 +1117,45 @@ pub fn execute_claim_lottery(
         config.stable_denom.clone(),
     )?;
 
-    if to_send > balance.into() {
+    if ust_to_send > balance.into() {
         return Err(ContractError::InsufficientFunds {
-            to_send,
+            to_send: ust_to_send,
             available_balance: balance,
         });
     }
 
+    msgs.push(CosmosMsg::Bank(BankMsg::Send {
+        to_address: info.sender.to_string(),
+        amount: vec![Coin {
+            denom: config.stable_denom,
+            amount: net_send,
+        }],
+    }));
+
+    // glow_to_send calculations
+
+    msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: config.distributor_contract.to_string(),
+        funds: vec![],
+        msg: to_binary(&FaucetExecuteMsg::Spend {
+            recipient: info.sender.to_string(),
+            amount: glow_to_send,
+        })?,
+    }));
+
+    // Update storage
+
     store_depositor_info(deps.storage, &info.sender, &depositor)?;
     STATE.save(deps.storage, &state)?;
 
-    Ok(Response::new()
-        .add_message(CosmosMsg::Bank(BankMsg::Send {
-            to_address: info.sender.to_string(),
-            amount: vec![Coin {
-                denom: config.stable_denom,
-                amount: net_send,
-            }],
-        }))
-        .add_attributes(vec![
-            attr("action", "claim_lottery"),
-            attr("lottery_ids", format!("{:?}", lottery_ids)),
-            attr("depositor", info.sender.to_string()),
-            attr("redeemed_amount", net_send),
-        ]))
+    // Send response
+
+    Ok(Response::new().add_messages(msgs).add_attributes(vec![
+        attr("action", "claim_lottery"),
+        attr("lottery_ids", format!("{:?}", lottery_ids)),
+        attr("depositor", info.sender.to_string()),
+        attr("redeemed_amount", net_send),
+    ]))
 }
 
 pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
@@ -1168,7 +1199,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     compute_reward(&mut state, &pool, env.block.height);
 
     let lottery_balance = calculate_lottery_balance(&state, &pool, contract_a_balance, rate)?;
-
+    //
     // Query updated Glow emission rate and update state
     state.glow_emission_rate = query_glow_emission_rate(
         &deps.querier,

@@ -108,6 +108,8 @@ pub fn execute_lottery(
         prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
         number_winners: [0; NUM_PRIZE_BUCKETS],
         page: "".to_string(),
+        glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+        block_height: env.block.height,
     };
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
@@ -325,6 +327,10 @@ pub fn execute_prize(
 
                 // Set the corresponding award bucket to 0
                 state.prize_buckets[index] = Uint256::zero();
+
+                // Update the corresponding glow lottery prize bucket
+                // In this case glow_prize_buckets is a config and we don't set it to zero afterwards
+                lottery_info.glow_prize_buckets[index] = config.glow_prize_buckets[index];
             }
         }
 

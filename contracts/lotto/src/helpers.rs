@@ -1,10 +1,14 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, Env, QuerierWrapper, StdError, StdResult, Storage, Uint128};
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
-use crate::state::{
-    read_depositor_info, store_depositor_info, DepositorInfo, Pool, SponsorInfo, State,
+use crate::{
+    querier::{query_address_voting_balance_at_height, query_total_voting_balance_at_height},
+    state::{
+        read_depositor_info, store_depositor_info, Config, DepositorInfo, LotteryInfo, Pool,
+        PrizeInfo, SponsorInfo, State,
+    },
 };
 
 /// Compute distributed reward and update global reward index
@@ -75,24 +79,103 @@ pub fn claim_deposits(
 }
 
 pub fn calculate_winner_prize(
-    lottery_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    address_rank: [u32; NUM_PRIZE_BUCKETS],
-    lottery_winners: [u32; NUM_PRIZE_BUCKETS],
-) -> Uint128 {
-    let mut to_send: Uint128 = Uint128::zero();
+    querier: &QuerierWrapper,
+    config: &Config,
+    pool: &Pool,
+    prize_info: &PrizeInfo,
+    lottery_info: &LotteryInfo,
+    depositor_info: &DepositorInfo,
+    winner_address: &Addr,
+) -> StdResult<(Uint128, Uint128)> {
+    let LotteryInfo {
+        prize_buckets,
+        number_winners,
+        glow_prize_buckets,
+        block_height,
+        ..
+    } = lottery_info;
+
+    let winner_matches = prize_info.matches;
+
+    let mut ust_to_send: Uint128 = Uint128::zero();
+    let mut glow_to_send: Uint128 = Uint128::zero();
+
+    // Get the values needed for boost calculation
+
+    // TVL across lottery deposits.
+    let total_user_lottery_deposits = pool.total_user_lottery_deposits;
+
+    // User Lottery deposit
+    let user_lottery_deposit = depositor_info.lottery_deposit;
+
+    // User voting balance
+    let user_voting_balance = query_address_voting_balance_at_height(
+        &querier,
+        &config.gov_contract,
+        *block_height,
+        &winner_address,
+    )?
+    .balance;
+
+    // Total voting balance
+
+    let total_voting_balance =
+        query_total_voting_balance_at_height(&querier, &config.gov_contract, *block_height)?
+            .total_supply;
+
     for i in 0..NUM_PRIZE_BUCKETS {
-        if lottery_winners[i] == 0 {
+        if number_winners[i] == 0 {
             continue;
         }
-        let prize_available: Uint256 = lottery_prize_buckets[i];
+
+        // Handle ust calculations
+        let prize_available: Uint256 = prize_buckets[i];
 
         let amount: Uint128 = prize_available
-            .multiply_ratio(address_rank[i], lottery_winners[i])
+            .multiply_ratio(winner_matches[i], number_winners[i])
             .into();
 
-        to_send += amount;
+        ust_to_send += amount;
+
+        // Handle glow calculations
+        let glow_prize_available = glow_prize_buckets[i];
+
+        // Get the raw awarded glow
+        let glow_raw_amount =
+            glow_prize_available.multiply_ratio(winner_matches[i], number_winners[i]);
+
+        // Glow multiplier formula:
+        // min(
+        //  max_multiplier,
+        //  min_multiplier +
+        //    (TotalDeposited / UserDeposited)
+        //    * (UserVotingBalance / (max_proportional_ratio * TotalVotingBalance))
+        //    * (max_multiplier - min_multiplier)
+        //  )
+
+        // Get the multiplier for users with no voting power
+        let glow_base_multiplier = Decimal256::percent(40);
+
+        // Calculate the additional multiplier for users with voting power
+        let glow_voting_boost =
+            Decimal256::from_ratio(total_user_lottery_deposits, user_lottery_deposit)
+                * Decimal256::from_ratio(
+                    Uint256::from(user_voting_balance),
+                    Decimal256::percent(150) * Uint256::from(total_voting_balance),
+                )
+                * (Decimal256::one() - Decimal256::percent(40));
+
+        // Sum glow_base_multiplier and glow_voting_boost and set it to 1 if greater than 1
+        let mut glow_multiplier = glow_base_multiplier + glow_voting_boost;
+        if glow_multiplier > Decimal256::one() {
+            glow_multiplier = Decimal256::one();
+        }
+
+        // Get the GLOW to send
+        glow_to_send += Uint128::from(glow_raw_amount * glow_multiplier);
     }
-    to_send
+
+    Ok((ust_to_send, glow_to_send))
 }
 
 // Get max bounds

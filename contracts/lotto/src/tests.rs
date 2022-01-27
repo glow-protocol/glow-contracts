@@ -88,6 +88,15 @@ lazy_static! {
         Decimal256::percent(35),
         Decimal256::percent(20),
     ];
+    static ref GLOW_PRIZE_BUCKETS: [Uint256; NUM_PRIZE_BUCKETS] = [
+        Uint256::from(0u128),
+        Uint256::from(0u128),
+        Uint256::from(10 * u128::pow(10, 6)),
+        Uint256::from(10 * u128::pow(10, 6)),
+        Uint256::from(10 * u128::pow(10, 6)),
+        Uint256::from(10 * u128::pow(10, 6)),
+        Uint256::from(10 * u128::pow(10, 6)),
+    ];
 }
 
 pub(crate) fn instantiate_msg() -> InstantiateMsg {
@@ -112,6 +121,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
         max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
+        glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
     }
 }
 
@@ -137,6 +147,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
         max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
+        glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
     }
 }
 

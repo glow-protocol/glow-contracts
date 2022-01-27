@@ -116,6 +116,7 @@ pub fn instantiate(
             instant_withdrawal_fee: msg.instant_withdrawal_fee,
             unbonding_period: Duration::Time(msg.unbonding_period),
             max_tickets_per_depositor: msg.max_tickets_per_depositor,
+            glow_prize_buckets: msg.glow_prize_buckets,
         },
     )?;
 
@@ -1617,7 +1618,7 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
     // migrate config
     let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
     let new_config = Config {
@@ -1640,7 +1641,8 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
         split_factor: old_config.split_factor,
         instant_withdrawal_fee: old_config.instant_withdrawal_fee,
         unbonding_period: old_config.unbonding_period,
-        max_tickets_per_depositor: 100,
+        max_tickets_per_depositor: msg.max_tickets_per_depositor,
+        glow_prize_buckets: msg.glow_prize_buckets,
     };
 
     CONFIG.save(deps.storage, &new_config)?;

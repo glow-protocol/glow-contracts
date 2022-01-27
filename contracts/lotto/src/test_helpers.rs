@@ -87,3 +87,21 @@ pub fn generate_sequential_ticket_combinations(num_combinations: u64) -> Vec<Str
         .map(|x: u64| format!("{:06x}", x))
         .collect::<Vec<String>>()
 }
+
+pub fn combinations_to_encoded_tickets(combinations: Vec<String>) -> String {
+    // Convert each string to
+    // when it's a string its taking 8 bits per char
+    // but each char only holds 4 bits of information
+    // convert it to just 4 bits, but then thats u4 not u8. u8 is 256
+
+    // Encode the vec of u8 with base64
+    base64::encode(
+        combinations
+            // Iterate over combinations
+            .iter()
+            // Take each combination and hex decode it
+            .flat_map(|s| hex::decode(s).unwrap())
+            // Then collect the flat map into a vec of u8
+            .collect::<Vec<u8>>(),
+    )
+}

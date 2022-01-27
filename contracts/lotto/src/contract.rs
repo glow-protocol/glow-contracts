@@ -12,7 +12,7 @@ use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rat
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
     store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo,
-    State, CONFIG, POOL, PRIZES, STATE, TICKETS,
+    State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -1612,6 +1612,33 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    // migrate config
+    let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
+    let new_config = Config {
+        owner: old_config.owner,
+        a_terra_contract: old_config.a_terra_contract,
+        gov_contract: old_config.gov_contract,
+        distributor_contract: old_config.distributor_contract,
+        oracle_contract: old_config.oracle_contract,
+        stable_denom: old_config.stable_denom,
+        anchor_contract: old_config.anchor_contract,
+        lottery_interval: old_config.lottery_interval,
+        epoch_interval: old_config.epoch_interval,
+        block_time: old_config.block_time,
+        round_delta: old_config.round_delta,
+        ticket_price: old_config.ticket_price,
+        max_holders: old_config.max_holders,
+        prize_distribution: old_config.prize_distribution,
+        target_award: old_config.target_award,
+        reserve_factor: old_config.reserve_factor,
+        split_factor: old_config.split_factor,
+        instant_withdrawal_fee: old_config.instant_withdrawal_fee,
+        unbonding_period: old_config.unbonding_period,
+        max_tickets_per_depositor: 100,
+    };
+
+    CONFIG.save(deps.storage, &new_config)?;
+
     Ok(Response::default())
 }

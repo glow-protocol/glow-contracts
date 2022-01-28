@@ -1067,10 +1067,8 @@ pub fn execute_claim_lottery(
                 calculate_winner_prize(
                     &deps.querier,
                     &config,
-                    &pool,
                     &prize,
                     &lottery_info,
-                    &depositor,
                     &info.sender,
                 )?;
 
@@ -1082,7 +1080,7 @@ pub fn execute_claim_lottery(
                 (&info.sender, lottery_key),
                 &PrizeInfo {
                     claimed: true,
-                    matches: prize.matches,
+                    ..prize
                 },
             )?;
         }

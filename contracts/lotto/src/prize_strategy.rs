@@ -2,8 +2,8 @@ use crate::error::ContractError;
 use crate::querier::{query_exchange_rate, query_oracle};
 
 use crate::state::{
-    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
-    TICKETS,
+    read_depositor_info, read_lottery_info, store_lottery_info, DepositorInfo, LotteryInfo,
+    PrizeInfo, CONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
@@ -110,6 +110,7 @@ pub fn execute_lottery(
         page: "".to_string(),
         glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
         block_height: env.block.height,
+        total_user_lottery_deposits: pool.total_user_lottery_deposits,
     };
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
@@ -286,25 +287,32 @@ pub fn execute_prize(
                 // Get the lottery_id
                 let lottery_id: U64Key = state.current_lottery.into();
 
-                // Update the prizes to show that the winner has a winning ticket
+                // Check if a prize already exist
+                let maybe_prize = PRIZES
+                    .may_load(deps.storage, (winner, lottery_id.clone()))
+                    .unwrap();
+
+                // Calculate updated_prize accordingly
+                let updated_prize = if let Some(mut prize) = maybe_prize {
+                    prize.matches[matches as usize] += 1;
+                    prize
+                } else {
+                    let mut winnings = [0; NUM_PRIZE_BUCKETS];
+                    winnings[matches as usize] = 1;
+
+                    let depositor_info: DepositorInfo =
+                        read_depositor_info(deps.as_ref().storage, &winner);
+
+                    PrizeInfo {
+                        claimed: false,
+                        matches: winnings,
+                        lottery_deposit: depositor_info.lottery_deposit,
+                    }
+                };
+
+                // Save the updated prize
                 PRIZES
-                    .update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
-                        let result = match hits {
-                            Some(mut prize) => {
-                                prize.matches[matches as usize] += 1;
-                                prize
-                            }
-                            None => {
-                                let mut winnings = [0; NUM_PRIZE_BUCKETS];
-                                winnings[matches as usize] = 1;
-                                PrizeInfo {
-                                    claimed: false,
-                                    matches: winnings,
-                                }
-                            }
-                        };
-                        Ok(result)
-                    })
+                    .save(deps.storage, (winner, lottery_id), &updated_prize)
                     .unwrap();
             });
         });

@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, Env, QuerierWrapper, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, QuerierWrapper, StdError, StdResult, Storage, Uint128};
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
@@ -81,10 +81,8 @@ pub fn claim_deposits(
 pub fn calculate_winner_prize(
     querier: &QuerierWrapper,
     config: &Config,
-    pool: &Pool,
     prize_info: &PrizeInfo,
     lottery_info: &LotteryInfo,
-    depositor_info: &DepositorInfo,
     winner_address: &Addr,
 ) -> StdResult<(Uint128, Uint128)> {
     let LotteryInfo {
@@ -92,21 +90,20 @@ pub fn calculate_winner_prize(
         number_winners,
         glow_prize_buckets,
         block_height,
+        total_user_lottery_deposits,
         ..
     } = lottery_info;
 
-    let winner_matches = prize_info.matches;
+    let PrizeInfo {
+        matches: winner_matches,
+        lottery_deposit: winner_lottery_deposit,
+        ..
+    } = prize_info;
 
     let mut ust_to_send: Uint128 = Uint128::zero();
     let mut glow_to_send: Uint128 = Uint128::zero();
 
     // Get the values needed for boost calculation
-
-    // TVL across lottery deposits.
-    let total_user_lottery_deposits = pool.total_user_lottery_deposits;
-
-    // User Lottery deposit
-    let user_lottery_deposit = depositor_info.lottery_deposit;
 
     // User voting balance
     let user_voting_balance = query_address_voting_balance_at_height(
@@ -158,7 +155,7 @@ pub fn calculate_winner_prize(
 
         // Calculate the additional multiplier for users with voting power
         let glow_voting_boost =
-            Decimal256::from_ratio(total_user_lottery_deposits, user_lottery_deposit)
+            Decimal256::from_ratio(*total_user_lottery_deposits, *winner_lottery_deposit)
                 * Decimal256::from_ratio(
                     Uint256::from(user_voting_balance),
                     Decimal256::percent(150) * Uint256::from(total_voting_balance),

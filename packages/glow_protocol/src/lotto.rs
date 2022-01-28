@@ -29,6 +29,7 @@ pub struct InstantiateMsg {
     pub unbonding_period: u64, // unbonding period after regular withdrawals from pool
     pub initial_emission_rate: Decimal256, // initial GLOW emission rate for depositor rewards
     pub initial_lottery_execution: u64, // time in seconds for the first Lotto execution
+    pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -50,6 +51,7 @@ pub enum ExecuteMsg {
         unbonding_period: Option<u64>,
         epoch_interval: Option<u64>,
         max_holders: Option<u8>,
+        max_tickets_per_depositor: Option<u64>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {
@@ -60,10 +62,10 @@ pub enum ExecuteMsg {
         round_delta: Option<u64>,
     },
     /// Deposit amount of stable into the pool
-    Deposit { combinations: Vec<String> },
+    Deposit { encoded_tickets: String },
     /// Deposit amount of stable into the pool in the name of the recipient
     Gift {
-        combinations: Vec<String>,
+        encoded_tickets: String,
         recipient: String,
     },
     /// Sponsor the pool. If award is true, sponsor the award available directly
@@ -148,6 +150,7 @@ pub struct ConfigResponse {
     pub split_factor: Decimal256,
     pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
+    pub max_tickets_per_depositor: u64,
 }
 
 // We define a custom struct for each query response

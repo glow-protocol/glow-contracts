@@ -13,6 +13,7 @@ const PREFIX_DEPOSIT: &[u8] = b"depositor";
 const PREFIX_SPONSOR: &[u8] = b"sponsor";
 
 pub const CONFIG: Item<Config> = Item::new("config");
+pub const OLDCONFIG: Item<OldConfig> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
 pub const POOL: Item<Pool> = Item::new("pool");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
@@ -44,9 +45,39 @@ pub struct Config {
     pub split_factor: Decimal256,
     pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
+    pub max_tickets_per_depositor: u64,
 }
 
 impl Config {
+    pub fn contracts_registered(&self) -> bool {
+        self.gov_contract != Addr::unchecked("") && self.distributor_contract != Addr::unchecked("")
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldConfig {
+    pub owner: Addr,
+    pub a_terra_contract: Addr,
+    pub gov_contract: Addr,
+    pub distributor_contract: Addr,
+    pub anchor_contract: Addr,
+    pub oracle_contract: Addr,
+    pub stable_denom: String,
+    pub lottery_interval: Duration,
+    pub epoch_interval: Duration,
+    pub block_time: Duration,
+    pub round_delta: u64,
+    pub ticket_price: Uint256,
+    pub max_holders: u8,
+    pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
+    pub target_award: Uint256,
+    pub reserve_factor: Decimal256,
+    pub split_factor: Decimal256,
+    pub instant_withdrawal_fee: Decimal256,
+    pub unbonding_period: Duration,
+}
+
+impl OldConfig {
     pub fn contracts_registered(&self) -> bool {
         self.gov_contract != Addr::unchecked("") && self.distributor_contract != Addr::unchecked("")
     }

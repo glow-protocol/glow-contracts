@@ -26,6 +26,9 @@ pub enum ContractError {
     #[error("Sequence must be 6 digits between 0-f but instead it was: {0}")]
     InvalidSequence(String),
 
+    #[error("Invalid encoded tickets. Could not decode.")]
+    InvalidEncodedTickets {},
+
     #[error("The ticket max holder limit has been reached for the following ticket: {0}")]
     InvalidHolderSequence(String),
 
@@ -145,6 +148,12 @@ pub enum ContractError {
 
     #[error("Invalid execute epochs execution")]
     InvalidEpochExecution {},
+
+    #[error("Max tickets per depositor exceeded. Max tickets per depositor: {max_tickets_per_depositor}. Post transaction num depositor tickets: {post_transaction_num_depositor_tickets}")]
+    MaxTicketsPerDepositorExceeded {
+        max_tickets_per_depositor: u64,
+        post_transaction_num_depositor_tickets: u64,
+    },
 
     #[error("Unauthorized")]
     Unauthorized {},

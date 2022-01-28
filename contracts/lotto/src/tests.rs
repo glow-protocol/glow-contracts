@@ -3,8 +3,8 @@ use crate::contract::{
     INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::helpers::{
-    calculate_max_bound, calculate_winner_prize, get_minimum_matches_for_winning_ticket,
-    uint256_times_decimal256_ceil,
+    calculate_max_bound, calculate_winner_prize, encoded_tickets_to_combinations,
+    get_minimum_matches_for_winning_ticket, uint256_times_decimal256_ceil,
 };
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
@@ -15,7 +15,8 @@ use crate::state::{
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
-    calculate_remaining_state_prize_buckets,
+    calculate_remaining_state_prize_buckets, combinations_to_encoded_tickets,
+    generate_sequential_ticket_combinations,
 };
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use lazy_static::lazy_static;
@@ -60,6 +61,8 @@ const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
 const FIRST_LOTTO_TIME: u64 = 1595961494; // timestamp between deployment and 1 week after
+const MAX_TICKETS_PER_DEPOSITOR: u64 = 12000;
+
 const SIX_MATCH_SEQUENCE: &str = "be1ce9";
 const FOUR_MATCH_SEQUENCE: &str = "be1c79";
 const FOUR_MATCH_SEQUENCE_2: &str = "be1c89";
@@ -71,9 +74,9 @@ const ZERO_MATCH_SEQUENCE: &str = "6e1ce9";
 const ZERO_MATCH_SEQUENCE_2: &str = "7e1ce9";
 const ZERO_MATCH_SEQUENCE_3: &str = "8e1ce9";
 const ZERO_MATCH_SEQUENCE_4: &str = "9e1ce9";
-const INVALID_TICKET_TOO_LONG: &str = "2b02cab";
-const INVALID_TICKET_TOO_SHORT: &str = "2b02c";
-const INVALID_TICKET_NOT_HEX: &str = "2b02cg";
+// const INVALID_TICKET_TOO_LONG: &str = "2b02cabf";
+// const INVALID_TICKET_TOO_SHORT: &str = "2b02";
+// const INVALID_TICKET_NOT_HEX: &str = "2b02cg";
 
 lazy_static! {
     static ref PRIZE_DISTRIBUTION: [Decimal256; NUM_PRIZE_BUCKETS] = [
@@ -108,6 +111,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
+        max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
     }
 }
 
@@ -132,6 +136,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         unbonding_period: WEEK_TIME,
         initial_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
+        max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
     }
 }
 
@@ -245,7 +250,8 @@ fn proper_initialization() {
             reserve_factor: Decimal256::percent(RESERVE_FACTOR),
             split_factor: Decimal256::percent(SPLIT_FACTOR),
             instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
-            unbonding_period: WEEK
+            unbonding_period: WEEK,
+            max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR
         }
     );
 
@@ -319,6 +325,7 @@ fn update_config() {
         reserve_factor: None,
         epoch_interval: None,
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -357,6 +364,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -377,6 +385,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: Some(HOUR_TIME * 5),
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -398,6 +407,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: Some(HOUR_TIME / 3),
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -419,6 +429,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(8),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -437,6 +448,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(15),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -457,6 +469,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(14),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -475,6 +488,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: Some(101),
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -482,6 +496,27 @@ fn update_config() {
         Err(ContractError::InvalidMaxHoldersOutsideBounds {}) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
+
+    // Update the max_tickets_per_depositor
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: Some(100),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // check max_tickets_per_depositor has changed
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
+    assert_eq!(config_response.max_tickets_per_depositor, 100);
 
     // check only owner can update config
     let info = mock_info("owner2", &[]);
@@ -493,6 +528,7 @@ fn update_config() {
         unbonding_period: None,
         epoch_interval: None,
         max_holders: None,
+        max_tickets_per_depositor: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -500,6 +536,112 @@ fn update_config() {
         Err(ContractError::Unauthorized {}) => {}
         _ => panic!("Must return unauthorized error"),
     }
+}
+
+#[test]
+fn test_max_tickets_per_depositor() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    // Invalid deposit - exceeds max_tickets_per_depositor
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from((MAX_TICKETS_PER_DEPOSITOR + 1) * TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations =
+        generate_sequential_ticket_combinations(MAX_TICKETS_PER_DEPOSITOR + 1);
+
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: combinations_to_encoded_tickets(too_many_combinations),
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+    match res {
+        Err(ContractError::MaxTicketsPerDepositorExceeded {
+            max_tickets_per_depositor,
+            post_transaction_num_depositor_tickets,
+        }) if max_tickets_per_depositor == MAX_TICKETS_PER_DEPOSITOR
+            && post_transaction_num_depositor_tickets == MAX_TICKETS_PER_DEPOSITOR + 1 => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Deposit at the limit successfully
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from((MAX_TICKETS_PER_DEPOSITOR) * TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations = generate_sequential_ticket_combinations(MAX_TICKETS_PER_DEPOSITOR);
+
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: combinations_to_encoded_tickets(too_many_combinations),
+    };
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Depositing one more ticket fails because it goes over the limit
+
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from(TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations = generate_sequential_ticket_combinations(1);
+
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: combinations_to_encoded_tickets(too_many_combinations),
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+
+    match res {
+        Err(ContractError::MaxTicketsPerDepositorExceeded {
+            max_tickets_per_depositor,
+            post_transaction_num_depositor_tickets,
+        }) if max_tickets_per_depositor == MAX_TICKETS_PER_DEPOSITOR
+            && post_transaction_num_depositor_tickets == MAX_TICKETS_PER_DEPOSITOR + 1 => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // If we increase the limit than we can deposit again
+
+    // Update the max_tickets_per_depositor
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: Some(MAX_TICKETS_PER_DEPOSITOR + 1),
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Depositing one more ticket now succeeds
+
+    let info = mock_info(
+        "addr1000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from(TICKET_PRICE).into(),
+        }],
+    );
+    let too_many_combinations = generate_sequential_ticket_combinations(1);
+
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: combinations_to_encoded_tickets(too_many_combinations),
+    };
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 }
 
 #[test]
@@ -512,10 +654,10 @@ fn deposit() {
 
     // Must deposit stable_denom coins
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(THREE_MATCH_SEQUENCE),
             String::from(ZERO_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let info = mock_info(
         "addr0000",
@@ -546,13 +688,55 @@ fn deposit() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Invalid ticket sequence - more number of digits
-    let msg = ExecuteMsg::Deposit {
-        combinations: vec![
-            String::from(INVALID_TICKET_TOO_LONG),
-            String::from(ZERO_MATCH_SEQUENCE),
-        ],
-    };
+    // These tests don't really make sense anymore because the encoding process will throw errors
+
+    // // Invalid ticket sequence - more number of digits
+    // let msg = ExecuteMsg::Deposit {
+    //     encoded_tickets: combinations_to_encoded_tickets(vec![
+    //         String::from(INVALID_TICKET_TOO_LONG),
+    //         String::from(ZERO_MATCH_SEQUENCE),
+    //     ]),
+    // };
+    // let info = mock_info(
+    //     "addr0000",
+    //     &[Coin {
+    //         denom: DENOM.to_string(),
+    //         amount: Uint256::from(2 * TICKET_PRICE).into(),
+    //     }],
+    // );
+    // let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    // match res {
+    //     Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_LONG => {}
+    //     _ => panic!("DO NOT ENTER HERE"),
+    // }
+
+    // // Invalid ticket sequence - less number of digits
+    // let msg = ExecuteMsg::Deposit {
+    //     encoded_tickets: combinations_to_encoded_tickets(vec![
+    //         String::from(ZERO_MATCH_SEQUENCE),
+    //         String::from(INVALID_TICKET_TOO_SHORT),
+    //     ]),
+    // };
+
+    // let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    // match res {
+    //     Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_SHORT => {}
+    //     _ => panic!("DO NOT ENTER HERE"),
+    // }
+
+    // // Invalid ticket sequence - only hex values allowed
+    // let msg = ExecuteMsg::Deposit {
+    //     encoded_tickets: combinations_to_encoded_tickets(vec![
+    //         String::from(INVALID_TICKET_NOT_HEX),
+    //         String::from(ZERO_MATCH_SEQUENCE),
+    //     ]),
+    // };
+    // let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    // match res {
+    //     Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_NOT_HEX => {}
+    //     _ => panic!("DO NOT ENTER HERE"),
+    // }
+
     let info = mock_info(
         "addr0000",
         &[Coin {
@@ -560,45 +744,13 @@ fn deposit() {
             amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
-    match res {
-        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_LONG => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-    // Invalid ticket sequence - less number of digits
-    let msg = ExecuteMsg::Deposit {
-        combinations: vec![
-            String::from(ZERO_MATCH_SEQUENCE),
-            String::from(INVALID_TICKET_TOO_SHORT),
-        ],
-    };
-
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
-    match res {
-        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_SHORT => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-    // Invalid ticket sequence - only hex values allowed
-    let msg = ExecuteMsg::Deposit {
-        combinations: vec![
-            String::from(INVALID_TICKET_NOT_HEX),
-            String::from(ZERO_MATCH_SEQUENCE),
-        ],
-    };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
-    match res {
-        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_NOT_HEX => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
 
     // Correct deposit - buys two tickets
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -714,7 +866,7 @@ fn deposit() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(TWO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(TWO_MATCH_SEQUENCE)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -728,7 +880,7 @@ fn deposit() {
 
     // deposit again
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(THREE_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(THREE_MATCH_SEQUENCE)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -741,7 +893,7 @@ fn deposit() {
     assert_eq!(depositor_info.tickets.len(), 5);
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ZERO_MATCH_SEQUENCE_2)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ZERO_MATCH_SEQUENCE_2)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -754,7 +906,7 @@ fn deposit() {
     assert_eq!(depositor_info.tickets.len(), 6);
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ZERO_MATCH_SEQUENCE_3)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ZERO_MATCH_SEQUENCE_3)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -768,13 +920,13 @@ fn deposit() {
 
     // Test sequential buys of the same ticket by the same address
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(FOUR_MATCH_SEQUENCE)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(FOUR_MATCH_SEQUENCE)]),
     };
 
     // We let users have a repeated ticket
@@ -790,7 +942,9 @@ fn deposit() {
     for (_index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
-            combinations: vec![String::from(ZERO_MATCH_SEQUENCE_4)],
+            encoded_tickets: combinations_to_encoded_tickets(vec![String::from(
+                ZERO_MATCH_SEQUENCE_4,
+            )]),
         };
         let info = mock_info(
             address.as_str(),
@@ -811,7 +965,7 @@ fn deposit() {
 
     // 11th holder with same sequence, should fail
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ZERO_MATCH_SEQUENCE_4)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ZERO_MATCH_SEQUENCE_4)]),
     };
     let info = mock_info(
         "addr1111",
@@ -839,10 +993,10 @@ fn gift_tickets() {
 
     // Must deposit stable_denom coins
     let msg = ExecuteMsg::Gift {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
         recipient: "addr1111".to_string(),
     };
     let info = mock_info(
@@ -897,10 +1051,10 @@ fn gift_tickets() {
     }
     // Invalid recipient - you cannot make a gift to yourself
     let msg = ExecuteMsg::Gift {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE_3),
             String::from(ZERO_MATCH_SEQUENCE_4),
-        ],
+        ]),
         recipient: "addr0000".to_string(),
     };
     let info = mock_info(
@@ -916,35 +1070,64 @@ fn gift_tickets() {
         _ => panic!("DO NOT ENTER HERE"),
     }
 
-    // Invalid ticket sequence - more number of digits
-    let msg = ExecuteMsg::Gift {
-        combinations: vec![
-            String::from(INVALID_TICKET_TOO_LONG),
-            String::from(ZERO_MATCH_SEQUENCE),
-        ],
-        recipient: "addr1111".to_string(),
-    };
-    let info = mock_info(
-        "addr0000",
-        &[Coin {
-            denom: DENOM.to_string(),
-            amount: Uint256::from(2 * TICKET_PRICE).into(),
-        }],
-    );
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
-    match res {
-        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_LONG => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
+    // These tests don't really make sense anymore because they will throw errors during the encoding process
+    // // Invalid ticket sequence - more number of digits
+    // let msg = ExecuteMsg::Gift {
+    //     encoded_tickets: combinations_to_encoded_tickets(vec![
+    //         String::from(INVALID_TICKET_TOO_LONG),
+    //         String::from(ZERO_MATCH_SEQUENCE),
+    //     ]),
+    //     recipient: "addr1111".to_string(),
+    // };
+    // let info = mock_info(
+    //     "addr0000",
+    //     &[Coin {
+    //         denom: DENOM.to_string(),
+    //         amount: Uint256::from(2 * TICKET_PRICE).into(),
+    //     }],
+    // );
+    // let res = execute(deps.as_mut(), mock_env(), info, msg);
+    // match res {
+    //     Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_LONG => {}
+    //     _ => panic!("DO NOT ENTER HERE"),
+    // }
 
-    // Invalid ticket sequence - less number of digits
-    let msg = ExecuteMsg::Gift {
-        combinations: vec![
-            String::from(ZERO_MATCH_SEQUENCE),
-            String::from(INVALID_TICKET_TOO_SHORT),
-        ],
-        recipient: "addr1111".to_string(),
-    };
+    // // Invalid ticket sequence - less number of digits
+    // let msg = ExecuteMsg::Gift {
+    //     encoded_tickets: combinations_to_encoded_tickets(vec![
+    //         String::from(ZERO_MATCH_SEQUENCE),
+    //         String::from(INVALID_TICKET_TOO_SHORT),
+    //     ]),
+    //     recipient: "addr1111".to_string(),
+    // };
+    // let info = mock_info(
+    //     "addr0000",
+    //     &[Coin {
+    //         denom: "uusd".to_string(),
+    //         amount: Uint256::from(2 * TICKET_PRICE).into(),
+    //     }],
+    // );
+    // let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    // match res {
+    //     Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_SHORT => {}
+    //     _ => panic!("DO NOT ENTER HERE"),
+    // }
+
+    // // Invalid ticket sequence - only numbers allowed
+    // let msg = ExecuteMsg::Gift {
+    //     encoded_tickets: combinations_to_encoded_tickets(vec![
+    //         String::from(INVALID_TICKET_NOT_HEX),
+    //         String::from(ZERO_MATCH_SEQUENCE),
+    //     ]),
+    //     recipient: "addr1111".to_string(),
+    // };
+
+    // let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
+    // match res {
+    //     Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_NOT_HEX => {}
+    //     _ => panic!("DO NOT ENTER HERE"),
+    // }
+
     let info = mock_info(
         "addr0000",
         &[Coin {
@@ -952,33 +1135,13 @@ fn gift_tickets() {
             amount: Uint256::from(2 * TICKET_PRICE).into(),
         }],
     );
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
-    match res {
-        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_TOO_SHORT => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
-
-    // Invalid ticket sequence - only numbers allowed
-    let msg = ExecuteMsg::Gift {
-        combinations: vec![
-            String::from(INVALID_TICKET_NOT_HEX),
-            String::from(ZERO_MATCH_SEQUENCE),
-        ],
-        recipient: "addr1111".to_string(),
-    };
-
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg);
-    match res {
-        Err(ContractError::InvalidSequence(sequence)) if sequence == INVALID_TICKET_NOT_HEX => {}
-        _ => panic!("DO NOT ENTER HERE"),
-    }
 
     // Correct gift - gifts two tickets
     let msg = ExecuteMsg::Gift {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
         recipient: "addr1111".to_string(),
     };
 
@@ -1299,7 +1462,7 @@ fn withdraw() {
     );
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ONE_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ONE_MATCH_SEQUENCE)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1433,7 +1596,11 @@ fn withdraw() {
     // Withdraw with a given amount
     for index in 0..10 {
         let msg = ExecuteMsg::Deposit {
-            combinations: vec![format!("{:0length$}", index, length = TICKET_LENGTH)],
+            encoded_tickets: combinations_to_encoded_tickets(vec![format!(
+                "{:0length$}",
+                index,
+                length = TICKET_LENGTH
+            )]),
         };
         let info = mock_info(
             "addr2222",
@@ -1587,7 +1754,7 @@ fn instant_withdraw() {
     );
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ZERO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ZERO_MATCH_SEQUENCE)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1748,7 +1915,7 @@ fn claim() {
     );
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ZERO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ZERO_MATCH_SEQUENCE)]),
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1918,7 +2085,7 @@ fn claim_lottery_single_winner() {
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(SIX_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0000",
@@ -2185,10 +2352,10 @@ fn execute_lottery() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -2566,7 +2733,7 @@ fn execute_prize_no_winners() {
 
     // Users buys a non-winning ticket
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ZERO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ZERO_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0000",
@@ -2686,7 +2853,7 @@ fn execute_prize_one_winner() {
 
     // Users buys winning ticket
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(SIX_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0000",
@@ -2816,7 +2983,7 @@ fn execute_prize_winners_diff_ranks() {
 
     // Users buys winning ticket - 5 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(SIX_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0000",
@@ -2857,7 +3024,7 @@ fn execute_prize_winners_diff_ranks() {
 
     // Users buys winning ticket - 2 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(TWO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(TWO_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0001",
@@ -2979,7 +3146,7 @@ fn execute_prize_winners_same_rank() {
 
     // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(FOUR_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0000",
@@ -3020,7 +3187,7 @@ fn execute_prize_winners_same_rank() {
 
     // Users buys winning ticket - 4 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(FOUR_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0001",
@@ -3139,7 +3306,7 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     // Users buys winning ticket - 6 hits
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(SIX_MATCH_SEQUENCE)]),
     };
     let info = mock_info(
         "addr0000",
@@ -3152,22 +3319,22 @@ fn execute_prize_one_winner_multiple_ranks() {
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ONE_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ONE_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FOUR_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(FOUR_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FOUR_MATCH_SEQUENCE_2)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(FOUR_MATCH_SEQUENCE_2)]),
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(FOUR_MATCH_SEQUENCE_3)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(FOUR_MATCH_SEQUENCE_3)]),
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -3302,7 +3469,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     mock_register_contracts(deps.as_mut());
 
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(SIX_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(SIX_MATCH_SEQUENCE)]),
     };
 
     // User 0 buys winning ticket - 5 hits
@@ -3450,11 +3617,11 @@ fn execute_prize_pagination() {
     for (index, address) in addresses.iter().enumerate() {
         // Users buys winning ticket
         let msg = ExecuteMsg::Deposit {
-            combinations: vec![format!(
+            encoded_tickets: combinations_to_encoded_tickets(vec![format!(
                 "be{:0length$}",
                 100 + index,
                 length = TICKET_LENGTH - 2
-            )],
+            )]),
         };
         let info = mock_info(
             address.as_str(),
@@ -3576,10 +3743,10 @@ fn test_premature_emissions() {
 
     // Deposit of 20_000_000 uusd
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let info = mock_info(
         "addr0000",
@@ -3707,10 +3874,10 @@ fn claim_rewards_one_depositor() {
 
     // Deposit of 20_000_000 uusd
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let info = mock_info(
         "addr0000",
@@ -3804,10 +3971,10 @@ fn claim_rewards_multiple_depositors() {
 
     // USER 0 Deposits 20_000_000 uusd
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let info = mock_info(
         "addr0000",
@@ -3823,10 +3990,10 @@ fn claim_rewards_multiple_depositors() {
 
     // USER 1 Deposits another 20_000_000 uusd
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(SIX_MATCH_SEQUENCE),
             String::from(TWO_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let info = mock_info(
         "addr1111",
@@ -3944,10 +4111,10 @@ fn claim_rewards_depositor_and_sponsor() {
 
     // USER 0 Deposits 20_000_000 uusd -----------------------------
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let info = mock_info(
         "addr0000",
@@ -4223,7 +4390,7 @@ fn small_withdraw() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ONE_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ONE_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4443,7 +4610,7 @@ pub fn lottery_deposit_floor_edge_case() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ONE_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ONE_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4456,7 +4623,7 @@ pub fn lottery_deposit_floor_edge_case() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(TWO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(TWO_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4505,7 +4672,7 @@ pub fn lottery_pool_solvency_edge_case() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(ONE_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(ONE_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4667,7 +4834,7 @@ pub fn simulate_many_lotteries_with_one_depositor() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(TWO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(TWO_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -5082,7 +5249,7 @@ pub fn simulate_many_lotteries_with_one_depositor_and_sponsor() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![String::from(TWO_MATCH_SEQUENCE)],
+        encoded_tickets: combinations_to_encoded_tickets(vec![String::from(TWO_MATCH_SEQUENCE)]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -5327,10 +5494,10 @@ pub fn simulate_jackpot_growth_with_one_depositor() {
         }],
     );
     let msg = ExecuteMsg::Deposit {
-        combinations: vec![
+        encoded_tickets: combinations_to_encoded_tickets(vec![
             String::from(THREE_MATCH_SEQUENCE),
             String::from(FOUR_MATCH_SEQUENCE),
-        ],
+        ]),
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -5539,4 +5706,42 @@ pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
     ));
 
     assert_eq!(minimum_matches_for_winning_ticket, err);
+}
+
+#[test]
+pub fn test_ticket_encoding_and_decoding() {
+    // Test inverse functionality #1
+    let combinations = vec![
+        String::from(THREE_MATCH_SEQUENCE),
+        String::from(ZERO_MATCH_SEQUENCE),
+    ];
+    let encoded_tickets = combinations_to_encoded_tickets(combinations.clone());
+    println!("{}", encoded_tickets);
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets).unwrap();
+    println!("{:?}", decoded_combinations);
+    assert_eq!(combinations, decoded_combinations);
+
+    // Test inverse functionality #2
+    let combinations = vec![String::from("000000")];
+    // TODO Understand why I have to clone in the following line
+    let encoded_tickets = combinations_to_encoded_tickets(combinations.clone());
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets).unwrap();
+    println!("{:?}", decoded_combinations);
+    assert_eq!(combinations, decoded_combinations);
+
+    // Test giving random data
+    let encoded_tickets = String::from("aowief");
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets);
+    match decoded_combinations {
+        Err(_) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    // Test giving data with wrong ticket length
+    let encoded_tickets = String::from("EjRWeA==");
+    let decoded_combinations = encoded_tickets_to_combinations(encoded_tickets);
+    match decoded_combinations {
+        Err(_) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
 }

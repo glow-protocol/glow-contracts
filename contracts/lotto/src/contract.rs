@@ -4,15 +4,15 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     calculate_lottery_balance, calculate_winner_prize, claim_deposits, compute_depositor_reward,
-    compute_reward, compute_sponsor_reward, is_valid_sequence, pseudo_random_seq,
-    uint256_times_decimal256_ceil,
+    compute_reward, compute_sponsor_reward, encoded_tickets_to_combinations, is_valid_sequence,
+    pseudo_random_seq, uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
     store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo,
-    State, CONFIG, POOL, PRIZES, STATE, TICKETS,
+    State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -115,6 +115,7 @@ pub fn instantiate(
             split_factor: msg.split_factor,
             instant_withdrawal_fee: msg.instant_withdrawal_fee,
             unbonding_period: Duration::Time(msg.unbonding_period),
+            max_tickets_per_depositor: msg.max_tickets_per_depositor,
         },
     )?;
 
@@ -184,11 +185,13 @@ pub fn execute(
             gov_contract,
             distributor_contract,
         } => execute_register_contracts(deps, info, gov_contract, distributor_contract),
-        ExecuteMsg::Deposit { combinations } => execute_deposit(deps, env, info, combinations),
+        ExecuteMsg::Deposit { encoded_tickets } => {
+            execute_deposit(deps, env, info, encoded_tickets)
+        }
         ExecuteMsg::Gift {
-            combinations,
+            encoded_tickets,
             recipient,
-        } => execute_gift(deps, env, info, combinations, recipient),
+        } => execute_gift(deps, env, info, encoded_tickets, recipient),
         ExecuteMsg::Sponsor {
             award,
             prize_distribution,
@@ -213,6 +216,7 @@ pub fn execute(
             unbonding_period,
             epoch_interval,
             max_holders,
+            max_tickets_per_depositor,
         } => execute_update_config(
             deps,
             info,
@@ -223,6 +227,7 @@ pub fn execute(
             unbonding_period,
             epoch_interval,
             max_holders,
+            max_tickets_per_depositor,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -272,7 +277,7 @@ pub fn deposit(
     env: Env,
     info: MessageInfo,
     recipient: Option<String>,
-    combinations: Vec<String>,
+    encoded_tickets: String,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
@@ -293,6 +298,9 @@ pub fn deposit(
         .find(|c| c.denom == config.stable_denom)
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
+
+    // Get combinations from encoded tickets
+    let combinations = encoded_tickets_to_combinations(encoded_tickets)?;
 
     // Get the depositor info
     // depositor being either the message sender
@@ -363,7 +371,7 @@ pub fn deposit(
     // Get the value of minted aust going towards the lottery
     let minted_lottery_aust_value = minted_lottery_aust * rate;
 
-    // Get the number of tickets the user would have post transaction
+    // Get the number of tickets the user would have post transaction (without accounting for round up)
     let raw_post_transaction_num_depositor_tickets =
         Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
 
@@ -387,6 +395,18 @@ pub fn deposit(
 
         new_combinations.push(sequence);
         amount_tickets += 1;
+    }
+
+    // Get the number of tickets the user would have post transaction (accounting for roundup)
+    let post_transaction_num_depositor_tickets =
+        depositor_info.tickets.len() as u64 + amount_tickets;
+
+    // Validate that the depositor won't go over max_tickets_per_depositor
+    if post_transaction_num_depositor_tickets > config.max_tickets_per_depositor {
+        return Err(ContractError::MaxTicketsPerDepositorExceeded {
+            max_tickets_per_depositor: config.max_tickets_per_depositor,
+            post_transaction_num_depositor_tickets,
+        });
     }
 
     for combination in new_combinations {
@@ -463,9 +483,9 @@ pub fn execute_deposit(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    combinations: Vec<String>,
+    encoded_tickets: String,
 ) -> Result<Response, ContractError> {
-    deposit(deps.branch(), env, info, None, combinations)
+    deposit(deps.branch(), env, info, None, encoded_tickets)
 }
 
 // Gift several tickets at once to a given address
@@ -473,13 +493,13 @@ pub fn execute_gift(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    combinations: Vec<String>,
+    encoded_tickets: String,
     to: String,
 ) -> Result<Response, ContractError> {
     if to == info.sender {
         return Err(ContractError::GiftToSelf {});
     }
-    deposit(deps.branch(), env, info, Some(to), combinations)
+    deposit(deps.branch(), env, info, Some(to), encoded_tickets)
 }
 
 // Make a donation deposit to the lottery pool
@@ -1249,6 +1269,7 @@ pub fn execute_update_config(
     unbonding_period: Option<u64>,
     epoch_interval: Option<u64>,
     max_holders: Option<u8>,
+    max_tickets_per_depositor: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1306,6 +1327,10 @@ pub fn execute_update_config(
         }
 
         config.max_holders = max_holders;
+    }
+
+    if let Some(max_tickets_per_depositor) = max_tickets_per_depositor {
+        config.max_tickets_per_depositor = max_tickets_per_depositor;
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -1434,6 +1459,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         split_factor: config.split_factor,
         instant_withdrawal_fee: config.instant_withdrawal_fee,
         unbonding_period: config.unbonding_period,
+        max_tickets_per_depositor: config.max_tickets_per_depositor,
     })
 }
 
@@ -1591,6 +1617,33 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    // migrate config
+    let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
+    let new_config = Config {
+        owner: old_config.owner,
+        a_terra_contract: old_config.a_terra_contract,
+        gov_contract: old_config.gov_contract,
+        distributor_contract: old_config.distributor_contract,
+        oracle_contract: old_config.oracle_contract,
+        stable_denom: old_config.stable_denom,
+        anchor_contract: old_config.anchor_contract,
+        lottery_interval: old_config.lottery_interval,
+        epoch_interval: old_config.epoch_interval,
+        block_time: old_config.block_time,
+        round_delta: old_config.round_delta,
+        ticket_price: old_config.ticket_price,
+        max_holders: old_config.max_holders,
+        prize_distribution: old_config.prize_distribution,
+        target_award: old_config.target_award,
+        reserve_factor: old_config.reserve_factor,
+        split_factor: old_config.split_factor,
+        instant_withdrawal_fee: old_config.instant_withdrawal_fee,
+        unbonding_period: old_config.unbonding_period,
+        max_tickets_per_depositor: 100,
+    };
+
+    CONFIG.save(deps.storage, &new_config)?;
+
     Ok(Response::default())
 }

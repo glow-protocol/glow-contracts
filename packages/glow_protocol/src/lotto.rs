@@ -62,10 +62,10 @@ pub enum ExecuteMsg {
         round_delta: Option<u64>,
     },
     /// Deposit amount of stable into the pool
-    Deposit { combinations: Vec<String> },
+    Deposit { encoded_tickets: String },
     /// Deposit amount of stable into the pool in the name of the recipient
     Gift {
-        combinations: Vec<String>,
+        encoded_tickets: String,
         recipient: String,
     },
     /// Sponsor the pool. If award is true, sponsor the award available directly

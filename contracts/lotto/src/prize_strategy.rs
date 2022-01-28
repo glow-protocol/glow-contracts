@@ -301,7 +301,7 @@ pub fn execute_prize(
                     winnings[matches as usize] = 1;
 
                     let depositor_info: DepositorInfo =
-                        read_depositor_info(deps.as_ref().storage, &winner);
+                        read_depositor_info(deps.as_ref().storage, winner);
 
                     PrizeInfo {
                         claimed: false,

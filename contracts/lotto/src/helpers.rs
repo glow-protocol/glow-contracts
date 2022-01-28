@@ -107,10 +107,10 @@ pub fn calculate_winner_prize(
 
     // User voting balance
     let user_voting_balance = if let Ok(response) = query_address_voting_balance_at_height(
-        &querier,
+        querier,
         &config.gov_contract,
         *block_height,
-        &winner_address,
+        winner_address,
     ) {
         response.balance
     } else {
@@ -120,7 +120,7 @@ pub fn calculate_winner_prize(
     // Total voting balance
 
     let total_voting_balance = if let Ok(response) =
-        query_total_voting_balance_at_height(&querier, &config.gov_contract, *block_height)
+        query_total_voting_balance_at_height(querier, &config.gov_contract, *block_height)
     {
         response.total_supply
     } else {

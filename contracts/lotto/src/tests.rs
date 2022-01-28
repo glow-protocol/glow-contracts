@@ -11,7 +11,7 @@ use crate::mock_querier::{
 };
 use crate::state::{
     query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
-    DepositorInfo, LotteryInfo, PrizeInfo, STATE,
+    DepositorInfo, LotteryInfo, PrizeInfo, CONFIG, STATE,
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
@@ -2221,16 +2221,20 @@ fn claim_lottery_single_winner() {
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
-            page: "".to_string()
+            page: "".to_string(),
+            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            block_height: env.block.height,
+            total_user_lottery_deposits: minted_lottery_aust_value
         }
     );
 
-    let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
+    let prize_info = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(
-        prizes,
+        prize_info,
         PrizeInfo {
             claimed: false,
-            matches: number_winners
+            matches: number_winners,
+            lottery_deposit: Uint256::zero()
         }
     );
 
@@ -2251,27 +2255,34 @@ fn claim_lottery_single_winner() {
     };
 
     // Claim lottery should work, even if there are no unbonded claims
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info.clone(), msg).unwrap();
 
-    let mut prize = calculate_winner_prize(
-        lottery.prize_buckets,
-        prizes.matches,
-        lottery.number_winners,
-    );
+    let config = CONFIG.load(deps.as_ref().storage).unwrap();
+    let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
+    let winner_address = info.sender;
+    let (mut ust_to_send, glow_to_send): (Uint128, Uint128) = calculate_winner_prize(
+        &deps.as_mut().querier,
+        &config,
+        &prize_info,
+        &lottery_info,
+        &winner_address,
+    )
+    .unwrap();
 
     let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(
         prizes,
         PrizeInfo {
             claimed: true,
-            matches: [0, 0, 0, 0, 0, 0, 1]
+            matches: [0, 0, 0, 0, 0, 0, 1],
+            lottery_deposit: Uint256::zero()
         }
     );
 
     //deduct reserve fee
     let config = query_config(deps.as_ref()).unwrap();
-    let reserve_fee = Uint256::from(prize) * config.reserve_factor;
-    prize -= Uint128::from(reserve_fee);
+    let reserve_fee = Uint256::from(ust_to_send) * config.reserve_factor;
+    ust_to_send -= Uint128::from(reserve_fee);
 
     //check total_reserve
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
@@ -2283,7 +2294,7 @@ fn claim_lottery_single_winner() {
             to_address: "addr0000".to_string(),
             amount: vec![Coin {
                 denom: String::from("uusd"),
-                amount: prize,
+                amount: ust_to_send,
             }],
         }))]
     );
@@ -2294,7 +2305,8 @@ fn claim_lottery_single_winner() {
             attr("action", "claim_lottery"),
             attr("lottery_ids", "[0]"),
             attr("depositor", "addr0000"),
-            attr("redeemed_amount", prize.to_string()),
+            attr("redeemed_amount", ust_to_send.to_string()),
+            attr("redeemed_glow", glow_to_send.to_string()),
         ]
     );
 }
@@ -2818,7 +2830,7 @@ fn execute_prize_no_winners() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Check lottery info was updated correctly
     let awarded_prize = Uint256::zero();
@@ -2833,7 +2845,10 @@ fn execute_prize_no_winners() {
             timestamp: exec_height,
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             number_winners: [0; NUM_PRIZE_BUCKETS],
-            page: "".to_string()
+            page: "".to_string(),
+            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            block_height: env.block.height,
+            total_user_lottery_deposits: minted_lottery_aust_value
         }
     );
 
@@ -2937,7 +2952,7 @@ fn execute_prize_one_winner() {
         env.block.time = env.block.time.plus_seconds(time);
     }
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 0, 0, 1];
     let lottery_prize_buckets =
@@ -2952,7 +2967,10 @@ fn execute_prize_one_winner() {
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
-            page: "".to_string()
+            page: "".to_string(),
+            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            block_height: env.block.height,
+            total_user_lottery_deposits: minted_lottery_aust_value
         }
     );
 
@@ -3095,7 +3113,7 @@ fn execute_prize_winners_diff_ranks() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let number_winners = [0, 0, 1, 0, 0, 0, 1];
     let lottery_prize_buckets =
@@ -3110,7 +3128,10 @@ fn execute_prize_winners_diff_ranks() {
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
-            page: "".to_string()
+            page: "".to_string(),
+            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            block_height: env.block.height,
+            total_user_lottery_deposits: minted_lottery_aust_value
         }
     );
 
@@ -3261,7 +3282,7 @@ fn execute_prize_winners_same_rank() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 2, 0, 0];
     let lottery_prize_buckets =
@@ -3276,7 +3297,10 @@ fn execute_prize_winners_same_rank() {
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
-            page: "".to_string()
+            page: "".to_string(),
+            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            block_height: env.block.height,
+            total_user_lottery_deposits: minted_lottery_aust_value
         }
     );
 
@@ -3417,7 +3441,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 3, 0, 1];
     let lottery_prize_buckets =
@@ -3437,7 +3461,10 @@ fn execute_prize_one_winner_multiple_ranks() {
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
-            page: "".to_string()
+            page: "".to_string(),
+            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            block_height: env.block.height,
+            total_user_lottery_deposits: total_lottery_deposit_amount
         }
     );
 
@@ -3516,6 +3543,14 @@ fn execute_prize_multiple_winners_one_ticket() {
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
+    // calculate the value of each deposit accounting for rounding errors
+    let each_lottery_deposit_amount = (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
+        * Decimal256::percent(SPLIT_FACTOR))
+        * Decimal256::permille(RATE);
+
+    // calculate the total minted_aust_value
+    let total_lottery_deposit_amount = Uint256::from(3u128) * each_lottery_deposit_amount;
+
     let address_0 = deps.api.addr_validate("addr0000").unwrap();
     let address_1 = deps.api.addr_validate("addr1111").unwrap();
     let address_2 = deps.api.addr_validate("addr2222").unwrap();
@@ -3562,7 +3597,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 0, 0, 3];
     let lottery_prize_buckets =
@@ -3577,7 +3612,10 @@ fn execute_prize_multiple_winners_one_ticket() {
             timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
-            page: "".to_string()
+            page: "".to_string(),
+            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            block_height: env.block.height,
+            total_user_lottery_deposits: total_lottery_deposit_amount
         }
     );
 

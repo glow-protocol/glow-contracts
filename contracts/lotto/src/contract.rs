@@ -1152,7 +1152,8 @@ pub fn execute_claim_lottery(
         attr("action", "claim_lottery"),
         attr("lottery_ids", format!("{:?}", lottery_ids)),
         attr("depositor", info.sender.to_string()),
-        attr("redeemed_amount", net_send),
+        attr("redeemed_ust", net_send),
+        attr("redeemed_glow", glow_to_send),
     ]))
 }
 

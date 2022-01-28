@@ -1132,14 +1132,16 @@ pub fn execute_claim_lottery(
 
     // glow_to_send calculations
 
-    msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.distributor_contract.to_string(),
-        funds: vec![],
-        msg: to_binary(&FaucetExecuteMsg::Spend {
-            recipient: info.sender.to_string(),
-            amount: glow_to_send,
-        })?,
-    }));
+    if glow_to_send != Uint128::zero() {
+        msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.distributor_contract.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: info.sender.to_string(),
+                amount: glow_to_send,
+            })?,
+        }));
+    }
 
     // Update storage
 

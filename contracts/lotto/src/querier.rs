@@ -14,9 +14,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Balance { address: String },
-    BalanceAt { address: String, height: u64 },
+    BalanceAt { address: String, block_height: u64 },
     TotalSupply {},
-    TotalSupplyAt { height: u64 },
+    TotalSupplyAt { block_height: u64 },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
@@ -32,13 +32,13 @@ pub struct TotalSupplyResponse {
 pub fn query_exchange_rate(
     deps: Deps,
     money_market_addr: String,
-    height: u64,
+    block_height: u64,
 ) -> StdResult<EpochStateResponse> {
     let epoch_state: EpochStateResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: money_market_addr,
             msg: to_binary(&AnchorMsg::EpochState {
-                block_height: Some(height),
+                block_height: Some(block_height),
                 distributed_interest: None,
             })?,
         }))?;
@@ -88,7 +88,7 @@ pub fn query_address_voting_balance_at_height(
         contract_addr: gov.to_string(),
         msg: to_binary(&QueryMsg::BalanceAt {
             address: address.to_string(),
-            height: block_height,
+            block_height,
         })?,
     }))?;
 
@@ -103,9 +103,7 @@ pub fn query_total_voting_balance_at_height(
     let total_supply: TotalSupplyResponse =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: gov.to_string(),
-            msg: to_binary(&QueryMsg::TotalSupplyAt {
-                height: block_height,
-            })?,
+            msg: to_binary(&QueryMsg::TotalSupplyAt { block_height })?,
         }))?;
 
     Ok(total_supply)

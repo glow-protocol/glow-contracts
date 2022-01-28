@@ -91,11 +91,16 @@ lazy_static! {
     static ref GLOW_PRIZE_BUCKETS: [Uint256; NUM_PRIZE_BUCKETS] = [
         Uint256::from(0u128),
         Uint256::from(0u128),
-        Uint256::from(10 * u128::pow(10, 6)),
-        Uint256::from(10 * u128::pow(10, 6)),
-        Uint256::from(10 * u128::pow(10, 6)),
-        Uint256::from(10 * u128::pow(10, 6)),
-        Uint256::from(10 * u128::pow(10, 6)),
+        Uint256::from(0u128),
+        Uint256::from(0u128),
+        Uint256::from(0u128),
+        Uint256::from(0u128),
+        Uint256::from(0u128),
+        // Uint256::from(10 * u128::pow(10, 6)),
+        // Uint256::from(10 * u128::pow(10, 6)),
+        // Uint256::from(10 * u128::pow(10, 6)),
+        // Uint256::from(10 * u128::pow(10, 6)),
+        // Uint256::from(10 * u128::pow(10, 6)),
     ];
 }
 
@@ -2210,6 +2215,7 @@ fn claim_lottery_single_winner() {
     let number_winners = [0, 0, 0, 0, 0, 0, 1];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
+    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
 
     let lottery = read_lottery_info(deps.as_ref().storage, 0u64);
     assert_eq!(
@@ -2222,7 +2228,7 @@ fn claim_lottery_single_winner() {
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
-            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            glow_prize_buckets,
             block_height: env.block.height,
             total_user_lottery_deposits: minted_lottery_aust_value
         }
@@ -2234,7 +2240,7 @@ fn claim_lottery_single_winner() {
         PrizeInfo {
             claimed: false,
             matches: number_winners,
-            lottery_deposit: Uint256::zero()
+            lottery_deposit: minted_lottery_aust_value
         }
     );
 
@@ -2275,7 +2281,7 @@ fn claim_lottery_single_winner() {
         PrizeInfo {
             claimed: true,
             matches: [0, 0, 0, 0, 0, 0, 1],
-            lottery_deposit: Uint256::zero()
+            lottery_deposit: minted_lottery_aust_value
         }
     );
 
@@ -2305,7 +2311,7 @@ fn claim_lottery_single_winner() {
             attr("action", "claim_lottery"),
             attr("lottery_ids", "[0]"),
             attr("depositor", "addr0000"),
-            attr("redeemed_amount", ust_to_send.to_string()),
+            attr("redeemed_ust", ust_to_send.to_string()),
             attr("redeemed_glow", glow_to_send.to_string()),
         ]
     );
@@ -2846,7 +2852,7 @@ fn execute_prize_no_winners() {
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             number_winners: [0; NUM_PRIZE_BUCKETS],
             page: "".to_string(),
-            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             block_height: env.block.height,
             total_user_lottery_deposits: minted_lottery_aust_value
         }
@@ -2958,6 +2964,8 @@ fn execute_prize_one_winner() {
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
+    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
@@ -2968,7 +2976,7 @@ fn execute_prize_one_winner() {
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
-            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            glow_prize_buckets,
             block_height: env.block.height,
             total_user_lottery_deposits: minted_lottery_aust_value
         }
@@ -3118,6 +3126,15 @@ fn execute_prize_winners_diff_ranks() {
     let number_winners = [0, 0, 1, 0, 0, 0, 1];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
+    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+
+    // calculate the value of each deposit accounting for rounding errors
+    let each_lottery_deposit_amount = (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
+        * Decimal256::percent(SPLIT_FACTOR))
+        * Decimal256::permille(RATE);
+
+    // calculate the total minted_aust_value
+    let total_lottery_deposit_amount = Uint256::from(2u128) * each_lottery_deposit_amount;
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -3129,9 +3146,9 @@ fn execute_prize_winners_diff_ranks() {
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
-            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            glow_prize_buckets,
             block_height: env.block.height,
-            total_user_lottery_deposits: minted_lottery_aust_value
+            total_user_lottery_deposits: total_lottery_deposit_amount
         }
     );
 
@@ -3288,6 +3305,16 @@ fn execute_prize_winners_same_rank() {
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
+    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+
+    // calculate the value of each deposit accounting for rounding errors
+    let each_lottery_deposit_amount = (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
+        * Decimal256::percent(SPLIT_FACTOR))
+        * Decimal256::permille(RATE);
+
+    // calculate the total minted_aust_value
+    let total_lottery_deposit_amount = Uint256::from(2u128) * each_lottery_deposit_amount;
+
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
         LotteryInfo {
@@ -3298,9 +3325,9 @@ fn execute_prize_winners_same_rank() {
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
-            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            glow_prize_buckets,
             block_height: env.block.height,
-            total_user_lottery_deposits: minted_lottery_aust_value
+            total_user_lottery_deposits: total_lottery_deposit_amount
         }
     );
 
@@ -3447,6 +3474,8 @@ fn execute_prize_one_winner_multiple_ranks() {
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
 
+    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+
     println!(
         "lottery_info: {:x?}",
         read_lottery_info(deps.as_ref().storage, 0u64)
@@ -3462,7 +3491,7 @@ fn execute_prize_one_winner_multiple_ranks() {
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
-            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            glow_prize_buckets,
             block_height: env.block.height,
             total_user_lottery_deposits: total_lottery_deposit_amount
         }
@@ -3602,6 +3631,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     let number_winners = [0, 0, 0, 0, 0, 0, 3];
     let lottery_prize_buckets =
         calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
+    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -3613,7 +3643,7 @@ fn execute_prize_multiple_winners_one_ticket() {
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
-            glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+            glow_prize_buckets,
             block_height: env.block.height,
             total_user_lottery_deposits: total_lottery_deposit_amount
         }

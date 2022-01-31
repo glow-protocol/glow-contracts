@@ -4,11 +4,20 @@
   "type": "object",
   "required": [
     "glow_token",
+    "gov_contract",
+    "lotto_contract",
     "owner",
-    "spend_limit"
+    "spend_limit",
+    "stable_denom"
   ],
   "properties": {
     "glow_token": {
+      "type": "string"
+    },
+    "gov_contract": {
+      "type": "string"
+    },
+    "lotto_contract": {
       "type": "string"
     },
     "owner": {
@@ -16,6 +25,9 @@
     },
     "spend_limit": {
       "$ref": "#/definitions/Uint128"
+    },
+    "stable_denom": {
+      "type": "string"
     }
   },
   "definitions": {

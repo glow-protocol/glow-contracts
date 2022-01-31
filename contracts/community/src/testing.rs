@@ -11,7 +11,10 @@ fn proper_initialization() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
+        stable_denom: "uusd".to_string(),
         glow_token: "glow".to_string(),
+        lotto_contract: "lotto".to_string(),
+        gov_contract: "gov".to_string(),
         spend_limit: Uint128::from(1000000u128),
     };
 
@@ -34,7 +37,10 @@ fn update_spend_limit() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
+        stable_denom: "uusd".to_string(),
         glow_token: "glow".to_string(),
+        lotto_contract: "lotto".to_string(),
+        gov_contract: "gov".to_string(),
         spend_limit: Uint128::from(1000000u128),
     };
 
@@ -72,7 +78,10 @@ fn update_spend_limit() {
         config,
         ConfigResponse {
             owner: "owner".to_string(),
+            stable_denom: "uusd".to_string(),
             glow_token: "glow".to_string(),
+            lotto_contract: "lotto".to_string(),
+            gov_contract: "gov".to_string(),
             spend_limit: Uint128::from(500000u128),
         }
     );
@@ -84,7 +93,10 @@ fn transfer_ownership_gov() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
+        stable_denom: "uusd".to_string(),
         glow_token: "glow".to_string(),
+        lotto_contract: "lotto".to_string(),
+        gov_contract: "gov".to_string(),
         spend_limit: Uint128::from(1000000u128),
     };
 
@@ -120,7 +132,10 @@ fn transfer_ownership_gov() {
         config,
         ConfigResponse {
             owner: "gov".to_string(),
+            stable_denom: "uusd".to_string(),
             glow_token: "glow".to_string(),
+            lotto_contract: "lotto".to_string(),
+            gov_contract: "gov".to_string(),
             spend_limit: Uint128::from(1000000u128),
         }
     );
@@ -144,7 +159,10 @@ fn test_spend() {
 
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
+        stable_denom: "uusd".to_string(),
         glow_token: "glow".to_string(),
+        lotto_contract: "lotto".to_string(),
+        gov_contract: "gov".to_string(),
         spend_limit: Uint128::from(1000000u128),
     };
 

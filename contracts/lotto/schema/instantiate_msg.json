@@ -12,6 +12,7 @@
     "instant_withdrawal_fee",
     "lottery_interval",
     "max_holders",
+    "max_tickets_per_depositor",
     "oracle_contract",
     "owner",
     "prize_distribution",
@@ -59,6 +60,11 @@
     "max_holders": {
       "type": "integer",
       "format": "uint8",
+      "minimum": 0.0
+    },
+    "max_tickets_per_depositor": {
+      "type": "integer",
+      "format": "uint64",
       "minimum": 0.0
     },
     "oracle_contract": {

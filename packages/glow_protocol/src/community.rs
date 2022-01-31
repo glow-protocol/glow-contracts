@@ -1,9 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Uint128};
 use cosmwasm_bignumber::Decimal256;
-
+use cosmwasm_std::Uint128;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -30,12 +29,12 @@ pub enum ExecuteMsg {
         amount: Uint128,
         recipient: String,
     },
-        SponsorLotto{
+    SponsorLotto {
         amount: Uint128,
         award: Option<bool>,
-        prize_distribution: Option<[Decimal256;7]>,
+        prize_distribution: Option<[Decimal256; 7]>,
     },
-    WithdrawSponsor{},
+    WithdrawSponsor {},
 }
 
 /// Migrations message

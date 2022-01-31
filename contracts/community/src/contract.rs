@@ -13,7 +13,6 @@ use glow_protocol::community::{ConfigResponse, ExecuteMsg, InstantiateMsg, Migra
 use cosmwasm_bignumber::Decimal256;
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::lotto::ExecuteMsg as LottoMsg;
-use glow_protocol::querier::deduct_tax;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -147,13 +146,10 @@ pub fn transfer_stable(
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Bank(BankMsg::Send {
             to_address: recipient_address.to_string(),
-            amount: vec![deduct_tax(
-                deps.as_ref(),
-                Coin {
-                    denom: config.stable_denom,
-                    amount,
-                },
-            )?],
+            amount: vec![Coin {
+                denom: config.stable_denom,
+                amount,
+            }],
         })])
         .add_attributes(vec![
             ("action", "spend"),
@@ -182,13 +178,10 @@ pub fn sponsor_lotto(
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: lotto,
-            funds: vec![deduct_tax(
-                deps.as_ref(),
-                Coin {
-                    denom: config.stable_denom,
-                    amount,
-                },
-            )?],
+            funds: vec![Coin {
+                denom: config.stable_denom,
+                amount,
+            }],
             msg: to_binary(&LottoMsg::Sponsor {
                 award,
                 prize_distribution,

@@ -20,6 +20,8 @@ use glow_protocol::staking::{
     StakerInfoResponse, StateResponse,
 };
 
+pub const TOTAL_DISTRIBUTION_AMOUNT: u128 = 100_000_000_000_000;
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -223,8 +225,7 @@ pub fn migrate_staking(
     // compute global reward, sets last_distributed_height to env.block.height
     compute_reward(&config, &mut state, env.block.height);
 
-    let total_distribution_amount: Uint128 =
-        config.distribution_schedule.iter().map(|item| item.2).sum();
+    let total_distribution_amount = Uint128::from(TOTAL_DISTRIBUTION_AMOUNT);
 
     let block_height = env.block.height;
     // eliminate distribution slots that have not started

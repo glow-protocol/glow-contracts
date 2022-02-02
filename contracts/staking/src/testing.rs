@@ -475,7 +475,7 @@ fn test_migrate_staking() {
         vec![
             attr("action", "migrate_staking"),
             attr("distributed_amount", "6000000"), // 1000000 + (10000000 / 2)
-            attr("remaining_amount", "5000000")    // 11,000,000 - 6000000
+            attr("remaining_amount", "99999994000000")  // 100_000_000_000_000 - 6_000_000
         ]
     );
 
@@ -485,7 +485,7 @@ fn test_migrate_staking() {
             contract_addr: "reward0000".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "newstaking0000".to_string(),
-                amount: Uint128::from(5000000u128),
+                amount: Uint128::from(99999994000000u128),
             })
             .unwrap(),
             funds: vec![],

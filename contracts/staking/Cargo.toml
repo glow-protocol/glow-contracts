@@ -3,7 +3,7 @@ name = "glow-staking"
 version = "1.0.0"
 authors = ["Glow Protocol Ltd."]
 edition = "2018"
-description = "A Staking contract for Glow Protocol - distribute rewards to stakers"
+description = "A Staking contract for Glow Protocol - distribute rewards to stakers. Inspired by Anchor Token Contracts"
 license = "Apache-2.0"
 
 exclude = [

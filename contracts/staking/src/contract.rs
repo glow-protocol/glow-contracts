@@ -17,6 +17,7 @@ use glow_protocol::staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
     StakerInfoResponse, StateResponse,
 };
+use std::collections::BTreeMap;
 
 pub const TOTAL_DISTRIBUTION_AMOUNT: u128 = 100_000_000_000_000;
 
@@ -47,7 +48,7 @@ pub fn instantiate(
     store_state(
         deps.storage,
         &State {
-            last_distributed: env.block.height,
+            last_distributed: env.block.time.seconds(),
             total_bond_amount: Uint128::zero(),
             global_reward_index: Decimal::zero(),
         },
@@ -62,6 +63,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::Withdraw {} => withdraw(deps, env, info),
+        ExecuteMsg::UpdateConfig {
+            owner,
+            distribution_schedule,
+        } => update_config(deps, env, info, owner, distribution_schedule),
         ExecuteMsg::MigrateStaking {
             new_staking_contract,
         } => migrate_staking(deps, env, info, new_staking_contract),
@@ -98,7 +103,7 @@ pub fn bond(deps: DepsMut, env: Env, sender_addr: Addr, amount: Uint128) -> StdR
     let mut staker_info: StakerInfo = read_staker_info(deps.storage, &sender_addr_raw)?;
 
     // Compute global reward & staker reward
-    compute_reward(&config, &mut state, env.block.height);
+    compute_reward(&config, &mut state, env.block.time.seconds());
     compute_staker_reward(&state, &mut staker_info)?;
 
     // Increase bond_amount
@@ -127,7 +132,7 @@ pub fn unbond(deps: DepsMut, env: Env, info: MessageInfo, amount: Uint128) -> St
     }
 
     // Compute global reward & staker reward
-    compute_reward(&config, &mut state, env.block.height);
+    compute_reward(&config, &mut state, env.block.time.seconds());
     compute_staker_reward(&state, &mut staker_info)?;
 
     // Decrease bond_amount
@@ -169,7 +174,7 @@ pub fn withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
     let mut staker_info = read_staker_info(deps.storage, &sender_addr_raw)?;
 
     // Compute global reward & staker reward
-    compute_reward(&config, &mut state, env.block.height);
+    compute_reward(&config, &mut state, env.block.time.seconds());
     compute_staker_reward(&state, &mut staker_info)?;
 
     let amount = staker_info.pending_reward;
@@ -202,6 +207,47 @@ pub fn withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
         ]))
 }
 
+pub fn update_config(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    owner: Option<String>,
+    distribution_schedule: Option<Vec<(u64, u64, Uint128)>>,
+) -> StdResult<Response> {
+    // get gov address by querying anc token minter
+    let config: Config = read_config(deps.storage)?;
+    let state: State = read_state(deps.storage)?;
+
+    let sender_addr_raw: CanonicalAddr = deps.api.addr_canonicalize(info.sender.as_str())?;
+    if sender_addr_raw != config.owner {
+        return Err(StdError::generic_err("Unauthorized"));
+    }
+
+    let owner: CanonicalAddr = if let Some(owner) = owner {
+        deps.api.addr_canonicalize(&owner)?
+    } else {
+        config.owner.clone()
+    };
+
+    let distribution_schedule: Vec<(u64, u64, Uint128)> =
+        if let Some(new_distribution_schedule) = distribution_schedule {
+            assert_new_schedules(&config, &state, new_distribution_schedule.clone())?;
+            new_distribution_schedule
+        } else {
+            config.distribution_schedule
+        };
+
+    let new_config = Config {
+        owner,
+        glow_token: config.glow_token,
+        staking_token: config.staking_token,
+        distribution_schedule,
+    };
+    store_config(deps.storage, &new_config)?;
+
+    Ok(Response::new().add_attributes(vec![("action", "update_config")]))
+}
+
 pub fn migrate_staking(
     deps: DepsMut,
     env: Env,
@@ -218,33 +264,33 @@ pub fn migrate_staking(
     }
 
     // compute global reward, sets last_distributed_height to env.block.height
-    compute_reward(&config, &mut state, env.block.height);
+    compute_reward(&config, &mut state, env.block.time.seconds());
 
     let total_distribution_amount = Uint128::from(TOTAL_DISTRIBUTION_AMOUNT);
 
-    let block_height = env.block.height;
+    let block_time = env.block.time.seconds();
     // eliminate distribution slots that have not started
     config
         .distribution_schedule
-        .retain(|slot| slot.0 < block_height);
+        .retain(|slot| slot.0 < block_time);
 
     let mut distributed_amount = Uint128::zero();
     for s in config.distribution_schedule.iter_mut() {
-        if s.1 < block_height {
+        if s.1 < block_time {
             // all distributed
             distributed_amount += s.2;
         } else {
             // partially distributed slot
-            let num_blocks = s.1 - s.0;
-            let distribution_amount_per_block: Decimal = Decimal::from_ratio(s.2, num_blocks);
+            let total_time = s.1 - s.0;
+            let distribution_amount_per_second: Decimal = Decimal::from_ratio(s.2, total_time);
 
-            let passed_blocks = block_height - s.0;
+            let time_elapsed = block_time - s.0;
             let distributed_amount_on_slot =
-                distribution_amount_per_block * Uint128::from(passed_blocks as u128);
+                distribution_amount_per_second * Uint128::from(time_elapsed as u128);
             distributed_amount += distributed_amount_on_slot;
 
             // modify distribution slot
-            s.1 = block_height;
+            s.1 = block_time;
             s.2 = distributed_amount_on_slot;
         }
     }
@@ -288,28 +334,28 @@ fn decrease_bond_amount(
 }
 
 // compute distributed rewards and update global reward index
-fn compute_reward(config: &Config, state: &mut State, block_height: u64) {
+fn compute_reward(config: &Config, state: &mut State, block_time: u64) {
     if state.total_bond_amount.is_zero() {
-        state.last_distributed = block_height;
+        state.last_distributed = block_time;
         return;
     }
 
     let mut distributed_amount: Uint128 = Uint128::zero();
     for s in config.distribution_schedule.iter() {
-        if s.0 > block_height || s.1 < state.last_distributed {
+        if s.0 > block_time || s.1 < state.last_distributed {
             continue;
         }
 
-        // min(s.1, block_height) - max(s.0, last_distributed)
-        let passed_blocks =
-            std::cmp::min(s.1, block_height) - std::cmp::max(s.0, state.last_distributed);
+        // min(s.1, block_time) - max(s.0, last_distributed)
+        let elapsed_time =
+            std::cmp::min(s.1, block_time) - std::cmp::max(s.0, state.last_distributed);
 
-        let num_blocks = s.1 - s.0;
-        let distribution_amount_per_block: Decimal = Decimal::from_ratio(s.2, num_blocks);
-        distributed_amount += distribution_amount_per_block * Uint128::from(passed_blocks as u128);
+        let total_time = s.1 - s.0;
+        let distribution_amount_per_second: Decimal = Decimal::from_ratio(s.2, total_time);
+        distributed_amount += distribution_amount_per_second * Uint128::from(elapsed_time as u128);
     }
 
-    state.last_distributed = block_height;
+    state.last_distributed = block_time;
     state.global_reward_index = state.global_reward_index
         + Decimal::from_ratio(distributed_amount, state.total_bond_amount);
 }
@@ -328,42 +374,42 @@ fn compute_staker_reward(state: &State, staker_info: &mut StakerInfo) -> StdResu
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::State { block_height } => to_binary(&query_state(deps, env, block_height)?),
-        QueryMsg::StakerInfo {
-            staker,
-            block_height,
-        } => to_binary(&query_staker_info(deps, staker, block_height)?),
+        QueryMsg::State { block_time } => to_binary(&query_state(deps, env, block_time)?),
+        QueryMsg::StakerInfo { staker, block_time } => {
+            to_binary(&query_staker_info(deps, staker, block_time)?)
+        }
     }
 }
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let state = read_config(deps.storage)?;
+    let config = read_config(deps.storage)?;
     let resp = ConfigResponse {
-        glow_token: deps.api.addr_humanize(&state.glow_token)?.to_string(),
-        staking_token: deps.api.addr_humanize(&state.staking_token)?.to_string(),
-        distribution_schedule: state.distribution_schedule,
+        owner: deps.api.addr_humanize(&config.owner)?.to_string(),
+        glow_token: deps.api.addr_humanize(&config.glow_token)?.to_string(),
+        staking_token: deps.api.addr_humanize(&config.staking_token)?.to_string(),
+        distribution_schedule: config.distribution_schedule,
     };
 
     Ok(resp)
 }
 
-pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
+pub fn query_state(deps: Deps, env: Env, block_time: Option<u64>) -> StdResult<StateResponse> {
     let mut state: State = read_state(deps.storage)?;
     let config = read_config(deps.storage)?;
 
-    let block_height = if let Some(block_height) = block_height {
-        block_height
+    let block_time = if let Some(block_time) = block_time {
+        block_time
     } else {
-        env.block.height
+        env.block.time.seconds()
     };
 
-    if block_height < state.last_distributed {
+    if block_time < state.last_distributed {
         return Err(StdError::generic_err(
-            "Block_height must be greater than last_distributed",
+            "Block time must be greater than last_distributed",
         ));
     }
 
-    compute_reward(&config, &mut state, block_height);
+    compute_reward(&config, &mut state, block_time);
 
     Ok(StateResponse {
         last_distributed: state.last_distributed,
@@ -375,16 +421,16 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
 pub fn query_staker_info(
     deps: Deps,
     staker: String,
-    block_height: Option<u64>,
+    block_time: Option<u64>,
 ) -> StdResult<StakerInfoResponse> {
     let staker_raw = deps.api.addr_canonicalize(&staker)?;
 
     let mut staker_info: StakerInfo = read_staker_info(deps.storage, &staker_raw)?;
-    if let Some(block_height) = block_height {
+    if let Some(block_time) = block_time {
         let config = read_config(deps.storage)?;
         let mut state = read_state(deps.storage)?;
 
-        compute_reward(&config, &mut state, block_height);
+        compute_reward(&config, &mut state, block_time);
         compute_staker_reward(&state, &mut staker_info)?;
     }
 
@@ -396,15 +442,70 @@ pub fn query_staker_info(
     })
 }
 
+pub fn assert_new_schedules(
+    config: &Config,
+    state: &State,
+    distribution_schedule: Vec<(u64, u64, Uint128)>,
+) -> StdResult<()> {
+    if distribution_schedule.len() < config.distribution_schedule.len() {
+        return Err(StdError::generic_err(
+            "The new schedule must support all of the previous schedule",
+        ));
+    }
+
+    let mut existing_counts: BTreeMap<(u64, u64, Uint128), u32> = BTreeMap::new();
+    for schedule in config.distribution_schedule.clone() {
+        let counter = existing_counts.entry(schedule).or_insert(0);
+        *counter += 1;
+    }
+
+    let mut new_counts: BTreeMap<(u64, u64, Uint128), u32> = BTreeMap::new();
+    for schedule in distribution_schedule.clone() {
+        let counter = new_counts.entry(schedule).or_insert(0);
+        *counter += 1;
+    }
+
+    for (schedule, count) in existing_counts.into_iter() {
+        // if began ensure its in the new schedule
+        if schedule.0 <= state.last_distributed {
+            if count > *new_counts.get(&schedule).unwrap_or(&0u32) {
+                return Err(StdError::generic_err(
+                    "The new schedule removes an already started distribution",
+                ));
+            }
+            // after this new_counts will only contain the newly added schedules
+            *new_counts.get_mut(&schedule).unwrap() -= count;
+        }
+    }
+
+    for (schedule, count) in new_counts.into_iter() {
+        if count > 0 && schedule.0 <= state.last_distributed {
+            return Err(StdError::generic_err(
+                "The new schedule adds an already started distribution",
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
     // migrate config
     let old_config = read_old_config(deps.storage)?;
+
+    // validate new distribution schedule
+    for s in msg.distribution_schedule.iter() {
+        // Validate distribution schedules
+        if s.0 >= s.1 {
+            return Err(StdError::generic_err("Invalid distribution schedule"));
+        }
+    }
+
     let new_config = Config {
         owner: deps.api.addr_canonicalize(&msg.owner)?,
         glow_token: old_config.glow_token,
         staking_token: old_config.staking_token,
-        distribution_schedule: old_config.distribution_schedule,
+        distribution_schedule: msg.distribution_schedule,
     };
 
     // store new config in contract

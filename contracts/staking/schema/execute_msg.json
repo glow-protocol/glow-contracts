@@ -48,6 +48,52 @@
       "additionalProperties": false
     },
     {
+      "type": "object",
+      "required": [
+        "update_config"
+      ],
+      "properties": {
+        "update_config": {
+          "type": "object",
+          "properties": {
+            "distribution_schedule": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "$ref": "#/definitions/Uint128"
+                  }
+                ],
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "owner": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Owner operation to stop distribution on current staking contract and send remaining tokens to the new contract",
       "type": "object",
       "required": [

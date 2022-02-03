@@ -5,6 +5,7 @@
   "required": [
     "distribution_schedule",
     "glow_token",
+    "owner",
     "staking_token"
   ],
   "properties": {
@@ -32,6 +33,9 @@
       }
     },
     "glow_token": {
+      "type": "string"
+    },
+    "owner": {
       "type": "string"
     },
     "staking_token": {

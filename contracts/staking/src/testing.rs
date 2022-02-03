@@ -1,6 +1,5 @@
 use crate::contract::{execute, instantiate, query};
-use crate::mock_querier::mock_dependencies;
-use cosmwasm_std::testing::{mock_env, mock_info};
+use cosmwasm_std::testing::{mock_env, mock_info, mock_dependencies};
 use cosmwasm_std::{
     attr, from_binary, to_binary, CosmosMsg, Decimal, StdError, SubMsg, Uint128, WasmMsg,
 };
@@ -15,6 +14,7 @@ fn proper_initialization() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
+        owner: "owner".to_string(),
         glow_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![(100, 200, Uint128::from(1000000u128))],
@@ -59,6 +59,7 @@ fn test_bond_tokens() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
+        owner: "owner".to_string(),
         glow_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
@@ -186,6 +187,7 @@ fn test_unbond() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
+        owner: "owner".to_string(),
         glow_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
@@ -246,6 +248,7 @@ fn test_compute_reward() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
+        owner: "owner".to_string(),
         glow_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
@@ -359,6 +362,7 @@ fn test_withdraw() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
+        owner: "owner".to_string(),
         glow_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
@@ -407,6 +411,7 @@ fn test_migrate_staking() {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
+        owner: "owner".to_string(),
         glow_token: "reward0000".to_string(),
         staking_token: "staking0000".to_string(),
         distribution_schedule: vec![
@@ -452,22 +457,20 @@ fn test_migrate_staking() {
     // execute migration after 50 blocks
     env.block.height += 50;
 
-    deps.querier.with_glow_minter("gov0000".to_string());
-
     let msg = ExecuteMsg::MigrateStaking {
         new_staking_contract: "newstaking0000".to_string(),
     };
 
     // unauthorized attempt
-    let info = mock_info("notgov0000", &[]);
+    let info = mock_info("not_owner", &[]);
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
     match res {
-        Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "unauthorized"),
+        Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Unauthorized"),
         _ => panic!("Must return unauthorized error"),
     }
 
     // successful attempt
-    let info = mock_info("gov0000", &[]);
+    let info = mock_info("owner", &[]);
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     assert_eq!(

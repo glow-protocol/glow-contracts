@@ -6,14 +6,12 @@ use cosmwasm_std::{
     MessageInfo, Response, StdError, StdResult, Uint128, WasmMsg,
 };
 
-use crate::{
-    querier::query_glow_minter,
-    state::{
-        read_config, read_staker_info, read_state, remove_staker_info, store_config,
-        store_staker_info, store_state, Config, StakerInfo, State,
-    },
+use crate::state::{
+    read_config, read_staker_info, read_state, remove_staker_info, store_config, store_staker_info,
+    store_state, Config, StakerInfo, State,
 };
 
+use crate::state::read_old_config;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use glow_protocol::staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
@@ -39,6 +37,7 @@ pub fn instantiate(
     store_config(
         deps.storage,
         &Config {
+            owner: deps.api.addr_canonicalize(&msg.owner)?,
             glow_token: deps.api.addr_canonicalize(&msg.glow_token)?,
             staking_token: deps.api.addr_canonicalize(&msg.staking_token)?,
             distribution_schedule: msg.distribution_schedule,
@@ -209,17 +208,13 @@ pub fn migrate_staking(
     info: MessageInfo,
     new_staking_contract: String,
 ) -> StdResult<Response> {
-    let sender_addr_raw: CanonicalAddr = deps.api.addr_canonicalize(info.sender.as_str())?;
     let mut config: Config = read_config(deps.storage)?;
     let mut state: State = read_state(deps.storage)?;
     let glow_token: Addr = deps.api.addr_humanize(&config.glow_token)?;
 
-    // get gov address by querying glow token minter
-    let gov_addr_raw: CanonicalAddr = deps
-        .api
-        .addr_canonicalize(&query_glow_minter(&deps.querier, glow_token.clone())?)?;
-    if sender_addr_raw != gov_addr_raw {
-        return Err(StdError::generic_err("unauthorized"));
+    // check only owner can call this function
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
+        return Err(StdError::generic_err("Unauthorized"));
     }
 
     // compute global reward, sets last_distributed_height to env.block.height
@@ -402,6 +397,18 @@ pub fn query_staker_info(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    // migrate config
+    let old_config = read_old_config(deps.storage)?;
+    let new_config = Config {
+        owner: deps.api.addr_canonicalize(&msg.owner)?,
+        glow_token: old_config.glow_token,
+        staking_token: old_config.staking_token,
+        distribution_schedule: old_config.distribution_schedule,
+    };
+
+    // store new config in contract
+    store_config(deps.storage, &new_config)?;
+
     Ok(Response::default())
 }

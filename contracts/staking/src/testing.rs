@@ -585,7 +585,7 @@ fn test_update_config_owner() {
     };
 
     let info = mock_info("addr0000", &[]);
-    let _res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // unauthorized attempt
     let msg = UpdateConfig {
@@ -601,7 +601,7 @@ fn test_update_config_owner() {
 
     // successful change of owner
     let info = mock_info("owner", &[]);
-    let _res = execute(deps.as_mut(), mock_env(), info, msg.clone());
+    let _res = execute(deps.as_mut(), mock_env(), info, msg);
     assert_eq!(
         from_binary::<ConfigResponse>(
             &query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()

@@ -13,6 +13,7 @@ pub struct Config {
     pub glow_token: CanonicalAddr, // glow token address
     pub lotto_contract: CanonicalAddr, // glow lotto address
     pub gov_contract: CanonicalAddr, // glow governance address
+    pub terraswap_factory: CanonicalAddr, // terraswap factory address
     pub spend_limit: Uint128, // spend limit per each `spend` request
 }
 

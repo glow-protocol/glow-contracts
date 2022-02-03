@@ -8,7 +8,8 @@
     "lotto_contract",
     "owner",
     "spend_limit",
-    "stable_denom"
+    "stable_denom",
+    "terraswap_factory"
   ],
   "properties": {
     "glow_token": {
@@ -27,6 +28,9 @@
       "$ref": "#/definitions/Uint128"
     },
     "stable_denom": {
+      "type": "string"
+    },
+    "terraswap_factory": {
       "type": "string"
     }
   },

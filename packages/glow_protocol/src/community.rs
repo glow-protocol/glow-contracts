@@ -11,6 +11,7 @@ pub struct InstantiateMsg {
     pub glow_token: String,   // glow token address
     pub lotto_contract: String, // lotto contract address
     pub gov_contract: String, // gov contract address
+    pub terraswap_factory: String, // terraswap factory contract address
     pub spend_limit: Uint128, // spend limit per each `spend` request
 }
 
@@ -36,6 +37,12 @@ pub enum ExecuteMsg {
         prize_distribution: Option<[Decimal256; 7]>,
     },
     WithdrawSponsor {},
+    Swap {
+        amount: Uint128,
+    },
+    Burn {
+        amount: Uint128,
+    },
 }
 
 /// Migrations message
@@ -43,6 +50,7 @@ pub enum ExecuteMsg {
 pub struct MigrateMsg {
     pub lotto_contract: String,
     pub gov_contract: String,
+    pub terraswap_factory: String,
     pub stable_denom: String,
 }
 
@@ -60,5 +68,6 @@ pub struct ConfigResponse {
     pub glow_token: String,
     pub lotto_contract: String,
     pub gov_contract: String,
+    pub terraswap_factory: String,
     pub spend_limit: Uint128,
 }

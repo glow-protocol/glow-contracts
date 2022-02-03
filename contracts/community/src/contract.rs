@@ -13,6 +13,9 @@ use glow_protocol::community::{ConfigResponse, ExecuteMsg, InstantiateMsg, Migra
 use cosmwasm_bignumber::Decimal256;
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::lotto::ExecuteMsg as LottoMsg;
+use terraswap::asset::{Asset, AssetInfo, PairInfo};
+use terraswap::pair::ExecuteMsg as TerraswapExecuteMsg;
+use terraswap::querier::{query_balance, query_pair_info};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -29,6 +32,7 @@ pub fn instantiate(
             glow_token: deps.api.addr_canonicalize(&msg.glow_token)?,
             lotto_contract: deps.api.addr_canonicalize(&msg.lotto_contract)?,
             gov_contract: deps.api.addr_canonicalize(&msg.gov_contract)?,
+            terraswap_factory: deps.api.addr_canonicalize(&msg.terraswap_factory)?,
             spend_limit: msg.spend_limit,
         },
     )?;
@@ -37,12 +41,7 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    msg: ExecuteMsg,
-) -> StdResult<Response> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         ExecuteMsg::UpdateConfig { spend_limit, owner } => {
             update_config(deps, info, spend_limit, owner)
@@ -57,6 +56,8 @@ pub fn execute(
             prize_distribution,
         } => sponsor_lotto(deps, info, amount, award, prize_distribution),
         ExecuteMsg::WithdrawSponsor {} => withdraw_sponsor(deps, info),
+        ExecuteMsg::Swap { amount } => execute_swap(deps, info, env, amount),
+        ExecuteMsg::Burn { amount } => execute_burn(deps, info, amount),
     }
 }
 
@@ -212,6 +213,109 @@ pub fn withdraw_sponsor(deps: DepsMut, info: MessageInfo) -> StdResult<Response>
         .add_attributes(vec![("action", "withdraw_sponsor")]))
 }
 
+/// Swap
+/// Owner can execute sweep function to swap
+/// asset config native denom => GLOW token
+pub fn execute_swap(
+    deps: DepsMut,
+    info: MessageInfo,
+    env: Env,
+    amount: Uint128,
+) -> StdResult<Response> {
+    let config: Config = read_config(deps.storage)?;
+
+    // Check only owner can call
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
+        return Err(StdError::generic_err("Unauthorized"));
+    }
+
+    let glow_token = deps.api.addr_humanize(&config.glow_token)?;
+    let terraswap_factory_addr = deps.api.addr_humanize(&config.terraswap_factory)?;
+
+    let pair_info: PairInfo = query_pair_info(
+        &deps.querier,
+        terraswap_factory_addr,
+        &[
+            AssetInfo::NativeToken {
+                denom: config.stable_denom.to_string(),
+            },
+            AssetInfo::Token {
+                contract_addr: glow_token.to_string(),
+            },
+        ],
+    )?;
+
+    let contract_balance = query_balance(
+        &deps.querier,
+        env.contract.address,
+        config.stable_denom.to_string(),
+    )?;
+
+    if amount > contract_balance {
+        return Err(StdError::generic_err(
+            "Amount of stable denom to buy cannot be greater than contract balance",
+        ));
+    }
+
+    let swap_asset = Asset {
+        info: AssetInfo::NativeToken {
+            denom: config.stable_denom.to_string(),
+        },
+        amount,
+    };
+
+    Ok(Response::new()
+        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: pair_info.contract_addr,
+            msg: to_binary(&TerraswapExecuteMsg::Swap {
+                offer_asset: Asset {
+                    amount,
+                    ..swap_asset
+                },
+                max_spread: None,
+                belief_price: None,
+                to: None,
+            })?,
+            funds: vec![Coin {
+                denom: config.stable_denom.clone(),
+                amount,
+            }],
+        }))
+        .add_attributes(vec![
+            attr("action", "swap"),
+            attr(
+                "amount_spent",
+                format!("{:?}{:?}", amount.to_string(), config.stable_denom),
+            ),
+        ]))
+}
+
+/// Burn
+/// Owner (governance contract) can execute a burn operation of `amount` of Glow tokens
+pub fn execute_burn(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Response> {
+    let config: Config = read_config(deps.storage)?;
+
+    // Check only owner can call
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
+        return Err(StdError::generic_err("Unauthorized"));
+    }
+
+    // The spend limit is sanity-check, as this contract manages a large sum of GLOW supply
+    if config.spend_limit < amount {
+        return Err(StdError::generic_err("Cannot burn more than spend_limit"));
+    }
+
+    let glow_token = deps.api.addr_humanize(&config.glow_token)?.to_string();
+
+    Ok(Response::new()
+        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: glow_token,
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Burn { amount })?,
+        })])
+        .add_attributes(vec![("action", "burn"), ("amount", &amount.to_string())]))
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -227,6 +331,10 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         glow_token: deps.api.addr_humanize(&config.glow_token)?.to_string(),
         lotto_contract: deps.api.addr_humanize(&config.lotto_contract)?.to_string(),
         gov_contract: deps.api.addr_humanize(&config.gov_contract)?.to_string(),
+        terraswap_factory: deps
+            .api
+            .addr_humanize(&config.terraswap_factory)?
+            .to_string(),
         spend_limit: config.spend_limit,
     };
 
@@ -243,6 +351,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         glow_token: old_config.glow_token,
         lotto_contract: deps.api.addr_canonicalize(&msg.lotto_contract)?,
         gov_contract: deps.api.addr_canonicalize(&msg.gov_contract)?,
+        terraswap_factory: deps.api.addr_canonicalize(&msg.terraswap_factory)?,
         spend_limit: old_config.spend_limit,
     };
 

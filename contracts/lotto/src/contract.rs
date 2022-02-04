@@ -11,9 +11,10 @@ use crate::helpers::{
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    read_depositor_info, read_depositors_info, read_depositors_stats, read_lottery_info,
-    read_sponsor_info, store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool,
-    PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
+    old_read_depositors, read_depositor_info, read_depositors_info, read_depositors_stats,
+    read_lottery_info, read_sponsor_info, store_depositor_info, store_sponsor_info, Config,
+    DepositorInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE,
+    TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -1703,6 +1704,13 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
     };
 
     CONFIG.save(deps.storage, &new_config)?;
+
+    // assuming we can iterate over all depositors
+    // TODO pause implementation
+    let old_depositors = old_read_depositors(deps.as_ref(), None, Some(10_000))?;
+    for (addr, depositor_info) in old_depositors {
+        store_depositor_info(deps.storage, &addr, depositor_info)?;
+    }
 
     Ok(Response::default())
 }

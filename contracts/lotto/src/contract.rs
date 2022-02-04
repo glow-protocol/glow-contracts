@@ -3,9 +3,10 @@ use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
 use crate::helpers::{
-    calculate_lottery_balance, calculate_winner_prize, claim_deposits, compute_depositor_reward,
-    compute_reward, compute_sponsor_reward, encoded_tickets_to_combinations, is_valid_sequence,
-    pseudo_random_seq, uint256_times_decimal256_ceil,
+    calculate_lottery_balance, calculate_winner_prize, claim_unbonded_withdrawals,
+    compute_depositor_reward, compute_reward, compute_sponsor_reward,
+    encoded_tickets_to_combinations, is_valid_sequence, pseudo_random_seq,
+    uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -455,7 +456,7 @@ pub fn deposit(
     state.total_tickets = state.total_tickets.add(amount_tickets.into());
 
     // update depositor and state information
-    store_depositor_info(deps.storage, &depositor, &depositor_info)?;
+    store_depositor_info(deps.storage, &depositor, depositor_info)?;
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
@@ -563,7 +564,7 @@ pub fn execute_sponsor(
 
         // add sponsor_amount to depositor
         sponsor_info.lottery_deposit = sponsor_info.lottery_deposit.add(minted_aust_value);
-        store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
+        store_sponsor_info(deps.storage, &info.sender, sponsor_info)?;
 
         // update pool
         pool.total_sponsor_lottery_deposits =
@@ -713,7 +714,7 @@ pub fn execute_sponsor_withdraw(
         amount: vec![net_coin_amount],
     }));
 
-    store_sponsor_info(deps.storage, &info.sender, &sponsor_info)?;
+    store_sponsor_info(deps.storage, &info.sender, sponsor_info)?;
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
@@ -721,10 +722,7 @@ pub fn execute_sponsor_withdraw(
         attr("action", "withdraw_sponsor"),
         attr("depositor", info.sender.to_string()),
         attr("redeem_amount_anchor", aust_to_redeem.to_string()),
-        attr(
-            "redeem_stable_amount",
-            sponsor_info.lottery_deposit.to_string(),
-        ),
+        attr("redeem_stable_amount", aust_to_redeem_value),
     ]))
 }
 
@@ -941,7 +939,7 @@ pub fn execute_withdraw(
         });
     }
 
-    store_depositor_info(deps.storage, &info.sender, &depositor)?;
+    store_depositor_info(deps.storage, &info.sender, depositor)?;
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
@@ -965,7 +963,9 @@ pub fn execute_claim_unbonded(
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let (to_send, mut depositor) = claim_deposits(deps.storage, &info.sender, &env.block, None)?;
+    let mut depositor = read_depositor_info(deps.storage, &info.sender);
+
+    let to_send = claim_unbonded_withdrawals(&mut depositor, &env.block, None)?;
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
@@ -1005,7 +1005,7 @@ pub fn execute_claim_unbonded(
         });
     }
 
-    store_depositor_info(deps.storage, &info.sender, &depositor)?;
+    store_depositor_info(deps.storage, &info.sender, depositor)?;
     STATE.save(deps.storage, &state)?;
 
     Ok(Response::new()
@@ -1145,7 +1145,7 @@ pub fn execute_claim_lottery(
 
     // Update storage
 
-    store_depositor_info(deps.storage, &info.sender, &depositor)?;
+    store_depositor_info(deps.storage, &info.sender, depositor)?;
     STATE.save(deps.storage, &state)?;
 
     // Send response
@@ -1269,8 +1269,8 @@ pub fn execute_claim_rewards(
     sponsor.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
-    store_depositor_info(deps.storage, &info.sender, &depositor)?;
-    store_sponsor_info(deps.storage, &info.sender, &sponsor)?;
+    store_depositor_info(deps.storage, &info.sender, depositor)?;
+    store_sponsor_info(deps.storage, &info.sender, sponsor)?;
 
     let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {
         vec![CosmosMsg::Wasm(WasmMsg::Execute {

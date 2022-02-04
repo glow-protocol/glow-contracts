@@ -2041,7 +2041,7 @@ fn claim() {
     store_depositor_info(
         &mut deps.storage,
         &deps.api.addr_validate("addr0001").unwrap(),
-        &dep,
+        dep,
     )
     .unwrap();
 

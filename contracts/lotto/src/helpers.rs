@@ -1,14 +1,11 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, QuerierWrapper, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, QuerierWrapper, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
 use crate::{
     querier::{query_address_voting_balance_at_height, query_total_voting_balance_at_height},
-    state::{
-        read_depositor_info, store_depositor_info, Config, DepositorInfo, LotteryInfo, Pool,
-        PrizeInfo, SponsorInfo, State,
-    },
+    state::{Config, DepositorInfo, LotteryInfo, Pool, PrizeInfo, SponsorInfo, State},
 };
 
 /// Compute distributed reward and update global reward index
@@ -44,17 +41,15 @@ pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
 
 /// This iterates over all mature claims for the address, and removes them, up to an optional cap.
 /// it removes the finished claims and returns the total amount of tokens to be released.
-pub fn claim_deposits(
-    storage: &mut dyn Storage,
-    addr: &Addr,
+pub fn claim_unbonded_withdrawals(
+    depositor: &mut DepositorInfo,
     block: &BlockInfo,
     cap: Option<Uint128>,
-) -> StdResult<(Uint128, DepositorInfo)> {
+) -> StdResult<Uint128> {
     let mut to_send = Uint128::zero();
-    let mut depositor = read_depositor_info(storage, addr);
 
     if depositor.unbonding_info.is_empty() {
-        return Ok((to_send, depositor));
+        return Ok(to_send);
     }
 
     let (_send, waiting): (Vec<_>, _) = depositor.unbonding_info.iter().cloned().partition(|c| {
@@ -74,8 +69,7 @@ pub fn claim_deposits(
         }
     });
     depositor.unbonding_info = waiting;
-    store_depositor_info(storage, addr, &depositor)?;
-    Ok((to_send, depositor))
+    Ok(to_send)
 }
 
 pub fn calculate_winner_prize(

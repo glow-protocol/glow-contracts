@@ -9,8 +9,8 @@ use cw_storage_plus::{Item, Map, U64Key};
 use glow_protocol::lotto::{Claim, DepositorInfoResponse};
 
 const PREFIX_LOTTERY: &[u8] = b"lottery";
-const PREFIX_DEPOSIT: &[u8] = b"depositor";
 const PREFIX_SPONSOR: &[u8] = b"sponsor";
+const OLD_PREFIX_DEPOSIT: &[u8] = b"depositor";
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const OLDCONFIG: Item<OldConfig> = Item::new("config");
@@ -18,6 +18,9 @@ pub const STATE: Item<State> = Item::new("state");
 pub const POOL: Item<Pool> = Item::new("pool");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
 pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
+
+pub const DEPOSITOR_DATA: Map<&Addr, DepositorData> = Map::new("depositor_data");
+pub const DEPOSITOR_STATS: Map<&Addr, DepositorStats> = Map::new("depositor_stats");
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
@@ -126,6 +129,33 @@ pub struct Pool {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorStats {
+    // Cumulative value of the depositor's lottery deposits
+    // The sums of all depositor deposit amounts equals total_user_lottery_deposits
+    // This is used for:
+    // - calculating how many tickets the user should have access to
+    // - computing the depositor's deposit reward
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub lottery_deposit: Uint256,
+    // Amount of aust in the users savings account
+    // This is used for:
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub savings_aust: Uint256,
+    // Reward index is used for tracking and calculating the depositor's rewards
+    pub reward_index: Decimal256,
+    // Stores the amount rewards that are available for the user to claim.
+    pub pending_rewards: Decimal256,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorData {
+    // The number of tickets the user owns.
+    pub tickets: Vec<String>,
+    // Stores information on the user's unbonding claims.
+    pub unbonding_info: Vec<Claim>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
     // Cumulative value of the depositor's lottery deposits
     // The sums of all depositor deposit amounts equals total_user_lottery_deposits
@@ -228,13 +258,33 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
 pub fn store_depositor_info(
     storage: &mut dyn Storage,
     depositor: &Addr,
-    depositor_info: &DepositorInfo,
+    depositor_info: DepositorInfo,
 ) -> StdResult<()> {
-    bucket(storage, PREFIX_DEPOSIT).save(depositor.as_bytes(), depositor_info)
+    let depositor_data = DepositorData {
+        tickets: depositor_info.tickets,
+        unbonding_info: depositor_info.unbonding_info,
+    };
+
+    let depositor_stats = DepositorStats {
+        lottery_deposit: depositor_info.lottery_deposit,
+        savings_aust: depositor_info.savings_aust,
+        reward_index: depositor_info.reward_index,
+        pending_rewards: depositor_info.pending_rewards,
+    };
+
+    DEPOSITOR_DATA
+        .save(storage, depositor, &depositor_data)
+        .unwrap();
+
+    DEPOSITOR_STATS
+        .save(storage, depositor, &depositor_stats)
+        .unwrap();
+
+    Ok(())
 }
 
-pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> DepositorInfo {
-    match bucket_read(storage, PREFIX_DEPOSIT).load(depositor.as_bytes()) {
+pub fn old_read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> DepositorInfo {
+    match bucket_read(storage, OLD_PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
         _ => DepositorInfo {
             lottery_deposit: Uint256::zero(),
@@ -247,12 +297,66 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
     }
 }
 
+pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> DepositorInfo {
+    let depositor_data = match DEPOSITOR_DATA.load(storage, depositor) {
+        Ok(v) => v,
+        _ => DepositorData {
+            tickets: vec![],
+            unbonding_info: vec![],
+        },
+    };
+
+    let depositor_stats = match DEPOSITOR_STATS.load(storage, depositor) {
+        Ok(v) => v,
+        _ => DepositorStats {
+            lottery_deposit: Uint256::zero(),
+            savings_aust: Uint256::zero(),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+        },
+    };
+
+    DepositorInfo {
+        // DepositorData
+        tickets: depositor_data.tickets,
+        unbonding_info: depositor_data.unbonding_info,
+
+        // DepositorStats
+        lottery_deposit: depositor_stats.lottery_deposit,
+        savings_aust: depositor_stats.savings_aust,
+        reward_index: depositor_stats.reward_index,
+        pending_rewards: depositor_stats.pending_rewards,
+    }
+}
+
+pub fn read_depositor_stats(storage: &dyn Storage, depositor: &Addr) -> DepositorStats {
+    match DEPOSITOR_STATS.load(storage, depositor) {
+        Ok(v) => v,
+        _ => DepositorStats {
+            lottery_deposit: Uint256::zero(),
+            savings_aust: Uint256::zero(),
+            reward_index: Decimal256::zero(),
+            pending_rewards: Decimal256::zero(),
+        },
+    }
+}
+
+pub fn read_depositor_data(storage: &dyn Storage, depositor: &Addr) -> DepositorData {
+    match DEPOSITOR_DATA.load(storage, depositor) {
+        Ok(v) => v,
+        _ => DepositorData {
+            tickets: vec![],
+            unbonding_info: vec![],
+        },
+    }
+}
+
 pub fn store_sponsor_info(
     storage: &mut dyn Storage,
     sponsor: &Addr,
-    sponsor_info: &SponsorInfo,
+    sponsor_info: SponsorInfo,
 ) -> StdResult<()> {
-    bucket(storage, PREFIX_SPONSOR).save(sponsor.as_bytes(), sponsor_info)
+    bucket(storage, PREFIX_SPONSOR).save(sponsor.as_bytes(), &sponsor_info)
 }
 
 pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
@@ -271,7 +375,8 @@ pub fn read_depositors(
     start_after: Option<Addr>,
     limit: Option<u32>,
 ) -> StdResult<Vec<DepositorInfoResponse>> {
-    let liability_bucket: ReadonlyBucket<DepositorInfo> = bucket_read(deps.storage, PREFIX_DEPOSIT);
+    let liability_bucket: ReadonlyBucket<DepositorInfo> =
+        bucket_read(deps.storage, OLD_PREFIX_DEPOSIT);
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
     let start = calc_range_start(start_after);

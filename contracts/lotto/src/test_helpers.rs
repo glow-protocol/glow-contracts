@@ -88,13 +88,13 @@ pub fn generate_sequential_ticket_combinations(num_combinations: u64) -> Vec<Str
         .collect::<Vec<String>>()
 }
 
-pub fn combinations_to_encoded_tickets(combinations: Vec<String>) -> String {
+pub fn vec_string_tickets_to_encoded_tickets(vec_string_tickets: Vec<String>) -> String {
     // Convert each string to
     // when it's a string its taking 8 bits per char
     // but each char only holds 4 bits of information
     // convert it to just 4 bits, but then thats u4 not u8. u8 is 256
 
-    let binary_data = combinations
+    let binary_data = vec_string_tickets
         // Iterate over combinations
         .iter()
         // Take each combination and hex decode it

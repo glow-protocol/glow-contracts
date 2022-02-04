@@ -3,10 +3,9 @@ use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
 use crate::helpers::{
-    calculate_lottery_balance, calculate_winner_prize, claim_unbonded_withdrawals,
-    compute_depositor_reward, compute_reward, compute_sponsor_reward,
-    encoded_tickets_to_combinations, is_valid_sequence, pseudo_random_seq,
-    uint256_times_decimal256_ceil,
+    base64_encoded_tickets_to_vec_string_tickets, calculate_lottery_balance,
+    calculate_winner_prize, claim_unbonded_withdrawals, compute_depositor_reward, compute_reward,
+    compute_sponsor_reward, is_valid_sequence, pseudo_random_seq, uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -304,7 +303,7 @@ pub fn deposit(
         .unwrap_or_else(Uint256::zero);
 
     // Get combinations from encoded tickets
-    let combinations = encoded_tickets_to_combinations(encoded_tickets)?;
+    let combinations = base64_encoded_tickets_to_vec_string_tickets(encoded_tickets)?;
 
     // Get the depositor info
     // depositor being either the message sender
@@ -968,6 +967,7 @@ pub fn execute_claim_unbonded(
     let mut depositor = read_depositor_info(deps.storage, &info.sender);
 
     let to_send = claim_unbonded_withdrawals(&mut depositor, &env.block, None)?;
+
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
@@ -1253,7 +1253,7 @@ pub fn execute_claim_rewards(
     let mut state = STATE.load(deps.storage)?;
 
     let depositor_address = info.sender.as_str();
-    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
+    let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
     let mut sponsor: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
     // Validate distributor contract has already been registered
@@ -1263,15 +1263,15 @@ pub fn execute_claim_rewards(
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
+    compute_depositor_reward(&state, &mut depositor_info);
     compute_sponsor_reward(&state, &mut sponsor);
 
-    let claim_amount = (depositor.pending_rewards + sponsor.pending_rewards) * Uint256::one();
-    depositor.pending_rewards = Decimal256::zero();
+    let claim_amount = (depositor_info.pending_rewards + sponsor.pending_rewards) * Uint256::one();
+    depositor_info.pending_rewards = Decimal256::zero();
     sponsor.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
-    store_depositor_info(deps.storage, &info.sender, depositor)?;
+    store_depositor_info(deps.storage, &info.sender, depositor_info)?;
     store_sponsor_info(deps.storage, &info.sender, sponsor)?;
 
     let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {

@@ -145,6 +145,8 @@ pub struct DepositorStats {
     pub reward_index: Decimal256,
     // Stores the amount rewards that are available for the user to claim.
     pub pending_rewards: Decimal256,
+    // The number of tickets owned by the depositor
+    pub num_tickets: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -260,6 +262,8 @@ pub fn store_depositor_info(
     depositor: &Addr,
     depositor_info: DepositorInfo,
 ) -> StdResult<()> {
+    let num_tickets = depositor_info.tickets.len();
+
     let depositor_data = DepositorData {
         tickets: depositor_info.tickets,
         unbonding_info: depositor_info.unbonding_info,
@@ -270,6 +274,7 @@ pub fn store_depositor_info(
         savings_aust: depositor_info.savings_aust,
         reward_index: depositor_info.reward_index,
         pending_rewards: depositor_info.pending_rewards,
+        num_tickets,
     };
 
     DEPOSITOR_DATA
@@ -313,6 +318,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
             savings_aust: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
+            num_tickets: 0,
         },
     };
 
@@ -337,6 +343,7 @@ pub fn read_depositor_stats(storage: &dyn Storage, depositor: &Addr) -> Deposito
             savings_aust: Uint256::zero(),
             reward_index: Decimal256::zero(),
             pending_rewards: Decimal256::zero(),
+            num_tickets: 0,
         },
     }
 }
@@ -425,6 +432,7 @@ pub fn read_depositors_stats(
                 savings_aust: v.savings_aust,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
+                num_tickets: v.num_tickets,
             })
         })
         .collect()

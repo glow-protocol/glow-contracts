@@ -218,6 +218,7 @@ pub struct DepositorStatsResponse {
     pub savings_aust: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
+    pub num_tickets: usize,
 }
 
 // We define a custom struct for each query response

@@ -128,7 +128,7 @@ pub struct Pool {
     pub total_sponsor_lottery_deposits: Uint256,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct DepositorStats {
     // Cumulative value of the depositor's lottery deposits
     // The sums of all depositor deposit amounts equals total_user_lottery_deposits
@@ -277,13 +277,28 @@ pub fn store_depositor_info(
         num_tickets,
     };
 
-    DEPOSITOR_DATA
-        .save(storage, depositor, &depositor_data)
-        .unwrap();
+    DEPOSITOR_DATA.save(storage, depositor, &depositor_data)?;
 
-    DEPOSITOR_STATS
-        .save(storage, depositor, &depositor_stats)
-        .unwrap();
+    DEPOSITOR_STATS.save(storage, depositor, &depositor_stats)?;
+
+    Ok(())
+}
+
+/// Store depositor stats
+/// Does *not* store changes to num_tickets
+/// in order to ensure that num_tickets always stays in sync with DepositorData
+pub fn store_depositor_stats(
+    storage: &mut dyn Storage,
+    depositor: &Addr,
+    mut depositor_stats: DepositorStats,
+) -> StdResult<()> {
+    let update_stats = |maybe_stats: Option<DepositorStats>| -> StdResult<DepositorStats> {
+        let stats = maybe_stats.unwrap_or_default();
+        depositor_stats.num_tickets = stats.num_tickets;
+        Ok(depositor_stats)
+    };
+
+    DEPOSITOR_STATS.update(storage, depositor, update_stats)?;
 
     Ok(())
 }

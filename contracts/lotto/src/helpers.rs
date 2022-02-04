@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, QuerierWrapper, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
@@ -303,7 +305,9 @@ pub fn calculate_depositor_balance(depositor: DepositorInfo, rate: Decimal256) -
     depositor_aust_balance * rate
 }
 
-pub fn encoded_tickets_to_combinations(encoded_tickets: String) -> StdResult<Vec<String>> {
+pub fn base64_encoded_tickets_to_vec_string_tickets(
+    encoded_tickets: String,
+) -> StdResult<Vec<String>> {
     // Encoded_tickets to binary
     let decoded_binary_tickets = match base64::decode(encoded_tickets) {
         Ok(decoded_binary_tickets) => decoded_binary_tickets,
@@ -325,4 +329,32 @@ pub fn encoded_tickets_to_combinations(encoded_tickets: String) -> StdResult<Vec
         .chunks(3)
         .map(hex::encode)
         .collect::<Vec<String>>())
+}
+
+pub fn vec_string_tickets_to_vec_binary_tickets(
+    vec_string_tickets: Vec<String>,
+) -> StdResult<Vec<[u8; 3]>> {
+    vec_string_tickets
+        .iter()
+        .map(|s| {
+            let vec_ticket = match hex::decode(s) {
+                Ok(b) => b,
+                Err(_) => return Err(StdError::generic_err("Couldn't hex decode string ticket")),
+            };
+
+            match vec_ticket.try_into() {
+                Ok(b) => Ok(b),
+                Err(_) => Err(StdError::generic_err(
+                    "Couldn't convert vec ticket to [u8, 3]",
+                )),
+            }
+        })
+        .collect::<StdResult<Vec<[u8; 3]>>>()
+}
+
+pub fn vec_binary_tickets_to_vec_string_tickets(vec_binary_tickets: Vec<[u8; 3]>) -> Vec<String> {
+    vec_binary_tickets
+        .iter()
+        .map(hex::encode)
+        .collect::<Vec<String>>()
 }

@@ -24,6 +24,10 @@ pub const DEPOSITOR_STATS: Map<&Addr, DepositorStats> = Map::new("depositor_stat
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
+use crate::helpers::{
+    vec_binary_tickets_to_vec_string_tickets, vec_string_tickets_to_vec_binary_tickets,
+};
+
 // settings for pagination
 const DEFAULT_LIMIT: u32 = 10;
 
@@ -153,7 +157,7 @@ pub struct DepositorStats {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorData {
     // The number of tickets the user owns.
-    pub tickets: Vec<String>,
+    pub vec_binary_tickets: Vec<[u8; 3]>,
     // Stores information on the user's unbonding claims.
     pub unbonding_info: Vec<Claim>,
 }
@@ -263,10 +267,14 @@ pub fn store_depositor_info(
     depositor: &Addr,
     depositor_info: DepositorInfo,
 ) -> StdResult<()> {
+    // Get the number of tickets
     let num_tickets = depositor_info.tickets.len();
 
+    // Get the tickets in binary form
+    let vec_binary_tickets = vec_string_tickets_to_vec_binary_tickets(depositor_info.tickets)?;
+
     let depositor_data = DepositorData {
-        tickets: depositor_info.tickets,
+        vec_binary_tickets,
         unbonding_info: depositor_info.unbonding_info,
     };
 
@@ -322,7 +330,7 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
     let depositor_data = match DEPOSITOR_DATA.load(storage, depositor) {
         Ok(v) => v,
         _ => DepositorData {
-            tickets: vec![],
+            vec_binary_tickets: vec![],
             unbonding_info: vec![],
         },
     };
@@ -338,9 +346,12 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
         },
     };
 
+    let vec_string_tickets =
+        vec_binary_tickets_to_vec_string_tickets(depositor_data.vec_binary_tickets);
+
     DepositorInfo {
         // DepositorData
-        tickets: depositor_data.tickets,
+        tickets: vec_string_tickets,
         unbonding_info: depositor_data.unbonding_info,
 
         // DepositorStats
@@ -368,7 +379,7 @@ pub fn read_depositor_data(storage: &dyn Storage, depositor: &Addr) -> Depositor
     match DEPOSITOR_DATA.load(storage, depositor) {
         Ok(v) => v,
         _ => DepositorData {
-            tickets: vec![],
+            vec_binary_tickets: vec![],
             unbonding_info: vec![],
         },
     }
@@ -409,13 +420,15 @@ pub fn read_depositors_info(
             let depositor = String::from_utf8(k).unwrap();
             let depositor_addr = Addr::unchecked(&depositor);
             let depositor_data = read_depositor_data(deps.storage, &depositor_addr);
+            let vec_string_tickets =
+                vec_binary_tickets_to_vec_string_tickets(depositor_data.vec_binary_tickets);
             Ok(DepositorInfoResponse {
                 depositor,
                 lottery_deposit: v.lottery_deposit,
                 savings_aust: v.savings_aust,
                 reward_index: v.reward_index,
                 pending_rewards: v.pending_rewards,
-                tickets: depositor_data.tickets,
+                tickets: vec_string_tickets,
                 unbonding_info: depositor_data.unbonding_info,
             })
         })

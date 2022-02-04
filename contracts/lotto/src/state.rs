@@ -437,7 +437,7 @@ pub fn old_read_depositors(
     deps: Deps,
     start_after: Option<Addr>,
     limit: Option<u32>,
-) -> StdResult<Vec<DepositorInfoResponse>> {
+) -> StdResult<Vec<(Addr, DepositorInfo)>> {
     let liability_bucket: ReadonlyBucket<DepositorInfo> =
         bucket_read(deps.storage, OLD_PREFIX_DEPOSIT);
 
@@ -450,15 +450,19 @@ pub fn old_read_depositors(
         .map(|elem| {
             let (k, v) = elem?;
             let depositor = String::from_utf8(k).unwrap();
-            Ok(DepositorInfoResponse {
-                depositor,
-                lottery_deposit: v.lottery_deposit,
-                savings_aust: v.savings_aust,
-                reward_index: v.reward_index,
-                pending_rewards: v.pending_rewards,
-                tickets: v.tickets,
-                unbonding_info: v.unbonding_info,
-            })
+            let depositor_addr = Addr::unchecked(&depositor);
+
+            Ok((
+                depositor_addr,
+                DepositorInfo {
+                    lottery_deposit: v.lottery_deposit,
+                    savings_aust: v.savings_aust,
+                    reward_index: v.reward_index,
+                    pending_rewards: v.pending_rewards,
+                    tickets: v.tickets,
+                    unbonding_info: v.unbonding_info,
+                },
+            ))
         })
         .collect()
 }

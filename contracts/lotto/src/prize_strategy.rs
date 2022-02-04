@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::querier::{query_exchange_rate, query_oracle};
 
 use crate::state::{
-    read_depositor_info, read_lottery_info, store_lottery_info, DepositorInfo, LotteryInfo,
+    read_depositor_stats, read_lottery_info, store_lottery_info, DepositorStats, LotteryInfo,
     PrizeInfo, CONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::Uint256;
@@ -300,8 +300,8 @@ pub fn execute_prize(
                     let mut winnings = [0; NUM_PRIZE_BUCKETS];
                     winnings[matches as usize] = 1;
 
-                    let depositor_info: DepositorInfo =
-                        read_depositor_info(deps.as_ref().storage, winner);
+                    let depositor_info: DepositorStats =
+                        read_depositor_stats(deps.as_ref().storage, winner);
 
                     PrizeInfo {
                         claimed: false,

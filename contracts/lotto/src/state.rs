@@ -384,10 +384,7 @@ pub fn read_depositors_info(
     limit: Option<u32>,
 ) -> StdResult<Vec<DepositorInfoResponse>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
-    let start = match start_after {
-        Some(v) => Some(Bound::Exclusive(v.as_bytes().to_vec())),
-        _ => None,
-    };
+    let start = start_after.map(|v| Bound::Exclusive(v.as_bytes().to_vec()));
 
     DEPOSITOR_STATS
         .range(deps.storage, start, None, Order::Ascending)
@@ -416,10 +413,7 @@ pub fn read_depositors_stats(
     limit: Option<u32>,
 ) -> StdResult<Vec<DepositorStatsResponse>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
-    let start = match start_after {
-        Some(v) => Some(Bound::Exclusive(v.as_bytes().to_vec())),
-        _ => None,
-    };
+    let start = start_after.map(|v| Bound::Exclusive(v.as_bytes().to_vec()));
 
     DEPOSITOR_STATS
         .range(deps.storage, start, None, Order::Ascending)

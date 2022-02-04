@@ -120,14 +120,19 @@ pub enum QueryMsg {
     /// Prizes for a given address on a given lottery id
     PrizeInfo { address: String, lottery_id: u64 },
     /// Depositor information by address
-    Depositor { address: String },
-    /// Sponsor information by address
-    Sponsor { address: String },
-    /// List (paginated) of depositors information
-    Depositors {
+    DepositorInfo { address: String },
+    /// List (paginated) of DepositorInfo
+    DepositorsInfo {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    /// List (paginated) of DepositorStats
+    DepositorsStats {
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
+    /// Sponsor information by address
+    Sponsor { address: String },
     /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
     /// now.
     LotteryBalance {},
@@ -207,6 +212,16 @@ pub struct DepositorInfoResponse {
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorStatsResponse {
+    pub depositor: String,
+    pub lottery_deposit: Uint256,
+    pub savings_aust: Uint256,
+    pub reward_index: Decimal256,
+    pub pending_rewards: Decimal256,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfoResponse {
     pub sponsor: String,
     pub lottery_deposit: Uint256,
@@ -218,6 +233,12 @@ pub struct SponsorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorsInfoResponse {
     pub depositors: Vec<DepositorInfoResponse>,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorsStatsResponse {
+    pub depositors: Vec<DepositorStatsResponse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -3911,7 +3911,7 @@ fn test_premature_emissions() {
         &query(
             deps.as_ref(),
             env,
-            QueryMsg::Depositor {
+            QueryMsg::DepositorInfo {
                 address: "addr0000".to_string(),
             },
         )
@@ -4013,7 +4013,7 @@ fn claim_rewards_one_depositor() {
         &query(
             deps.as_ref(),
             mock_env(),
-            QueryMsg::Depositor {
+            QueryMsg::DepositorInfo {
                 address: "addr0000".to_string(),
             },
         )
@@ -4135,7 +4135,7 @@ fn claim_rewards_multiple_depositors() {
         &query(
             deps.as_ref(),
             mock_env(),
-            QueryMsg::Depositor {
+            QueryMsg::DepositorInfo {
                 address: "addr0000".to_string(),
             },
         )
@@ -4156,7 +4156,7 @@ fn claim_rewards_multiple_depositors() {
         &query(
             deps.as_ref(),
             mock_env(),
-            QueryMsg::Depositor {
+            QueryMsg::DepositorInfo {
                 address: "addr1111".to_string(),
             },
         )
@@ -4276,7 +4276,7 @@ fn claim_rewards_depositor_and_sponsor() {
         &query(
             deps.as_ref(),
             env.clone(),
-            QueryMsg::Depositor {
+            QueryMsg::DepositorInfo {
                 address: "addr0000".to_string(),
             },
         )
@@ -4343,7 +4343,7 @@ fn claim_rewards_depositor_and_sponsor() {
         &query(
             deps.as_ref(),
             env.clone(),
-            QueryMsg::Depositor {
+            QueryMsg::DepositorInfo {
                 address: "addr0000".to_string(),
             },
         )

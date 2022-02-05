@@ -342,6 +342,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: None,
         max_tickets_per_depositor: None,
+        paused: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -381,6 +382,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: None,
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -402,6 +404,7 @@ fn update_config() {
         epoch_interval: Some(HOUR_TIME * 5),
         max_holders: None,
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -424,6 +427,7 @@ fn update_config() {
         epoch_interval: Some(HOUR_TIME / 3),
         max_holders: None,
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -446,6 +450,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: Some(8),
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -465,6 +470,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: Some(15),
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -486,6 +492,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: Some(14),
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -505,6 +512,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: Some(101),
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -524,6 +532,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: None,
         max_tickets_per_depositor: Some(100),
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -545,6 +554,7 @@ fn update_config() {
         epoch_interval: None,
         max_holders: None,
         max_tickets_per_depositor: None,
+        paused: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -639,6 +649,7 @@ fn test_max_tickets_per_depositor() {
         epoch_interval: None,
         max_holders: None,
         max_tickets_per_depositor: Some(MAX_TICKETS_PER_DEPOSITOR + 1),
+        paused: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();

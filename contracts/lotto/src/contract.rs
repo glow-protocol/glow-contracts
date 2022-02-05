@@ -119,6 +119,7 @@ pub fn instantiate(
             unbonding_period: Duration::Time(msg.unbonding_period),
             max_tickets_per_depositor: msg.max_tickets_per_depositor,
             glow_prize_buckets: msg.glow_prize_buckets,
+            paused: false,
         },
     )?;
 
@@ -183,6 +184,44 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
+    if let ExecuteMsg::MigrateLoop { limit } = msg {
+        return migrate_loop(deps, limit);
+    }
+
+    if let ExecuteMsg::UpdateConfig {
+        owner,
+        oracle_addr,
+        reserve_factor,
+        instant_withdrawal_fee,
+        unbonding_period,
+        epoch_interval,
+        max_holders,
+        max_tickets_per_depositor,
+        paused,
+    } = msg
+    {
+        return execute_update_config(
+            deps,
+            info,
+            owner,
+            oracle_addr,
+            reserve_factor,
+            instant_withdrawal_fee,
+            unbonding_period,
+            epoch_interval,
+            max_holders,
+            max_tickets_per_depositor,
+            paused,
+        );
+    }
+
+    let config = CONFIG.load(deps.storage)?;
+    if config.paused {
+        return Err(ContractError::Std(StdError::generic_err(
+            "The contract is temporarily paused.",
+        )));
+    }
+
     match msg {
         ExecuteMsg::RegisterContracts {
             gov_contract,
@@ -211,27 +250,6 @@ pub fn execute(
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
-        ExecuteMsg::UpdateConfig {
-            owner,
-            oracle_addr,
-            reserve_factor,
-            instant_withdrawal_fee,
-            unbonding_period,
-            epoch_interval,
-            max_holders,
-            max_tickets_per_depositor,
-        } => execute_update_config(
-            deps,
-            info,
-            owner,
-            oracle_addr,
-            reserve_factor,
-            instant_withdrawal_fee,
-            unbonding_period,
-            epoch_interval,
-            max_holders,
-            max_tickets_per_depositor,
-        ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
             block_time,
@@ -247,6 +265,12 @@ pub fn execute(
             prize_distribution,
             round_delta,
         ),
+        ExecuteMsg::MigrateLoop { .. } => Err(ContractError::Std(StdError::generic_err(
+            "Cannot call MigrateLoop when unpaused.",
+        ))),
+        ExecuteMsg::UpdateConfig { .. } => Err(ContractError::Std(StdError::generic_err(
+            "Cannot call MigrateLoop when unpaused.",
+        ))),
     }
 }
 
@@ -1305,6 +1329,7 @@ pub fn execute_update_config(
     epoch_interval: Option<u64>,
     max_holders: Option<u8>,
     max_tickets_per_depositor: Option<u64>,
+    paused: Option<bool>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1312,6 +1337,7 @@ pub fn execute_update_config(
     if info.sender != config.owner {
         return Err(ContractError::Unauthorized {});
     }
+
     // change owner of Glow lotto contract
     if let Some(owner) = owner {
         config.owner = deps.api.addr_validate(owner.as_str())?;
@@ -1366,6 +1392,20 @@ pub fn execute_update_config(
 
     if let Some(max_tickets_per_depositor) = max_tickets_per_depositor {
         config.max_tickets_per_depositor = max_tickets_per_depositor;
+    }
+
+    if let Some(paused) = paused {
+        if paused {
+            // Make sure that there isn't any old data left if you are unpausing
+
+            let old_depositors = old_read_depositors(deps.as_ref(), None, Some(1))?;
+            if !old_depositors.is_empty() {
+                return Err(ContractError::Std(StdError::generic_err(
+                    "Cannot unpause contract with old depositors",
+                )));
+            }
+        }
+        config.paused = paused;
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -1701,10 +1741,16 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         unbonding_period: old_config.unbonding_period,
         max_tickets_per_depositor: msg.max_tickets_per_depositor,
         glow_prize_buckets: msg.glow_prize_buckets,
+        paused: true,
     };
 
     CONFIG.save(deps.storage, &new_config)?;
 
+    Ok(Response::default())
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate_loop(deps: DepsMut, _limit: Option<u32>) -> Result<Response, ContractError> {
     // assuming we can iterate over all depositors
     // TODO pause implementation
     let old_depositors = old_read_depositors(deps.as_ref(), None, Some(10_000))?;

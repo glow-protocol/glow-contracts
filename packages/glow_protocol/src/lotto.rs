@@ -53,6 +53,7 @@ pub enum ExecuteMsg {
         epoch_interval: Option<u64>,
         max_holders: Option<u8>,
         max_tickets_per_depositor: Option<u64>,
+        paused: Option<bool>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {
@@ -95,6 +96,8 @@ pub enum ExecuteMsg {
     ExecutePrize { limit: Option<u32> },
     /// Updates rewards emission rate and transfer outstanding reserve to gov
     ExecuteEpochOps {},
+    /// Handles the migrate loop
+    MigrateLoop { limit: Option<u32> },
 }
 
 /// We currently take no arguments for migrations

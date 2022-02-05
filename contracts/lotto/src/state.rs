@@ -54,6 +54,7 @@ pub struct Config {
     pub unbonding_period: Duration,
     pub max_tickets_per_depositor: u64,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub paused: bool,
 }
 
 impl Config {

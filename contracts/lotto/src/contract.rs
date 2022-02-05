@@ -11,9 +11,9 @@ use crate::helpers::{
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    read_depositor_info, read_depositors, read_lottery_info, read_sponsor_info,
-    store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo,
-    State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
+    read_depositor_info, read_depositors_info, read_depositors_stats, read_lottery_info,
+    read_sponsor_info, store_depositor_info, store_sponsor_info, Config, DepositorInfo, Pool,
+    PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -25,9 +25,10 @@ use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
-    BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
-    InstantiateMsg, LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse,
-    PrizeInfoResponse, QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
+    BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse,
+    DepositorsStatsResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,
+    LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse, QueryMsg,
+    SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
@@ -1456,10 +1457,15 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             address,
             lottery_id,
         } => to_binary(&query_prizes(deps, address, lottery_id)?),
-        QueryMsg::Depositor { address } => to_binary(&query_depositor(deps, env, address)?),
+        QueryMsg::DepositorInfo { address } => {
+            to_binary(&query_depositor_info(deps, env, address)?)
+        }
         QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, env, address)?),
-        QueryMsg::Depositors { start_after, limit } => {
-            to_binary(&query_depositors(deps, start_after, limit)?)
+        QueryMsg::DepositorsInfo { start_after, limit } => {
+            to_binary(&query_depositors_info(deps, start_after, limit)?)
+        }
+        QueryMsg::DepositorsStats { start_after, limit } => {
+            to_binary(&query_depositors_info(deps, start_after, limit)?)
         }
         QueryMsg::LotteryBalance {} => to_binary(&query_lottery_balance(deps, env)?),
     }
@@ -1589,7 +1595,11 @@ pub fn query_lottery_info(
     }
 }
 
-pub fn query_depositor(deps: Deps, env: Env, addr: String) -> StdResult<DepositorInfoResponse> {
+pub fn query_depositor_info(
+    deps: Deps,
+    env: Env,
+    addr: String,
+) -> StdResult<DepositorInfoResponse> {
     let address = deps.api.addr_validate(&addr)?;
     let mut depositor = read_depositor_info(deps.storage, &address);
 
@@ -1630,7 +1640,7 @@ pub fn query_sponsor(deps: Deps, env: Env, addr: String) -> StdResult<SponsorInf
     })
 }
 
-pub fn query_depositors(
+pub fn query_depositors_info(
     deps: Deps,
     start_after: Option<String>,
     limit: Option<u32>,
@@ -1641,8 +1651,23 @@ pub fn query_depositors(
         None
     };
 
-    let depositors = read_depositors(deps, start_after, limit)?;
+    let depositors = read_depositors_info(deps, start_after, limit)?;
     Ok(DepositorsInfoResponse { depositors })
+}
+
+pub fn query_depositors_stats(
+    deps: Deps,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> StdResult<DepositorsStatsResponse> {
+    let start_after = if let Some(start_after) = start_after {
+        Some(deps.api.addr_validate(&start_after)?)
+    } else {
+        None
+    };
+
+    let depositors = read_depositors_stats(deps, start_after, limit)?;
+    Ok(DepositorsStatsResponse { depositors })
 }
 
 pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceResponse> {

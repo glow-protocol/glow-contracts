@@ -5,8 +5,8 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage};
 use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
-use cw_storage_plus::{Item, Map, U64Key};
-use glow_protocol::lotto::{BoostConfig, Claim, DepositorInfoResponse};
+use cw_storage_plus::{Bound, Item, Map, U64Key};
+use glow_protocol::lotto::{BoostConfig, Claim, DepositorInfoResponse, DepositorStatsResponse};
 
 const PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_SPONSOR: &[u8] = b"sponsor";
@@ -371,7 +371,67 @@ pub fn read_sponsor_info(storage: &dyn Storage, sponsor: &Addr) -> SponsorInfo {
     }
 }
 
-pub fn read_depositors(
+pub fn read_depositors_info(
+    deps: Deps,
+    start_after: Option<Addr>,
+    limit: Option<u32>,
+) -> StdResult<Vec<DepositorInfoResponse>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
+    let start = match start_after {
+        Some(v) => Some(Bound::Exclusive(v.as_bytes().to_vec())),
+        _ => None,
+    };
+
+    DEPOSITOR_STATS
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .map(|elem| {
+            let (k, v) = elem?;
+            let depositor = String::from_utf8(k).unwrap();
+            let depositor_addr = Addr::unchecked(&depositor);
+            let depositor_data = read_depositor_data(deps.storage, &depositor_addr);
+            Ok(DepositorInfoResponse {
+                depositor,
+                lottery_deposit: v.lottery_deposit,
+                savings_aust: v.savings_aust,
+                reward_index: v.reward_index,
+                pending_rewards: v.pending_rewards,
+                tickets: depositor_data.tickets,
+                unbonding_info: depositor_data.unbonding_info,
+            })
+        })
+        .collect()
+}
+
+pub fn read_depositors_stats(
+    deps: Deps,
+    start_after: Option<Addr>,
+    limit: Option<u32>,
+) -> StdResult<Vec<DepositorStatsResponse>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
+    let start = match start_after {
+        Some(v) => Some(Bound::Exclusive(v.as_bytes().to_vec())),
+        _ => None,
+    };
+
+    DEPOSITOR_STATS
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .map(|elem| {
+            let (k, v) = elem?;
+            let depositor = String::from_utf8(k).unwrap();
+            Ok(DepositorStatsResponse {
+                depositor,
+                lottery_deposit: v.lottery_deposit,
+                savings_aust: v.savings_aust,
+                reward_index: v.reward_index,
+                pending_rewards: v.pending_rewards,
+            })
+        })
+        .collect()
+}
+
+pub fn old_read_depositors(
     deps: Deps,
     start_after: Option<Addr>,
     limit: Option<u32>,
@@ -380,7 +440,7 @@ pub fn read_depositors(
         bucket_read(deps.storage, OLD_PREFIX_DEPOSIT);
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
-    let start = calc_range_start(start_after);
+    let start = old_calc_range_start(start_after);
 
     liability_bucket
         .range(start.as_deref(), None, Order::Ascending)
@@ -401,7 +461,7 @@ pub fn read_depositors(
         .collect()
 }
 
-fn calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
+fn old_calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
     start_after.map(|addr| {
         let mut v = addr.as_bytes().to_vec();
         v.push(1);

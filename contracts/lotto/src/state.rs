@@ -293,6 +293,10 @@ pub fn store_depositor_info(
     Ok(())
 }
 
+pub fn old_remove_depositor_info(storage: &mut dyn Storage, depositor: &Addr) -> () {
+    bucket::<DepositorInfo>(storage, OLD_PREFIX_DEPOSIT).remove(depositor.as_bytes())
+}
+
 /// Store depositor stats
 /// Does *not* store changes to num_tickets
 /// in order to ensure that num_tickets always stays in sync with DepositorData

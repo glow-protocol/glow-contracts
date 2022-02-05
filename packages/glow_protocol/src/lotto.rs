@@ -97,7 +97,7 @@ pub enum ExecuteMsg {
     /// Updates rewards emission rate and transfer outstanding reserve to gov
     ExecuteEpochOps {},
     /// Handles the migrate loop
-    MigrateLoop { limit: Option<u32> },
+    MigrateOldDepositors { limit: Option<u32> },
 }
 
 /// We currently take no arguments for migrations

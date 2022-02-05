@@ -10,10 +10,10 @@ use crate::helpers::{
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    old_read_depositors, read_depositor_info, read_depositors_info, read_depositors_stats,
-    read_lottery_info, read_sponsor_info, store_depositor_info, store_sponsor_info, Config,
-    DepositorInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE,
-    TICKETS,
+    old_read_depositors, old_remove_depositor_info, read_depositor_info, read_depositors_info,
+    read_depositors_stats, read_lottery_info, read_sponsor_info, store_depositor_info,
+    store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG,
+    OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -184,8 +184,8 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    if let ExecuteMsg::MigrateLoop { limit } = msg {
-        return migrate_loop(deps, limit);
+    if let ExecuteMsg::MigrateOldDepositors { limit } = msg {
+        return migrate_old_depositors(deps, limit);
     }
 
     if let ExecuteMsg::UpdateConfig {
@@ -265,7 +265,7 @@ pub fn execute(
             prize_distribution,
             round_delta,
         ),
-        ExecuteMsg::MigrateLoop { .. } => Err(ContractError::Std(StdError::generic_err(
+        ExecuteMsg::MigrateOldDepositors { .. } => Err(ContractError::Std(StdError::generic_err(
             "Cannot call MigrateLoop when unpaused.",
         ))),
         ExecuteMsg::UpdateConfig { .. } => Err(ContractError::Std(StdError::generic_err(
@@ -1750,13 +1750,35 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate_loop(deps: DepsMut, _limit: Option<u32>) -> Result<Response, ContractError> {
-    // assuming we can iterate over all depositors
-    // TODO pause implementation
-    let old_depositors = old_read_depositors(deps.as_ref(), None, Some(10_000))?;
+pub fn migrate_old_depositors(
+    deps: DepsMut,
+    limit: Option<u32>,
+) -> Result<Response, ContractError> {
+    let old_depositors = old_read_depositors(deps.as_ref(), None, limit)?;
+
+    let mut num_migrated_entries: u32 = 0;
+
     for (addr, depositor_info) in old_depositors {
+        // Delete old depositor
+        old_remove_depositor_info(deps.storage, &addr);
+
+        // Store new depositor
         store_depositor_info(deps.storage, &addr, depositor_info)?;
+
+        // Increment num_migrates_entries
+        num_migrated_entries += 1;
     }
 
-    Ok(Response::default())
+    let old_depositors = old_read_depositors(deps.as_ref(), None, Some(1))?;
+    if old_depositors.is_empty() {
+        // Set paused to false and save
+        let mut config: Config = CONFIG.load(deps.storage)?;
+        config.paused = false;
+        CONFIG.save(deps.storage, &config)?;
+    }
+
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "migrate_old_depositors"),
+        attr("num_migrated_entries", num_migrated_entries.to_string()),
+    ]))
 }

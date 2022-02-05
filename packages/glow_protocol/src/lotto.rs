@@ -9,6 +9,13 @@ pub const TICKET_LENGTH: usize = 6;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct BoostConfig {
+    pub base_multiplier: Decimal256,
+    pub max_multiplier: Decimal256,
+    pub total_voting_power_weight: Decimal256,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
     pub stable_denom: String,                                // uusd
@@ -54,6 +61,7 @@ pub enum ExecuteMsg {
         max_holders: Option<u8>,
         max_tickets_per_depositor: Option<u64>,
         paused: Option<bool>,
+        lotto_winner_boost_config: Option<BoostConfig>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {

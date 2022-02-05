@@ -343,6 +343,7 @@ fn update_config() {
         max_holders: None,
         max_tickets_per_depositor: None,
         paused: None,
+        lotto_winner_boost_config: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -383,6 +384,7 @@ fn update_config() {
         max_holders: None,
         max_tickets_per_depositor: None,
         paused: None,
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -405,6 +407,8 @@ fn update_config() {
         max_holders: None,
         max_tickets_per_depositor: None,
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -428,6 +432,8 @@ fn update_config() {
         max_holders: None,
         max_tickets_per_depositor: None,
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -451,6 +457,8 @@ fn update_config() {
         max_holders: Some(8),
         max_tickets_per_depositor: None,
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -471,6 +479,8 @@ fn update_config() {
         max_holders: Some(15),
         max_tickets_per_depositor: None,
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -493,6 +503,8 @@ fn update_config() {
         max_holders: Some(14),
         max_tickets_per_depositor: None,
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -513,6 +525,8 @@ fn update_config() {
         max_holders: Some(101),
         max_tickets_per_depositor: None,
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -533,6 +547,8 @@ fn update_config() {
         max_holders: None,
         max_tickets_per_depositor: Some(100),
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -555,6 +571,8 @@ fn update_config() {
         max_holders: None,
         max_tickets_per_depositor: None,
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -650,6 +668,8 @@ fn test_max_tickets_per_depositor() {
         max_holders: None,
         max_tickets_per_depositor: Some(MAX_TICKETS_PER_DEPOSITOR + 1),
         paused: None,
+
+        lotto_winner_boost_config: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();

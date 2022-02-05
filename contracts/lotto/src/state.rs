@@ -6,7 +6,7 @@ use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage};
 use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
-use glow_protocol::lotto::{Claim, DepositorInfoResponse, DepositorStatsResponse};
+use glow_protocol::lotto::{BoostConfig, Claim, DepositorInfoResponse, DepositorStatsResponse};
 
 const PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_SPONSOR: &[u8] = b"sponsor";
@@ -55,6 +55,7 @@ pub struct Config {
     pub max_tickets_per_depositor: u64,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub paused: bool,
+    pub lotto_winner_boost_config: BoostConfig,
 }
 
 impl Config {

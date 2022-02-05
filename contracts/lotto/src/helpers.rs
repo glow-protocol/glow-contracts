@@ -154,7 +154,8 @@ pub fn calculate_winner_prize(
         //  )
 
         // Get the multiplier for users with no voting power
-        let glow_base_multiplier = Decimal256::percent(40);
+        let glow_base_multiplier = config.lotto_winner_boost_config.base_multiplier;
+        let glow_max_multiplier = config.lotto_winner_boost_config.max_multiplier;
 
         // Calculate the additional multiplier for users with voting power
         let glow_voting_boost = if total_voting_balance > Uint128::zero()
@@ -165,10 +166,11 @@ pub fn calculate_winner_prize(
 
             let user_voting_balance_proportion = Decimal256::from_ratio(
                 Uint256::from(user_voting_balance),
-                Decimal256::percent(150) * Uint256::from(total_voting_balance),
+                config.lotto_winner_boost_config.total_voting_power_weight
+                    * Uint256::from(total_voting_balance),
             );
 
-            let slope = Decimal256::one() - Decimal256::percent(40);
+            let slope = glow_max_multiplier - glow_base_multiplier;
 
             inverted_user_lottery_deposit_proportion * user_voting_balance_proportion * slope
         } else {
@@ -178,8 +180,8 @@ pub fn calculate_winner_prize(
 
         // Sum glow_base_multiplier and glow_voting_boost and set it to 1 if greater than 1
         let mut glow_multiplier = glow_base_multiplier + glow_voting_boost;
-        if glow_multiplier > Decimal256::one() {
-            glow_multiplier = Decimal256::one();
+        if glow_multiplier > glow_max_multiplier {
+            glow_multiplier = glow_max_multiplier;
         }
 
         // Get the GLOW to send

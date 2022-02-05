@@ -293,7 +293,7 @@ pub fn store_depositor_info(
     Ok(())
 }
 
-pub fn old_remove_depositor_info(storage: &mut dyn Storage, depositor: &Addr) -> () {
+pub fn old_remove_depositor_info(storage: &mut dyn Storage, depositor: &Addr) {
     bucket::<DepositorInfo>(storage, OLD_PREFIX_DEPOSIT).remove(depositor.as_bytes())
 }
 

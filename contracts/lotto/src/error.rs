@@ -11,6 +11,9 @@ pub enum ContractError {
     #[error("Invalid instantiation deposit amount: {0}")]
     InvalidDepositInstantiation(Uint128),
 
+    #[error("Invalid boost config. Base multiplier must be less than or equal to max multiplier")]
+    InvalidBoostConfig {},
+
     #[error("Cannot register contracts twice")]
     AlreadyRegistered {},
 

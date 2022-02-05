@@ -24,7 +24,7 @@ use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
-    Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
+    BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg,
     InstantiateMsg, LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse,
     PrizeInfoResponse, QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
@@ -93,6 +93,12 @@ pub fn instantiate(
         return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
     }
 
+    let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
+        base_multiplier: Decimal256::from_ratio(40, 100),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(150),
+    };
+
     CONFIG.save(
         deps.storage,
         &Config {
@@ -117,6 +123,7 @@ pub fn instantiate(
             unbonding_period: Duration::Time(msg.unbonding_period),
             max_tickets_per_depositor: msg.max_tickets_per_depositor,
             glow_prize_buckets: msg.glow_prize_buckets,
+            lotto_winner_boost_config: default_lotto_winner_boost_config,
         },
     )?;
 
@@ -218,6 +225,7 @@ pub fn execute(
             epoch_interval,
             max_holders,
             max_tickets_per_depositor,
+            lotto_winner_boost_config,
         } => execute_update_config(
             deps,
             info,
@@ -229,6 +237,7 @@ pub fn execute(
             epoch_interval,
             max_holders,
             max_tickets_per_depositor,
+            lotto_winner_boost_config,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -1303,6 +1312,7 @@ pub fn execute_update_config(
     epoch_interval: Option<u64>,
     max_holders: Option<u8>,
     max_tickets_per_depositor: Option<u64>,
+    lotto_winner_boost_config: Option<BoostConfig>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1364,6 +1374,13 @@ pub fn execute_update_config(
 
     if let Some(max_tickets_per_depositor) = max_tickets_per_depositor {
         config.max_tickets_per_depositor = max_tickets_per_depositor;
+    }
+
+    if let Some(lotto_winner_boost_config) = lotto_winner_boost_config {
+        if lotto_winner_boost_config.base_multiplier > lotto_winner_boost_config.max_multiplier {
+            return Err(ContractError::InvalidBoostConfig {});
+        }
+        config.lotto_winner_boost_config = lotto_winner_boost_config
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -1651,6 +1668,12 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
+        base_multiplier: Decimal256::from_ratio(40, 100),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(150),
+    };
+
     // migrate config
     let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
     let new_config = Config {
@@ -1675,6 +1698,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         unbonding_period: old_config.unbonding_period,
         max_tickets_per_depositor: msg.max_tickets_per_depositor,
         glow_prize_buckets: msg.glow_prize_buckets,
+        lotto_winner_boost_config: default_lotto_winner_boost_config,
     };
 
     CONFIG.save(deps.storage, &new_config)?;

@@ -253,7 +253,7 @@ pub fn execute_swap(
 
     if amount > contract_balance {
         return Err(StdError::generic_err(
-            "Amount of stable denom to buy cannot be greater than contract balance",
+            "Amount of stable denom to spend cannot be greater than contract balance",
         ));
     }
 

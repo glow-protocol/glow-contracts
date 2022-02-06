@@ -28,7 +28,7 @@ const DEFAULT_LIMIT: u32 = 10;
 pub struct Config {
     pub owner: Addr,
     pub a_terra_contract: Addr,
-    pub gov_contract: Addr,
+    pub community_contract: Addr,
     pub distributor_contract: Addr,
     pub anchor_contract: Addr,
     pub oracle_contract: Addr,
@@ -50,7 +50,8 @@ pub struct Config {
 
 impl Config {
     pub fn contracts_registered(&self) -> bool {
-        self.gov_contract != Addr::unchecked("") && self.distributor_contract != Addr::unchecked("")
+        self.community_contract != Addr::unchecked("")
+            && self.distributor_contract != Addr::unchecked("")
     }
 }
 

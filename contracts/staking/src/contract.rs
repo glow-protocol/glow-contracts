@@ -376,7 +376,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State { block_time } => to_binary(&query_state(deps, env, block_time)?),
         QueryMsg::StakerInfo { staker, block_time } => {
-            to_binary(&query_staker_info(deps, staker, block_time)?)
+            to_binary(&query_staker_info(deps, env, staker, block_time)?)
         }
     }
 }
@@ -420,19 +420,29 @@ pub fn query_state(deps: Deps, env: Env, block_time: Option<u64>) -> StdResult<S
 
 pub fn query_staker_info(
     deps: Deps,
+    env: Env,
     staker: String,
     block_time: Option<u64>,
 ) -> StdResult<StakerInfoResponse> {
-    let staker_raw = deps.api.addr_canonicalize(&staker)?;
+    let mut state: State = read_state(deps.storage)?;
+    let config = read_config(deps.storage)?;
 
-    let mut staker_info: StakerInfo = read_staker_info(deps.storage, &staker_raw)?;
-    if let Some(block_time) = block_time {
-        let config = read_config(deps.storage)?;
-        let mut state = read_state(deps.storage)?;
+    let block_time = if let Some(block_time) = block_time {
+        block_time
+    } else {
+        env.block.time.seconds()
+    };
 
-        compute_reward(&config, &mut state, block_time);
-        compute_staker_reward(&state, &mut staker_info)?;
+    if block_time < state.last_distributed {
+        return Err(StdError::generic_err(
+            "Block time must be greater than last_distributed",
+        ));
     }
+    let staker_raw = deps.api.addr_canonicalize(&staker)?;
+    let mut staker_info: StakerInfo = read_staker_info(deps.storage, &staker_raw)?;
+
+    compute_reward(&config, &mut state, block_time);
+    compute_staker_reward(&state, &mut staker_info)?;
 
     Ok(StakerInfoResponse {
         staker,

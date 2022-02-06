@@ -312,7 +312,7 @@ fn test_compute_reward() {
         from_binary::<StakerInfoResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env.clone(),
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
                     block_time: None,
@@ -338,12 +338,12 @@ fn test_compute_reward() {
     let msg = ExecuteMsg::Unbond {
         amount: Uint128::from(100u128),
     };
-    let _res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
     assert_eq!(
         from_binary::<StakerInfoResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env.clone(),
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
                     block_time: None,
@@ -365,7 +365,7 @@ fn test_compute_reward() {
         from_binary::<StakerInfoResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env,
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
                     block_time: Some(mock_env().block.time.plus_seconds(120).seconds()),

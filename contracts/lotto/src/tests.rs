@@ -3897,11 +3897,8 @@ fn test_premature_emissions() {
     // Get the number of minted aust
     let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the number of minted aust that will go towards savings
-    let _minted_savings_aust = minted_aust - minted_aust * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the number of minted aust that will go towards the lottery
-    let minted_lottery_aust = minted_aust * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_aust = minted_aust;
 
     // Get the value of minted aust going towards the lottery
     let minted_lottery_aust_value = minted_lottery_aust * Decimal256::permille(RATE);
@@ -3984,7 +3981,7 @@ fn test_premature_emissions() {
 }
 
 #[test]
-fn claim_rewards_one_depositor() {
+fn claim_rewards_one_sponsor() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
 
@@ -4038,11 +4035,8 @@ fn claim_rewards_one_depositor() {
     // Get the number of minted aust
     let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the number of minted aust that will go towards savings
-    let _minted_savings_aust = minted_aust - minted_aust * Decimal256::percent(SPLIT_FACTOR);
-
     // Get the number of minted aust that will go towards the lottery
-    let minted_lottery_aust = minted_aust * Decimal256::percent(SPLIT_FACTOR);
+    let minted_lottery_aust = minted_aust;
 
     // Get the value of minted aust going towards the lottery
     let minted_lottery_aust_value = minted_lottery_aust * Decimal256::permille(RATE);
@@ -4075,6 +4069,7 @@ fn claim_rewards_one_depositor() {
         .unwrap(),
     )
     .unwrap();
+
     assert_eq!(res.pending_rewards, Decimal256::zero());
     assert_eq!(
         res.reward_index,

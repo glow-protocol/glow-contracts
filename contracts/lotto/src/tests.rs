@@ -45,6 +45,7 @@ pub const TEST_CREATOR: &str = "creator";
 pub const ANCHOR: &str = "anchor";
 pub const A_UST: &str = "aterra-ust";
 pub const DENOM: &str = "uusd";
+pub const GOV_ADDR: &str = "gov";
 pub const COMMUNITY_ADDR: &str = "community";
 pub const DISTRIBUTOR_ADDR: &str = "distributor";
 pub const ORACLE_ADDR: &str = "oracle";
@@ -127,6 +128,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         initial_lottery_execution: FIRST_LOTTO_TIME,
         max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
         glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+        lotto_winner_boost_config: None,
     }
 }
 
@@ -153,6 +155,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         initial_lottery_execution: FIRST_LOTTO_TIME,
         max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
         glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
+        lotto_winner_boost_config: None,
     }
 }
 
@@ -208,6 +211,7 @@ fn mock_instantiate_small_ticket_price(deps: DepsMut) -> Response {
 fn mock_register_contracts(deps: DepsMut) {
     let info = mock_info(TEST_CREATOR, &[]);
     let msg = ExecuteMsg::RegisterContracts {
+        gov_contract: GOV_ADDR.to_string(),
         community_contract: COMMUNITY_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
@@ -251,6 +255,7 @@ fn proper_initialization() {
         ConfigResponse {
             owner: TEST_CREATOR.to_string(),
             a_terra_contract: A_UST.to_string(),
+            gov_contract: "".to_string(),
             community_contract: "".to_string(),
             distributor_contract: "".to_string(),
             anchor_contract: ANCHOR.to_string(),
@@ -278,12 +283,14 @@ fn proper_initialization() {
 
     // Register contracts
     let msg = ExecuteMsg::RegisterContracts {
+        gov_contract: GOV_ADDR.to_string(),
         community_contract: COMMUNITY_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
     };
 
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
     let config = query_config(deps.as_ref()).unwrap();
+    assert_eq!(config.gov_contract, GOV_ADDR.to_string());
     assert_eq!(config.community_contract, COMMUNITY_ADDR.to_string());
     assert_eq!(config.distributor_contract, DISTRIBUTOR_ADDR.to_string());
 

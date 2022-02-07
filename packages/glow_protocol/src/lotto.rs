@@ -46,6 +46,8 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Register Contracts contract address - restricted to owner
     RegisterContracts {
+        /// Gov contract tracks ve balances
+        gov_contract: String,
         /// Community treasury contract that accrues and manages protocol fees
         community_contract: String,
         /// Faucet contract to drip GLOW token to users and update Glow emission rate
@@ -151,6 +153,7 @@ pub struct ConfigResponse {
     pub stable_denom: String,
     pub a_terra_contract: String,
     pub anchor_contract: String,
+    pub gov_contract: String,
     pub community_contract: String,
     pub distributor_contract: String,
     pub lottery_interval: Duration,

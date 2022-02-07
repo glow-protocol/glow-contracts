@@ -116,6 +116,7 @@ pub fn instantiate(
         &Config {
             owner: deps.api.addr_validate(msg.owner.as_str())?,
             a_terra_contract: deps.api.addr_validate(msg.aterra_contract.as_str())?,
+            gov_contract: Addr::unchecked(""),
             community_contract: Addr::unchecked(""),
             distributor_contract: Addr::unchecked(""),
             oracle_contract: deps.api.addr_validate(msg.oracle_contract.as_str())?,
@@ -202,9 +203,16 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::RegisterContracts {
+            gov_contract,
             community_contract,
             distributor_contract,
-        } => execute_register_contracts(deps, info, community_contract, distributor_contract),
+        } => execute_register_contracts(
+            deps,
+            info,
+            gov_contract,
+            community_contract,
+            distributor_contract,
+        ),
         ExecuteMsg::Deposit { encoded_tickets } => {
             execute_deposit(deps, env, info, encoded_tickets)
         }
@@ -272,6 +280,7 @@ pub fn execute(
 pub fn execute_register_contracts(
     deps: DepsMut,
     info: MessageInfo,
+    gov_contract: String,
     community_contract: String,
     distributor_contract: String,
 ) -> Result<Response, ContractError> {
@@ -287,6 +296,7 @@ pub fn execute_register_contracts(
         return Err(ContractError::AlreadyRegistered {});
     }
 
+    config.gov_contract = deps.api.addr_validate(&gov_contract)?;
     config.community_contract = deps.api.addr_validate(&community_contract)?;
     config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
     CONFIG.save(deps.storage, &config)?;
@@ -1507,6 +1517,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         stable_denom: config.stable_denom,
         a_terra_contract: config.a_terra_contract.to_string(),
         anchor_contract: config.anchor_contract.to_string(),
+        gov_contract: config.gov_contract.to_string(),
         community_contract: config.community_contract.to_string(),
         distributor_contract: config.distributor_contract.to_string(),
         lottery_interval: config.lottery_interval,
@@ -1705,6 +1716,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
     let new_config = Config {
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
+        gov_contract: old_config.gov_contract,
         community_contract: deps.api.addr_validate(msg.community_contract.as_str())?,
         distributor_contract: old_config.distributor_contract,
         oracle_contract: old_config.oracle_contract,

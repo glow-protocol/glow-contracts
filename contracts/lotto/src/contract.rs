@@ -4,8 +4,8 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     base64_encoded_tickets_to_vec_string_tickets, calculate_lottery_balance,
-    calculate_winner_prize, claim_unbonded_withdrawals, compute_depositor_reward, compute_reward,
-    compute_sponsor_reward, is_valid_sequence, pseudo_random_seq, uint256_times_decimal256_ceil,
+    calculate_winner_prize, claim_unbonded_withdrawals, compute_reward, compute_sponsor_reward,
+    is_valid_sequence, pseudo_random_seq, uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -426,11 +426,6 @@ pub fn deposit(
             Err(ContractError::InsufficientDepositAmount(amount_tickets))
         };
     }
-
-    // update the glow deposit reward index
-    compute_reward(&mut state, &pool, env.block.height);
-    // update the glow depositor reward for the depositor
-    compute_depositor_reward(&state, &mut depositor_info);
 
     // deduct tx taxes when calculating the net deposited amount in anchor
     let net_coin_amount = deduct_tax(
@@ -863,10 +858,6 @@ pub fn execute_withdraw(
         });
     }
 
-    // Compute GLOW reward
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
-
     // Get the amount of aust equivalent to the depositor's lottery deposit
     let depositor_lottery_aust = depositor.lottery_deposit / rate;
 
@@ -1038,8 +1029,7 @@ pub fn execute_claim_unbonded(
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
-    let mut state = STATE.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
 
     let mut depositor = read_depositor_info(deps.storage, &info.sender);
 
@@ -1049,10 +1039,6 @@ pub fn execute_claim_unbonded(
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
-
-    // Compute Glow depositor rewards
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
 
     if to_send == Uint128::zero() {
         return Err(ContractError::InsufficientClaimableFunds {});
@@ -1110,22 +1096,17 @@ pub fn execute_claim_lottery(
     lottery_ids: Vec<u64>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
     let mut ust_to_send = Uint128::zero();
     let mut glow_to_send = Uint128::zero();
 
-    let mut depositor = read_depositor_info(deps.storage, &info.sender);
+    let depositor = read_depositor_info(deps.storage, &info.sender);
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
-
-    // Compute Glow depositor rewards
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
 
     for lottery_id in lottery_ids.clone() {
         let lottery_info = read_lottery_info(deps.storage, lottery_id);
@@ -1330,7 +1311,6 @@ pub fn execute_claim_rewards(
     let mut state = STATE.load(deps.storage)?;
 
     let depositor_address = info.sender.as_str();
-    let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
     let mut sponsor: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
     // Validate distributor contract has already been registered
@@ -1340,15 +1320,12 @@ pub fn execute_claim_rewards(
 
     // Compute Glow depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor_info);
     compute_sponsor_reward(&state, &mut sponsor);
 
-    let claim_amount = (depositor_info.pending_rewards + sponsor.pending_rewards) * Uint256::one();
-    depositor_info.pending_rewards = Decimal256::zero();
+    let claim_amount = sponsor.pending_rewards * Uint256::one();
     sponsor.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
-    store_depositor_info(deps.storage, &info.sender, depositor_info)?;
     store_sponsor_info(deps.storage, &info.sender, sponsor)?;
 
     let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {
@@ -1686,25 +1663,16 @@ pub fn query_lottery_info(
 
 pub fn query_depositor_info(
     deps: Deps,
-    env: Env,
+    _env: Env,
     addr: String,
 ) -> StdResult<DepositorInfoResponse> {
     let address = deps.api.addr_validate(&addr)?;
-    let mut depositor = read_depositor_info(deps.storage, &address);
-
-    let mut state = STATE.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
-
-    // compute rewards
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_depositor_reward(&state, &mut depositor);
+    let depositor = read_depositor_info(deps.storage, &address);
 
     Ok(DepositorInfoResponse {
         depositor: addr,
         lottery_deposit: depositor.lottery_deposit,
         savings_aust: depositor.savings_aust,
-        reward_index: depositor.reward_index,
-        pending_rewards: depositor.pending_rewards,
         tickets: depositor.tickets,
         unbonding_info: depositor.unbonding_info,
     })
@@ -1722,8 +1690,6 @@ pub fn query_depositor_stats(
         depositor: addr,
         lottery_deposit: depositor_stats.lottery_deposit,
         savings_aust: depositor_stats.savings_aust,
-        reward_index: depositor_stats.reward_index,
-        pending_rewards: depositor_stats.pending_rewards,
         num_tickets: depositor_stats.num_tickets,
     })
 }
@@ -1851,13 +1817,6 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
 
     CONFIG.save(deps.storage, &new_config)?;
 
-    // assuming we can iterate over all depositors
-    // TODO pause implementation
-    let old_depositors = old_read_depositors(deps.as_ref(), None, Some(10_000))?;
-    for (addr, depositor_info) in old_depositors {
-        store_depositor_info(deps.storage, &addr, depositor_info)?;
-    }
-
     Ok(Response::default())
 }
 
@@ -1869,12 +1828,21 @@ pub fn migrate_old_depositors(
 
     let mut num_migrated_entries: u32 = 0;
 
-    for (addr, depositor_info) in old_depositors {
+    for (addr, old_depositor_info) in old_depositors {
         // Delete old depositor
         old_remove_depositor_info(deps.storage, &addr);
 
         // Store new depositor
-        store_depositor_info(deps.storage, &addr, depositor_info)?;
+        store_depositor_info(
+            deps.storage,
+            &addr,
+            DepositorInfo {
+                lottery_deposit: old_depositor_info.lottery_deposit,
+                savings_aust: old_depositor_info.savings_aust,
+                tickets: old_depositor_info.tickets,
+                unbonding_info: old_depositor_info.unbonding_info,
+            },
+        )?;
 
         // Increment num_migrates_entries
         num_migrated_entries += 1;

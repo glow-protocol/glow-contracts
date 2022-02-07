@@ -150,10 +150,6 @@ pub struct DepositorStats {
     // This is used for:
     // - calculating the depositor's balance (how much they can withdraw)
     pub savings_aust: Uint256,
-    // Reward index is used for tracking and calculating the depositor's rewards
-    pub reward_index: Decimal256,
-    // Stores the amount rewards that are available for the user to claim.
-    pub pending_rewards: Decimal256,
     // The number of tickets owned by the depositor
     pub num_tickets: usize,
 }
@@ -162,6 +158,29 @@ pub struct DepositorStats {
 pub struct DepositorData {
     // The number of tickets the user owns.
     pub vec_binary_tickets: Vec<[u8; 3]>,
+    // Stores information on the user's unbonding claims.
+    pub unbonding_info: Vec<Claim>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldDepositorInfo {
+    // Cumulative value of the depositor's lottery deposits
+    // The sums of all depositor deposit amounts equals total_user_lottery_deposits
+    // This is used for:
+    // - calculating how many tickets the user should have access to
+    // - computing the depositor's deposit reward
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub lottery_deposit: Uint256,
+    // Amount of aust in the users savings account
+    // This is used for:
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub savings_aust: Uint256,
+    // Reward index is used for tracking and calculating the depositor's rewards
+    pub reward_index: Decimal256,
+    // Stores the amount rewards that are available for the user to claim.
+    pub pending_rewards: Decimal256,
+    // The number of tickets the user owns.
+    pub tickets: Vec<String>,
     // Stores information on the user's unbonding claims.
     pub unbonding_info: Vec<Claim>,
 }
@@ -179,10 +198,6 @@ pub struct DepositorInfo {
     // This is used for:
     // - calculating the depositor's balance (how much they can withdraw)
     pub savings_aust: Uint256,
-    // Reward index is used for tracking and calculating the depositor's rewards
-    pub reward_index: Decimal256,
-    // Stores the amount rewards that are available for the user to claim.
-    pub pending_rewards: Decimal256,
     // The number of tickets the user owns.
     pub tickets: Vec<String>,
     // Stores information on the user's unbonding claims.
@@ -285,8 +300,6 @@ pub fn store_depositor_info(
     let depositor_stats = DepositorStats {
         lottery_deposit: depositor_info.lottery_deposit,
         savings_aust: depositor_info.savings_aust,
-        reward_index: depositor_info.reward_index,
-        pending_rewards: depositor_info.pending_rewards,
         num_tickets,
     };
 
@@ -320,10 +333,10 @@ pub fn store_depositor_stats(
     Ok(())
 }
 
-pub fn old_read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> DepositorInfo {
+pub fn old_read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> OldDepositorInfo {
     match bucket_read(storage, OLD_PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
-        _ => DepositorInfo {
+        _ => OldDepositorInfo {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
             reward_index: Decimal256::zero(),
@@ -348,8 +361,6 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
         _ => DepositorStats {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             num_tickets: 0,
         },
     };
@@ -365,8 +376,6 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
         // DepositorStats
         lottery_deposit: depositor_stats.lottery_deposit,
         savings_aust: depositor_stats.savings_aust,
-        reward_index: depositor_stats.reward_index,
-        pending_rewards: depositor_stats.pending_rewards,
     }
 }
 
@@ -376,8 +385,6 @@ pub fn read_depositor_stats(storage: &dyn Storage, depositor: &Addr) -> Deposito
         _ => DepositorStats {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             num_tickets: 0,
         },
     }
@@ -434,8 +441,6 @@ pub fn read_depositors_info(
                 depositor,
                 lottery_deposit: v.lottery_deposit,
                 savings_aust: v.savings_aust,
-                reward_index: v.reward_index,
-                pending_rewards: v.pending_rewards,
                 tickets: vec_string_tickets,
                 unbonding_info: depositor_data.unbonding_info,
             })
@@ -461,8 +466,6 @@ pub fn read_depositors_stats(
                 depositor,
                 lottery_deposit: v.lottery_deposit,
                 savings_aust: v.savings_aust,
-                reward_index: v.reward_index,
-                pending_rewards: v.pending_rewards,
                 num_tickets: v.num_tickets,
             })
         })
@@ -473,8 +476,8 @@ pub fn old_read_depositors(
     deps: Deps,
     start_after: Option<Addr>,
     limit: Option<u32>,
-) -> StdResult<Vec<(Addr, DepositorInfo)>> {
-    let liability_bucket: ReadonlyBucket<DepositorInfo> =
+) -> StdResult<Vec<(Addr, OldDepositorInfo)>> {
+    let liability_bucket: ReadonlyBucket<OldDepositorInfo> =
         bucket_read(deps.storage, OLD_PREFIX_DEPOSIT);
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
@@ -490,7 +493,7 @@ pub fn old_read_depositors(
 
             Ok((
                 depositor_addr,
-                DepositorInfo {
+                OldDepositorInfo {
                     lottery_deposit: v.lottery_deposit,
                     savings_aust: v.savings_aust,
                     reward_index: v.reward_index,

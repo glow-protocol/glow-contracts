@@ -30,8 +30,8 @@ use cosmwasm_std::{
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
-    Claim, ConfigResponse, DepositorInfoResponse, ExecuteMsg, InstantiateMsg, PoolResponse,
-    QueryMsg, SponsorInfoResponse, StateResponse,
+    Claim, ConfigResponse, ExecuteMsg, InstantiateMsg, PoolResponse, QueryMsg, SponsorInfoResponse,
+    StateResponse,
 };
 
 use crate::error::ContractError;
@@ -844,8 +844,6 @@ fn deposit() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![
                 String::from(ZERO_MATCH_SEQUENCE),
                 String::from(ONE_MATCH_SEQUENCE)
@@ -1250,8 +1248,6 @@ fn gift_tickets() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![
                 String::from(ZERO_MATCH_SEQUENCE),
                 String::from(ONE_MATCH_SEQUENCE)
@@ -1594,8 +1590,6 @@ fn withdraw() {
         DepositorInfo {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
                 amount: Uint256::from(sent_amount) * Decimal256::permille(RATE),
@@ -1901,8 +1895,6 @@ fn instant_withdraw() {
         DepositorInfo {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![]
         }
@@ -2121,8 +2113,6 @@ fn claim() {
         DepositorInfo {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![]
         }
@@ -2193,8 +2183,6 @@ fn claim_lottery_single_winner() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -2856,8 +2844,6 @@ fn execute_prize_no_winners() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(ZERO_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -2981,8 +2967,6 @@ fn execute_prize_one_winner() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -3118,8 +3102,6 @@ fn execute_prize_winners_diff_ranks() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -3149,8 +3131,6 @@ fn execute_prize_winners_diff_ranks() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(TWO_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -3297,8 +3277,6 @@ fn execute_prize_winners_same_rank() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(FOUR_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -3328,8 +3306,6 @@ fn execute_prize_winners_same_rank() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(FOUR_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -3502,8 +3478,6 @@ fn execute_prize_one_winner_multiple_ranks() {
         DepositorInfo {
             lottery_deposit: total_lottery_deposit_amount,
             savings_aust: Uint256::from(5u128) * (each_savings_aust_amount),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![
                 String::from(SIX_MATCH_SEQUENCE),
                 String::from(ONE_MATCH_SEQUENCE),
@@ -3905,12 +3879,11 @@ fn test_premature_emissions() {
     }
 
     // Deposit of 20_000_000 uusd
-    let msg = ExecuteMsg::Deposit {
-        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
-            String::from(ZERO_MATCH_SEQUENCE),
-            String::from(ONE_MATCH_SEQUENCE),
-        ]),
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
     };
+
     let info = mock_info(
         "addr0000",
         &[Coin {
@@ -3991,11 +3964,11 @@ fn test_premature_emissions() {
         }))]
     );
 
-    let res: DepositorInfoResponse = from_binary(
+    let res: SponsorInfoResponse = from_binary(
         &query(
             deps.as_ref(),
             env,
-            QueryMsg::DepositorInfo {
+            QueryMsg::Sponsor {
                 address: "addr0000".to_string(),
             },
         )
@@ -4036,11 +4009,9 @@ fn claim_rewards_one_depositor() {
     assert_eq!(res.messages.len(), 0);
 
     // Deposit of 20_000_000 uusd
-    let msg = ExecuteMsg::Deposit {
-        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
-            String::from(ZERO_MATCH_SEQUENCE),
-            String::from(ONE_MATCH_SEQUENCE),
-        ]),
+    let msg = ExecuteMsg::Sponsor {
+        award: None,
+        prize_distribution: None,
     };
     let info = mock_info(
         "addr0000",
@@ -4093,11 +4064,11 @@ fn claim_rewards_one_depositor() {
         }))]
     );
 
-    let res: DepositorInfoResponse = from_binary(
+    let res: SponsorInfoResponse = from_binary(
         &query(
             deps.as_ref(),
             mock_env(),
-            QueryMsg::DepositorInfo {
+            QueryMsg::Sponsor {
                 address: "addr0000".to_string(),
             },
         )
@@ -4110,358 +4081,6 @@ fn claim_rewards_one_depositor() {
         (Decimal256::from_str("100").unwrap()
             / Decimal256::from_uint256(minted_lottery_aust_value))
     );
-}
-
-#[test]
-fn claim_rewards_multiple_depositors() {
-    // Initialize contract
-    let mut deps = mock_dependencies(&[]);
-
-    mock_instantiate(&mut deps);
-    mock_register_contracts(deps.as_mut());
-
-    let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
-    STATE.save(deps.as_mut().storage, &state).unwrap();
-
-    //TODO: should query glow emission rate instead of hard-code
-    /*
-    STATE.update(deps.as_mut().storage,  |mut state| {
-        state.glow_emission_rate = Decimal256::one();
-        Ok(state)
-    }).unwrap();
-     */
-
-    // USER 0 Deposits 20_000_000 uusd
-    let msg = ExecuteMsg::Deposit {
-        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
-            String::from(ZERO_MATCH_SEQUENCE),
-            String::from(ONE_MATCH_SEQUENCE),
-        ]),
-    };
-    let info = mock_info(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint256::from(2 * TICKET_PRICE).into(),
-        }],
-    );
-
-    let mut env = mock_env();
-
-    let _res = execute(deps.as_mut(), env.clone(), info, msg);
-
-    // USER 1 Deposits another 20_000_000 uusd
-    let msg = ExecuteMsg::Deposit {
-        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
-            String::from(SIX_MATCH_SEQUENCE),
-            String::from(TWO_MATCH_SEQUENCE),
-        ]),
-    };
-    let info = mock_info(
-        "addr1111",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint256::from(2 * TICKET_PRICE).into(),
-        }],
-    );
-    let _res = execute(deps.as_mut(), env.clone(), info, msg);
-
-    let info = mock_info("addr0000", &[]);
-
-    // calculate the value of each deposit accounting for rounding errors
-    let each_lottery_deposit_amount = (Uint256::from(2 * TICKET_PRICE)
-        / Decimal256::permille(RATE)
-        * Decimal256::percent(SPLIT_FACTOR))
-        * Decimal256::permille(RATE);
-
-    // calculate the total minted_aust_value
-    let total_lottery_deposit_amount = Uint256::from(2u128) * each_lottery_deposit_amount;
-
-    // After 100 blocks
-    env.block.height += 100;
-
-    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
-    println!("Global reward index: {:?}", state.global_reward_index);
-    println!("Emission rate {:?}", state.glow_emission_rate);
-    println!("Last reward updated {:?}", state.last_reward_updated);
-    println!("Current height {:?}", env.block.height);
-
-    let msg = ExecuteMsg::ClaimRewards {};
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
-
-    println!("{:?}", res.attributes);
-    println!("Total deposits test: {}", total_lottery_deposit_amount);
-    println!(
-        "{}",
-        (Decimal256::from_str("100").unwrap()
-            / Decimal256::from_uint256(total_lottery_deposit_amount)
-            * each_lottery_deposit_amount)
-    );
-    assert_eq!(
-        res.messages,
-        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: DISTRIBUTOR_ADDR.to_string(),
-            funds: vec![],
-            msg: to_binary(&FaucetExecuteMsg::Spend {
-                recipient: "addr0000".to_string(),
-                amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lottery_deposit_amount)
-                    * each_lottery_deposit_amount)
-                    .into(),
-            })
-            .unwrap(),
-        }))]
-    );
-
-    // Checking USER 0 state is correct
-    let res: DepositorInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            mock_env(),
-            QueryMsg::DepositorInfo {
-                address: "addr0000".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(res.pending_rewards, Decimal256::zero());
-
-    assert_eq!(res.reward_index, state.global_reward_index);
-    assert_eq!(
-        res.reward_index,
-        Decimal256::from_uint256(Uint256::from(100u128))
-            / Decimal256::from_uint256(total_lottery_deposit_amount)
-    );
-
-    // Checking USER 1 state is correct
-    let res: DepositorInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            mock_env(),
-            QueryMsg::DepositorInfo {
-                address: "addr1111".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-
-    assert_eq!(
-        res.pending_rewards,
-        Decimal256::from_uint256(each_lottery_deposit_amount) * state.global_reward_index
-    );
-    assert_eq!(res.reward_index, state.global_reward_index);
-
-    //TODO: Add a subsequent deposit at a later env.block.height and test again
-}
-
-#[test]
-fn claim_rewards_depositor_and_sponsor() {
-    // Initialize contract
-    let mut deps = mock_dependencies(&[]);
-
-    // Mock aUST-UST exchange rate
-    deps.querier.with_exchange_rate(Decimal256::permille(RATE));
-
-    mock_instantiate(&mut deps);
-    mock_register_contracts(deps.as_mut());
-
-    let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
-    STATE.save(deps.as_mut().storage, &state).unwrap();
-
-    // USER 0 Deposits 20_000_000 uusd -----------------------------
-    let msg = ExecuteMsg::Deposit {
-        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
-            String::from(ZERO_MATCH_SEQUENCE),
-            String::from(ONE_MATCH_SEQUENCE),
-        ]),
-    };
-    let info = mock_info(
-        "addr0000",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint256::from(2 * TICKET_PRICE).into(),
-        }],
-    );
-
-    let mut env = mock_env();
-
-    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
-
-    // Sponsor deposits 20_000_000 uusd ------------------------------
-    let msg = ExecuteMsg::Sponsor {
-        award: Some(false),
-        prize_distribution: None,
-    };
-
-    let info = mock_info(
-        "addr1111",
-        &[Coin {
-            denom: "uusd".to_string(),
-            amount: Uint256::from(2 * TICKET_PRICE).into(),
-        }],
-    );
-    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
-    println!("{:?}", _res.attributes);
-
-    let info = mock_info("addr0000", &[]);
-
-    // Calculations
-
-    // calculate the value of each deposit accounting for rounding errors
-    let user_lottery_deposit_amount = (Uint256::from(2 * TICKET_PRICE)
-        / Decimal256::permille(RATE)
-        * Decimal256::percent(SPLIT_FACTOR))
-        * Decimal256::permille(RATE);
-
-    let sponsor_lottery_deposit_amount =
-        Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE) * Decimal256::permille(RATE);
-
-    // calculate the total minted_aust_value
-    let total_lottery_deposit_amount = user_lottery_deposit_amount + sponsor_lottery_deposit_amount;
-
-    // Move forward 100 blocks ------------------------------------
-    env.block.height += 100;
-
-    // Query the state --------------------------------------------
-    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
-    println!("Global reward index: {:?}", state.global_reward_index);
-    println!("Emission rate {:?}", state.glow_emission_rate);
-    println!("Last reward updated {:?}", state.last_reward_updated);
-    println!("Current height {:?}", env.block.height);
-
-    // Claim rewards for user 1
-    let msg = ExecuteMsg::ClaimRewards {};
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-
-    // assert that res has a message to send 50 GLOW (half of the total emission of 100)
-    // from the distributor to addr0000
-    assert_eq!(
-        res.messages,
-        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: DISTRIBUTOR_ADDR.to_string(),
-            funds: vec![],
-            msg: to_binary(&FaucetExecuteMsg::Spend {
-                recipient: "addr0000".to_string(),
-                amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lottery_deposit_amount)
-                    * user_lottery_deposit_amount)
-                    .into(),
-            })
-            .unwrap(),
-        }))]
-    );
-
-    // Checking USER 0 state is correct
-    let res: DepositorInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            env.clone(),
-            QueryMsg::DepositorInfo {
-                address: "addr0000".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-
-    // USER 0 shouldn't have any pending rewards remaining
-    assert_eq!(res.pending_rewards, Decimal256::zero());
-    // The reward index of the USER should equal the global reward index
-    assert_eq!(res.reward_index, state.global_reward_index);
-
-    // Checking sponsor state is correct
-    let res: SponsorInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            env.clone(),
-            QueryMsg::Sponsor {
-                address: "addr1111".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    // assert that the sponsor has 50 GLOW pending rewards
-    assert_eq!(
-        res.pending_rewards,
-        Decimal256::from_uint256(sponsor_lottery_deposit_amount) * state.global_reward_index
-    );
-
-    // assert that the user reward index equals the global_reward_index
-    assert_eq!(res.reward_index, state.global_reward_index);
-
-    // Move forward 100 blocks ------------------------------------
-    env.block.height += 100;
-
-    // query the state --------------------------------------------
-    let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
-
-    // Claim rewards for USER 0
-    let msg = ExecuteMsg::ClaimRewards {};
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
-
-    // assert that res has a message to send 50 GLOW (half of the total emission of 100)
-    // from the distributor to addr0000
-    assert_eq!(
-        res.messages,
-        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: DISTRIBUTOR_ADDR.to_string(),
-            funds: vec![],
-            msg: to_binary(&FaucetExecuteMsg::Spend {
-                recipient: "addr0000".to_string(),
-                amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(total_lottery_deposit_amount)
-                    * user_lottery_deposit_amount)
-                    .into(),
-            })
-            .unwrap(),
-        }))]
-    );
-
-    // Checking USER 0 state is correct
-    let res: DepositorInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            env.clone(),
-            QueryMsg::DepositorInfo {
-                address: "addr0000".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-
-    // USER 0 shouldn't have any pending rewards remaining
-    assert_eq!(res.pending_rewards, Decimal256::zero());
-
-    // the reward index of USER 0 should equal the global reward index
-    assert_eq!(res.reward_index, state.global_reward_index);
-
-    // Checking sponsor state is correct
-    let res: SponsorInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            env,
-            QueryMsg::Sponsor {
-                address: "addr1111".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-
-    // assert the sponsors pending rewards
-    assert_eq!(
-        res.pending_rewards,
-        Decimal256::from_uint256(sponsor_lottery_deposit_amount) * state.global_reward_index
-    );
-
-    // assert that the user reward index equals the global_reward_index
-    assert_eq!(res.reward_index, state.global_reward_index);
 }
 
 #[test]
@@ -4603,8 +4222,6 @@ fn small_withdraw() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(ONE_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }
@@ -4712,8 +4329,6 @@ fn small_withdraw() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value - ceil_withdrawn_lottery_aust_value,
             savings_aust: minted_savings_aust - withdrawn_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![],
             unbonding_info: vec![Claim {
                 amount: Uint256::from(sent_amount) * Decimal256::permille(RATE),
@@ -4892,8 +4507,6 @@ pub fn lottery_pool_solvency_edge_case() {
         DepositorInfo {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             tickets: vec![String::from(ONE_MATCH_SEQUENCE)],
             unbonding_info: vec![]
         }

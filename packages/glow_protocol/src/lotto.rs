@@ -223,8 +223,6 @@ pub struct DepositorInfoResponse {
     pub depositor: String,
     pub lottery_deposit: Uint256,
     pub savings_aust: Uint256,
-    pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }
@@ -235,8 +233,6 @@ pub struct DepositorStatsResponse {
     pub depositor: String,
     pub lottery_deposit: Uint256,
     pub savings_aust: Uint256,
-    pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
     pub num_tickets: usize,
 }
 

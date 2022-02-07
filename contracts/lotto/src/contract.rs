@@ -101,12 +101,25 @@ pub fn instantiate(
         total_voting_power_weight: Decimal256::percent(150),
     };
 
+    let lotto_winner_boost_config =
+        if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
+            if msg_lotto_winner_boost_config.base_multiplier
+                > msg_lotto_winner_boost_config.max_multiplier
+            {
+                return Err(ContractError::InvalidBoostConfig {});
+            }
+            msg_lotto_winner_boost_config
+        } else {
+            default_lotto_winner_boost_config
+        };
+
     CONFIG.save(
         deps.storage,
         &Config {
             owner: deps.api.addr_validate(msg.owner.as_str())?,
             a_terra_contract: deps.api.addr_validate(msg.aterra_contract.as_str())?,
             gov_contract: Addr::unchecked(""),
+            community_contract: Addr::unchecked(""),
             distributor_contract: Addr::unchecked(""),
             oracle_contract: deps.api.addr_validate(msg.oracle_contract.as_str())?,
             stable_denom: msg.stable_denom.clone(),
@@ -125,7 +138,7 @@ pub fn instantiate(
             unbonding_period: Duration::Time(msg.unbonding_period),
             max_tickets_per_depositor: msg.max_tickets_per_depositor,
             glow_prize_buckets: msg.glow_prize_buckets,
-            lotto_winner_boost_config: default_lotto_winner_boost_config,
+            lotto_winner_boost_config,
         },
     )?;
 
@@ -193,8 +206,15 @@ pub fn execute(
     match msg {
         ExecuteMsg::RegisterContracts {
             gov_contract,
+            community_contract,
             distributor_contract,
-        } => execute_register_contracts(deps, info, gov_contract, distributor_contract),
+        } => execute_register_contracts(
+            deps,
+            info,
+            gov_contract,
+            community_contract,
+            distributor_contract,
+        ),
         ExecuteMsg::Deposit { encoded_tickets } => {
             execute_deposit(deps, env, info, encoded_tickets)
         }
@@ -263,6 +283,7 @@ pub fn execute_register_contracts(
     deps: DepsMut,
     info: MessageInfo,
     gov_contract: String,
+    community_contract: String,
     distributor_contract: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
@@ -278,6 +299,7 @@ pub fn execute_register_contracts(
     }
 
     config.gov_contract = deps.api.addr_validate(&gov_contract)?;
+    config.community_contract = deps.api.addr_validate(&community_contract)?;
     config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
     CONFIG.save(deps.storage, &config)?;
 
@@ -1226,7 +1248,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     let total_reserves = state.total_reserve;
     let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
         vec![CosmosMsg::Bank(BankMsg::Send {
-            to_address: config.gov_contract.to_string(),
+            to_address: config.community_contract.to_string(),
             amount: vec![deduct_tax(
                 deps.as_ref(),
                 Coin {
@@ -1503,6 +1525,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         a_terra_contract: config.a_terra_contract.to_string(),
         anchor_contract: config.anchor_contract.to_string(),
         gov_contract: config.gov_contract.to_string(),
+        community_contract: config.community_contract.to_string(),
         distributor_contract: config.distributor_contract.to_string(),
         lottery_interval: config.lottery_interval,
         epoch_interval: config.epoch_interval,
@@ -1700,12 +1723,27 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         total_voting_power_weight: Decimal256::percent(150),
     };
 
+    let lotto_winner_boost_config =
+        if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
+            if msg_lotto_winner_boost_config.base_multiplier
+                > msg_lotto_winner_boost_config.max_multiplier
+            {
+                return Err(StdError::generic_err(
+                    "boost config base multiplier must be less than max multiplier",
+                ));
+            }
+            msg_lotto_winner_boost_config
+        } else {
+            default_lotto_winner_boost_config
+        };
+
     // migrate config
     let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
     let new_config = Config {
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
         gov_contract: old_config.gov_contract,
+        community_contract: deps.api.addr_validate(msg.community_contract.as_str())?,
         distributor_contract: old_config.distributor_contract,
         oracle_contract: old_config.oracle_contract,
         stable_denom: old_config.stable_denom,
@@ -1724,7 +1762,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         unbonding_period: old_config.unbonding_period,
         max_tickets_per_depositor: msg.max_tickets_per_depositor,
         glow_prize_buckets: msg.glow_prize_buckets,
-        lotto_winner_boost_config: default_lotto_winner_boost_config,
+        lotto_winner_boost_config,
     };
 
     CONFIG.save(deps.storage, &new_config)?;

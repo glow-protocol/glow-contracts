@@ -12,16 +12,16 @@
         "register_contracts": {
           "type": "object",
           "required": [
-            "distributor_contract",
-            "gov_contract"
+            "community_contract",
+            "distributor_contract"
           ],
           "properties": {
-            "distributor_contract": {
-              "description": "Faucet contract to drip GLOW token to users and update Glow emission rate",
+            "community_contract": {
+              "description": "Community treasury contract that accrues and manages protocol fees",
               "type": "string"
             },
-            "gov_contract": {
-              "description": "Gov contract accrues protocol fees and distributes them to Glow stakers",
+            "distributor_contract": {
+              "description": "Faucet contract to drip GLOW token to users and update Glow emission rate",
               "type": "string"
             }
           }
@@ -63,6 +63,14 @@
                 "null"
               ],
               "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_tickets_per_depositor": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
               "minimum": 0.0
             },
             "oracle_addr": {
@@ -170,14 +178,11 @@
         "deposit": {
           "type": "object",
           "required": [
-            "combinations"
+            "encoded_tickets"
           ],
           "properties": {
-            "combinations": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+            "encoded_tickets": {
+              "type": "string"
             }
           }
         }
@@ -194,15 +199,12 @@
         "gift": {
           "type": "object",
           "required": [
-            "combinations",
+            "encoded_tickets",
             "recipient"
           ],
           "properties": {
-            "combinations": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+            "encoded_tickets": {
+              "type": "string"
             },
             "recipient": {
               "type": "string"

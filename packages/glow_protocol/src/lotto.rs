@@ -38,6 +38,7 @@ pub struct InstantiateMsg {
     pub initial_lottery_execution: u64, // time in seconds for the first Lotto execution
     pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS], // glow to be awarded as a bonus to lottery winners
+    pub lotto_winner_boost_config: Option<BoostConfig>, // the boost config to apply to glow emissions for lotto winners
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -111,6 +112,7 @@ pub struct MigrateMsg {
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS], // glow to be awarded as a bonus to lottery winners
     pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
     pub community_contract: String,     // Glow community contract address
+    pub lotto_winner_boost_config: Option<BoostConfig>, // The boost config to apply to glow emissions for lotto winners
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

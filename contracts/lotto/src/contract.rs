@@ -99,6 +99,18 @@ pub fn instantiate(
         total_voting_power_weight: Decimal256::percent(150),
     };
 
+    let lotto_winner_boost_config =
+        if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
+            if msg_lotto_winner_boost_config.base_multiplier
+                > msg_lotto_winner_boost_config.max_multiplier
+            {
+                return Err(ContractError::InvalidBoostConfig {});
+            }
+            msg_lotto_winner_boost_config
+        } else {
+            default_lotto_winner_boost_config
+        };
+
     CONFIG.save(
         deps.storage,
         &Config {
@@ -123,7 +135,7 @@ pub fn instantiate(
             unbonding_period: Duration::Time(msg.unbonding_period),
             max_tickets_per_depositor: msg.max_tickets_per_depositor,
             glow_prize_buckets: msg.glow_prize_buckets,
-            lotto_winner_boost_config: default_lotto_winner_boost_config,
+            lotto_winner_boost_config: lotto_winner_boost_config,
         },
     )?;
 
@@ -1674,6 +1686,20 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         total_voting_power_weight: Decimal256::percent(150),
     };
 
+    let lotto_winner_boost_config =
+        if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
+            if msg_lotto_winner_boost_config.base_multiplier
+                > msg_lotto_winner_boost_config.max_multiplier
+            {
+                return Err(StdError::generic_err(
+                    "boost config base multiplier must be less than max multiplier",
+                ));
+            }
+            msg_lotto_winner_boost_config
+        } else {
+            default_lotto_winner_boost_config
+        };
+
     // migrate config
     let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
     let new_config = Config {
@@ -1698,7 +1724,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         unbonding_period: old_config.unbonding_period,
         max_tickets_per_depositor: msg.max_tickets_per_depositor,
         glow_prize_buckets: msg.glow_prize_buckets,
-        lotto_winner_boost_config: default_lotto_winner_boost_config,
+        lotto_winner_boost_config: lotto_winner_boost_config,
     };
 
     CONFIG.save(deps.storage, &new_config)?;

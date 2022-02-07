@@ -10,10 +10,11 @@ use crate::helpers::{
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    old_read_depositors, read_depositor_info, read_depositor_stats, read_depositors_info,
-    read_depositors_stats, read_lottery_info, read_sponsor_info, store_depositor_info,
-    store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG,
-    OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
+    old_read_lottery_info, old_remove_lottery_info, read_depositor_info, read_depositor_stats,
+    read_depositors_info, read_depositors_stats, read_lottery_info, read_sponsor_info,
+    store_depositor_info, store_lottery_info, store_sponsor_info, Config, DepositorInfo,
+    LotteryInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE,
+    TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -1602,9 +1603,12 @@ pub fn query_lottery_info(
             sequence: lottery.sequence,
             awarded: lottery.awarded,
             timestamp: lottery.timestamp,
+            block_height: lottery.block_height,
+            glow_prize_buckets: lottery.glow_prize_buckets,
             prize_buckets: lottery.prize_buckets,
             number_winners: lottery.number_winners,
             page: lottery.page,
+            total_user_lottery_deposits: lottery.total_user_lottery_deposits,
         })
     } else {
         let current_lottery = query_state(deps, env, None)?.current_lottery;
@@ -1618,6 +1622,9 @@ pub fn query_lottery_info(
             prize_buckets: lottery.prize_buckets,
             number_winners: lottery.number_winners,
             page: lottery.page,
+            block_height: lottery.block_height,
+            glow_prize_buckets: lottery.glow_prize_buckets,
+            total_user_lottery_deposits: lottery.total_user_lottery_deposits,
         })
     }
 }
@@ -1738,6 +1745,9 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    let state = STATE.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+
     let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
         base_multiplier: Decimal256::from_ratio(40, 100),
         max_multiplier: Decimal256::one(),
@@ -1788,11 +1798,26 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
 
     CONFIG.save(deps.storage, &new_config)?;
 
-    // assuming we can iterate over all depositors
-    // TODO pause implementation
-    let old_depositors = old_read_depositors(deps.as_ref(), None, Some(10_000))?;
-    for (addr, depositor_info) in old_depositors {
-        store_depositor_info(deps.storage, &addr, depositor_info)?;
+    // Migrate lottery info
+    for i in 0..state.current_lottery {
+        let old_lottery_info = old_read_lottery_info(deps.storage, i);
+
+        let new_lottery_info = LotteryInfo {
+            rand_round: old_lottery_info.rand_round,
+            sequence: old_lottery_info.sequence,
+            awarded: old_lottery_info.awarded,
+            timestamp: Timestamp::from_seconds(0),
+            prize_buckets: old_lottery_info.prize_buckets,
+            number_winners: old_lottery_info.number_winners,
+            page: old_lottery_info.page,
+            glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+            block_height: old_lottery_info.timestamp,
+            total_user_lottery_deposits: pool.total_user_lottery_deposits,
+        };
+
+        store_lottery_info(deps.storage, i, &new_lottery_info)?;
+
+        old_remove_lottery_info(deps.storage, i);
     }
 
     Ok(Response::default())

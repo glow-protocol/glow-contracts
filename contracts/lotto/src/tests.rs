@@ -2211,8 +2211,8 @@ fn claim_lottery_single_winner() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
-    let exec_height = env.block.height;
 
+    let execute_lottery_block = env.block.clone();
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Check that state equals calculated prize
@@ -2272,12 +2272,12 @@ fn claim_lottery_single_winner() {
             rand_round: 20170,
             sequence: SIX_MATCH_SEQUENCE.to_string(),
             awarded: true,
-            timestamp: exec_height,
+            timestamp: execute_lottery_block.time,
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
             glow_prize_buckets,
-            block_height: env.block.height,
+            block_height: execute_lottery_block.height,
             total_user_lottery_deposits: minted_lottery_aust_value
         }
     );
@@ -2449,6 +2449,7 @@ fn execute_lottery() {
     // Execute lottery, now with tickets
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
+
     let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
     // Get the sent_amount
@@ -2538,6 +2539,7 @@ fn execute_lottery() {
     // Execute 2nd lottery
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
+
     let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
     // Amount of aust to redeem
@@ -2630,6 +2632,7 @@ fn execute_lottery() {
     // Execute 3rd lottery
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
+
     let res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
     // Amount of aust to redeem
@@ -2721,6 +2724,7 @@ fn execute_lottery() {
     // Confirm that you can run the lottery right at the next execution time
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
+
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), lottery_msg).unwrap();
 
     // Advance block_time in time
@@ -2778,6 +2782,7 @@ fn execute_lottery_no_tickets() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
+
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
     println!("res: {:?}", res);
@@ -2871,7 +2876,8 @@ fn execute_prize_no_winners() {
     // Execute lottery - should run correctly
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
     let msg = ExecuteMsg::ExecuteLottery {};
-    let exec_height = env.block.height;
+
+    let execute_lottery_block = env.block.clone();
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Check that state equals calculated prize
@@ -2884,7 +2890,7 @@ fn execute_prize_no_winners() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     // Check lottery info was updated correctly
     let awarded_prize = Uint256::zero();
@@ -2896,12 +2902,12 @@ fn execute_prize_no_winners() {
             rand_round: 20170,
             sequence: SIX_MATCH_SEQUENCE.to_string(),
             awarded: true,
-            timestamp: exec_height,
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             number_winners: [0; NUM_PRIZE_BUCKETS],
             page: "".to_string(),
             glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-            block_height: env.block.height,
+            timestamp: execute_lottery_block.time,
+            block_height: execute_lottery_block.height,
             total_user_lottery_deposits: minted_lottery_aust_value
         }
     );
@@ -2997,8 +3003,8 @@ fn execute_prize_one_winner() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
-    let exec_height = env.block.height;
 
+    let execute_lottery_block = env.block.clone();
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -3006,7 +3012,7 @@ fn execute_prize_one_winner() {
         env.block.time = env.block.time.plus_seconds(time);
     }
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 0, 0, 1];
     let lottery_prize_buckets =
@@ -3020,13 +3026,13 @@ fn execute_prize_one_winner() {
             rand_round: 20170,
             sequence: SIX_MATCH_SEQUENCE.to_string(),
             awarded: true,
-            timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
             glow_prize_buckets,
-            block_height: env.block.height,
-            total_user_lottery_deposits: minted_lottery_aust_value
+            total_user_lottery_deposits: minted_lottery_aust_value,
+            timestamp: execute_lottery_block.time,
+            block_height: execute_lottery_block.height,
         }
     );
 
@@ -3159,8 +3165,8 @@ fn execute_prize_winners_diff_ranks() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
-    let exec_height = env.block.height;
 
+    let execute_lottery_block = env.block.clone();
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Advance block_time in time
@@ -3169,7 +3175,7 @@ fn execute_prize_winners_diff_ranks() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 1, 0, 0, 0, 1];
     let lottery_prize_buckets =
@@ -3190,13 +3196,13 @@ fn execute_prize_winners_diff_ranks() {
             rand_round: 20170,
             sequence: SIX_MATCH_SEQUENCE.to_string(),
             awarded: true,
-            timestamp: exec_height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
             glow_prize_buckets,
-            block_height: env.block.height,
-            total_user_lottery_deposits: total_lottery_deposit_amount
+            total_user_lottery_deposits: total_lottery_deposit_amount,
+            timestamp: execute_lottery_block.time,
+            block_height: execute_lottery_block.height,
         }
     );
 
@@ -3333,8 +3339,8 @@ fn execute_prize_winners_same_rank() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
-    let exec_height = env.block.height;
 
+    let execute_lottery_block = env.block.clone();
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Check that state equals calculated prize
@@ -3347,7 +3353,7 @@ fn execute_prize_winners_same_rank() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 2, 0, 0];
     let lottery_prize_buckets =
@@ -3369,12 +3375,12 @@ fn execute_prize_winners_same_rank() {
             rand_round: 20170,
             sequence: SIX_MATCH_SEQUENCE.to_string(),
             awarded: true,
-            timestamp: exec_height,
+            timestamp: execute_lottery_block.time,
+            block_height: execute_lottery_block.height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
             glow_prize_buckets,
-            block_height: env.block.height,
             total_user_lottery_deposits: total_lottery_deposit_amount
         }
     );
@@ -3511,7 +3517,7 @@ fn execute_prize_one_winner_multiple_ranks() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
-    let exec_height = env.block.height;
+    let execute_lottery_block = env.block.clone();
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Check that state equals calculated prize
@@ -3524,7 +3530,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 3, 0, 1];
     let lottery_prize_buckets =
@@ -3543,12 +3549,12 @@ fn execute_prize_one_winner_multiple_ranks() {
             rand_round: 20170,
             sequence: SIX_MATCH_SEQUENCE.to_string(),
             awarded: true,
-            timestamp: exec_height,
+            timestamp: execute_lottery_block.time,
+            block_height: execute_lottery_block.height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
             glow_prize_buckets,
-            block_height: env.block.height,
             total_user_lottery_deposits: total_lottery_deposit_amount
         }
     );
@@ -3671,7 +3677,7 @@ fn execute_prize_multiple_winners_one_ticket() {
 
     // Execute Lottery
     let msg = ExecuteMsg::ExecuteLottery {};
-    let exec_height = env.block.height;
+    let execute_lottery_block = env.block.clone();
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Check that state equals calculated prize
@@ -3684,7 +3690,7 @@ fn execute_prize_multiple_winners_one_ticket() {
     }
 
     let msg = ExecuteMsg::ExecutePrize { limit: None };
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 0, 0, 3];
     let lottery_prize_buckets =
@@ -3697,12 +3703,12 @@ fn execute_prize_multiple_winners_one_ticket() {
             rand_round: 20170,
             sequence: SIX_MATCH_SEQUENCE.to_string(),
             awarded: true,
-            timestamp: exec_height,
+            timestamp: execute_lottery_block.time,
+            block_height: execute_lottery_block.height,
             prize_buckets: lottery_prize_buckets,
             number_winners,
             page: "".to_string(),
             glow_prize_buckets,
-            block_height: env.block.height,
             total_user_lottery_deposits: total_lottery_deposit_amount
         }
     );

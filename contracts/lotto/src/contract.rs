@@ -136,7 +136,7 @@ pub fn instantiate(
             unbonding_period: Duration::Time(msg.unbonding_period),
             max_tickets_per_depositor: msg.max_tickets_per_depositor,
             glow_prize_buckets: msg.glow_prize_buckets,
-            lotto_winner_boost_config: lotto_winner_boost_config,
+            lotto_winner_boost_config,
         },
     )?;
 
@@ -1736,7 +1736,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         unbonding_period: old_config.unbonding_period,
         max_tickets_per_depositor: msg.max_tickets_per_depositor,
         glow_prize_buckets: msg.glow_prize_buckets,
-        lotto_winner_boost_config: lotto_winner_boost_config,
+        lotto_winner_boost_config,
     };
 
     CONFIG.save(deps.storage, &new_config)?;

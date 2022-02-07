@@ -35,12 +35,15 @@ backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
 cw20 = "0.8.0"
+terraswap = "2.3.0"
 cosmwasm-std = "0.16.0"
 cosmwasm-storage = "0.16.0"
 glow-protocol = { version = "1.0.0", path = "../../packages/glow_protocol" }
 schemars = "0.8.1"
+cosmwasm-bignumber = "2.2.0"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.20"}
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
+terra-cosmwasm = "2.2.0"

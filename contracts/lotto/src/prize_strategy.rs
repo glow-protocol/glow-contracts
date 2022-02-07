@@ -300,13 +300,13 @@ pub fn execute_prize(
                     let mut winnings = [0; NUM_PRIZE_BUCKETS];
                     winnings[matches as usize] = 1;
 
-                    let depositor_info: DepositorStats =
+                    let depositor_stats: DepositorStats =
                         read_depositor_stats(deps.as_ref().storage, winner);
 
                     PrizeInfo {
                         claimed: false,
                         matches: winnings,
-                        lottery_deposit: depositor_info.lottery_deposit,
+                        lottery_deposit: depositor_stats.lottery_deposit,
                     }
                 };
 

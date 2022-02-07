@@ -2,13 +2,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage};
+use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage, Timestamp};
 use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Item, Map, U64Key};
 use glow_protocol::lotto::{BoostConfig, Claim, DepositorInfoResponse};
 
-const PREFIX_LOTTERY: &[u8] = b"lottery";
+use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
+
+const OLD_PREFIX_LOTTERY: &[u8] = b"lottery";
 const PREFIX_DEPOSIT: &[u8] = b"depositor";
 const PREFIX_SPONSOR: &[u8] = b"sponsor";
 
@@ -19,7 +21,7 @@ pub const POOL: Item<Pool> = Item::new("pool");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
 pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
 
-use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
+pub const LOTTERIES: Map<U64Key, LotteryInfo> = Map::new("lo_v2");
 
 // settings for pagination
 const DEFAULT_LIMIT: u32 = 10;
@@ -170,12 +172,12 @@ pub struct LotteryInfo {
     pub rand_round: u64,
     pub sequence: String,
     pub awarded: bool,
-    pub timestamp: u64,
+    pub timestamp: Timestamp,
+    pub block_height: u64,
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub block_height: u64,
     pub total_user_lottery_deposits: Uint256,
 }
 
@@ -208,17 +210,17 @@ pub fn store_lottery_info(
     lottery_id: u64,
     lottery_info: &LotteryInfo,
 ) -> StdResult<()> {
-    bucket(storage, PREFIX_LOTTERY).save(&lottery_id.to_be_bytes(), lottery_info)
+    LOTTERIES.save(storage, U64Key::from(lottery_id), lottery_info)
 }
 
 pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo {
-    match bucket_read(storage, PREFIX_LOTTERY).load(&lottery_id.to_be_bytes()) {
+    match LOTTERIES.load(storage, U64Key::from(lottery_id)) {
         Ok(v) => v,
         _ => LotteryInfo {
             rand_round: 0,
             sequence: "".to_string(),
             awarded: false,
-            timestamp: 0,
+            timestamp: Timestamp::from_seconds(0),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             number_winners: [0; NUM_PRIZE_BUCKETS],
             page: "".to_string(),
@@ -227,6 +229,25 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             total_user_lottery_deposits: Uint256::zero(),
         },
     }
+}
+
+pub fn old_read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> OldLotteryInfo {
+    match bucket_read(storage, OLD_PREFIX_LOTTERY).load(&lottery_id.to_be_bytes()) {
+        Ok(v) => v,
+        _ => OldLotteryInfo {
+            rand_round: 0,
+            sequence: "".to_string(),
+            awarded: false,
+            timestamp: 0,
+            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+            number_winners: [0; NUM_PRIZE_BUCKETS],
+            page: "".to_string(),
+        },
+    }
+}
+
+pub fn old_remove_lottery_info(storage: &mut dyn Storage, lottery_id: u64) -> () {
+    bucket::<OldLotteryInfo>(storage, OLD_PREFIX_LOTTERY).remove(&lottery_id.to_be_bytes())
 }
 
 pub fn store_depositor_info(

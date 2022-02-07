@@ -11,6 +11,7 @@ static PREFIX_REWARD: &[u8] = b"reward";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    pub owner: CanonicalAddr,
     pub glow_token: CanonicalAddr,
     pub staking_token: CanonicalAddr,
     pub distribution_schedule: Vec<(u64, u64, Uint128)>,
@@ -21,6 +22,17 @@ pub fn store_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()>
 }
 
 pub fn read_config(storage: &dyn Storage) -> StdResult<Config> {
+    singleton_read(storage, KEY_CONFIG).load()
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldConfig {
+    pub glow_token: CanonicalAddr,
+    pub staking_token: CanonicalAddr,
+    pub distribution_schedule: Vec<(u64, u64, Uint128)>,
+}
+
+pub fn read_old_config(storage: &dyn Storage) -> StdResult<OldConfig> {
     singleton_read(storage, KEY_CONFIG).load()
 }
 

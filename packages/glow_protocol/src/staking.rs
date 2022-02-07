@@ -6,6 +6,7 @@ use cw20::Cw20ReceiveMsg;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    pub owner: String,
     pub glow_token: String,
     pub staking_token: String, // lp token of GLOW-UST pair contract
     pub distribution_schedule: Vec<(u64, u64, Uint128)>,
@@ -20,6 +21,10 @@ pub enum ExecuteMsg {
     },
     /// Withdraw pending rewards
     Withdraw {},
+    UpdateConfig {
+        owner: Option<String>,
+        distribution_schedule: Option<Vec<(u64, u64, Uint128)>>,
+    },
     /// Owner operation to stop distribution on current staking contract
     /// and send remaining tokens to the new contract
     MigrateStaking {
@@ -35,24 +40,28 @@ pub enum Cw20HookMsg {
 
 /// We currently take no arguments for migrations
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MigrateMsg {}
+pub struct MigrateMsg {
+    pub owner: String,
+    pub distribution_schedule: Vec<(u64, u64, Uint128)>,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
     State {
-        block_height: Option<u64>,
+        block_time: Option<u64>,
     },
     StakerInfo {
         staker: String,
-        block_height: Option<u64>,
+        block_time: Option<u64>,
     },
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
+    pub owner: String,
     pub glow_token: String,
     pub staking_token: String,
     pub distribution_schedule: Vec<(u64, u64, Uint128)>,

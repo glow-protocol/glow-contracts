@@ -23,7 +23,7 @@
         "state": {
           "type": "object",
           "properties": {
-            "block_height": {
+            "block_time": {
               "type": [
                 "integer",
                 "null"
@@ -48,7 +48,7 @@
             "staker"
           ],
           "properties": {
-            "block_height": {
+            "block_time": {
               "type": [
                 "integer",
                 "null"

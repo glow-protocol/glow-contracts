@@ -246,7 +246,7 @@ pub fn old_read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> OldLotte
     }
 }
 
-pub fn old_remove_lottery_info(storage: &mut dyn Storage, lottery_id: u64) -> () {
+pub fn old_remove_lottery_info(storage: &mut dyn Storage, lottery_id: u64) {
     bucket::<OldLotteryInfo>(storage, OLD_PREFIX_LOTTERY).remove(&lottery_id.to_be_bytes())
 }
 

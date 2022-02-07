@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::{Addr, Timestamp, Uint128};
 use cw0::{Duration, Expiration};
 
 pub const TICKET_LENGTH: usize = 6;
@@ -211,10 +211,13 @@ pub struct LotteryInfoResponse {
     pub rand_round: u64,
     pub sequence: String,
     pub awarded: bool,
-    pub timestamp: u64,
+    pub timestamp: Timestamp,
+    pub block_height: u64,
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
+    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub total_user_lottery_deposits: Uint256,
 }
 
 // We define a custom struct for each query response

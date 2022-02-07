@@ -104,12 +104,12 @@ pub fn execute_lottery(
         rand_round: lottery_rand_round,
         sequence: "".to_string(),
         awarded: false,
-        timestamp: env.block.height,
         prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
         number_winners: [0; NUM_PRIZE_BUCKETS],
         page: "".to_string(),
         glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
         block_height: env.block.height,
+        timestamp: env.block.time,
         total_user_lottery_deposits: pool.total_user_lottery_deposits,
     };
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;

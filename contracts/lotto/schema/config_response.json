@@ -6,12 +6,13 @@
     "a_terra_contract",
     "anchor_contract",
     "block_time",
+    "community_contract",
     "distributor_contract",
     "epoch_interval",
-    "gov_contract",
     "instant_withdrawal_fee",
     "lottery_interval",
     "max_holders",
+    "max_tickets_per_depositor",
     "owner",
     "prize_distribution",
     "reserve_factor",
@@ -32,14 +33,14 @@
     "block_time": {
       "$ref": "#/definitions/Duration"
     },
+    "community_contract": {
+      "type": "string"
+    },
     "distributor_contract": {
       "type": "string"
     },
     "epoch_interval": {
       "$ref": "#/definitions/Duration"
-    },
-    "gov_contract": {
-      "type": "string"
     },
     "instant_withdrawal_fee": {
       "$ref": "#/definitions/Decimal256"
@@ -50,6 +51,11 @@
     "max_holders": {
       "type": "integer",
       "format": "uint8",
+      "minimum": 0.0
+    },
+    "max_tickets_per_depositor": {
+      "type": "integer",
+      "format": "uint64",
       "minimum": 0.0
     },
     "owner": {

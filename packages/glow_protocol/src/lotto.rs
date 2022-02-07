@@ -45,8 +45,8 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Register Contracts contract address - restricted to owner
     RegisterContracts {
-        /// Gov contract accrues protocol fees and distributes them to Glow stakers
-        gov_contract: String,
+        /// Community treasury contract that accrues and manages protocol fees
+        community_contract: String,
         /// Faucet contract to drip GLOW token to users and update Glow emission rate
         distributor_contract: String,
     },
@@ -105,11 +105,12 @@ pub enum ExecuteMsg {
     ExecuteEpochOps {},
 }
 
-/// We currently take no arguments for migrations
+/// Migration message
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MigrateMsg {
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS], // glow to be awarded as a bonus to lottery winners
     pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
+    pub community_contract: String,     // Glow community contract address
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -148,7 +149,7 @@ pub struct ConfigResponse {
     pub stable_denom: String,
     pub a_terra_contract: String,
     pub anchor_contract: String,
-    pub gov_contract: String,
+    pub community_contract: String,
     pub distributor_contract: String,
     pub lottery_interval: Duration,
     pub epoch_interval: Duration,

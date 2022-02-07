@@ -1449,7 +1449,7 @@ pub fn execute_update_config(
     }
 
     if let Some(paused) = paused {
-        if paused {
+        if !paused {
             // Make sure that there isn't any old data left if you are unpausing
 
             let old_depositors = old_read_depositors(deps.as_ref(), None, Some(1))?;

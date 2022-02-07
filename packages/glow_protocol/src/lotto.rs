@@ -134,6 +134,8 @@ pub enum QueryMsg {
     PrizeInfo { address: String, lottery_id: u64 },
     /// Depositor information by address
     DepositorInfo { address: String },
+    /// Depositor stats by address
+    DepositorStats { address: String },
     /// List (paginated) of DepositorInfo
     DepositorsInfo {
         start_after: Option<String>,

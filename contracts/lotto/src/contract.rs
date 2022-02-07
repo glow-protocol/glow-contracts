@@ -10,10 +10,10 @@ use crate::helpers::{
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
-    old_read_depositors, read_depositor_info, read_depositors_info, read_depositors_stats,
-    read_lottery_info, read_sponsor_info, store_depositor_info, store_sponsor_info, Config,
-    DepositorInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, POOL, PRIZES, STATE,
-    TICKETS,
+    old_read_depositors, read_depositor_info, read_depositor_stats, read_depositors_info,
+    read_depositors_stats, read_lottery_info, read_sponsor_info, store_depositor_info,
+    store_sponsor_info, Config, DepositorInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG,
+    OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -25,10 +25,10 @@ use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
-    BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse,
-    DepositorsStatsResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,
-    LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse, QueryMsg,
-    SponsorInfoResponse, StateResponse, TicketInfoResponse,
+    BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorStatsResponse,
+    DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg, InstantiateMsg,
+    LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse,
+    QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
@@ -1483,13 +1483,16 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::DepositorInfo { address } => {
             to_binary(&query_depositor_info(deps, env, address)?)
         }
-        QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, env, address)?),
+        QueryMsg::DepositorStats { address } => {
+            to_binary(&query_depositor_stats(deps, env, address)?)
+        }
         QueryMsg::DepositorsInfo { start_after, limit } => {
             to_binary(&query_depositors_info(deps, start_after, limit)?)
         }
         QueryMsg::DepositorsStats { start_after, limit } => {
-            to_binary(&query_depositors_info(deps, start_after, limit)?)
+            to_binary(&query_depositors_stats(deps, start_after, limit)?)
         }
+        QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, env, address)?),
         QueryMsg::LotteryBalance {} => to_binary(&query_lottery_balance(deps, env)?),
     }
 }
@@ -1642,6 +1645,24 @@ pub fn query_depositor_info(
         pending_rewards: depositor.pending_rewards,
         tickets: depositor.tickets,
         unbonding_info: depositor.unbonding_info,
+    })
+}
+
+pub fn query_depositor_stats(
+    deps: Deps,
+    _env: Env,
+    addr: String,
+) -> StdResult<DepositorStatsResponse> {
+    let address = deps.api.addr_validate(&addr)?;
+    let depositor_stats = read_depositor_stats(deps.storage, &address);
+
+    Ok(DepositorStatsResponse {
+        depositor: addr,
+        lottery_deposit: depositor_stats.lottery_deposit,
+        savings_aust: depositor_stats.savings_aust,
+        reward_index: depositor_stats.reward_index,
+        pending_rewards: depositor_stats.pending_rewards,
+        num_tickets: depositor_stats.num_tickets,
     })
 }
 

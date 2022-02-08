@@ -9,11 +9,13 @@
     "community_contract",
     "distributor_contract",
     "epoch_interval",
+    "gov_contract",
     "instant_withdrawal_fee",
     "lottery_interval",
     "max_holders",
     "max_tickets_per_depositor",
     "owner",
+    "paused",
     "prize_distribution",
     "reserve_factor",
     "round_delta",
@@ -42,6 +44,9 @@
     "epoch_interval": {
       "$ref": "#/definitions/Duration"
     },
+    "gov_contract": {
+      "type": "string"
+    },
     "instant_withdrawal_fee": {
       "$ref": "#/definitions/Decimal256"
     },
@@ -60,6 +65,9 @@
     },
     "owner": {
       "type": "string"
+    },
+    "paused": {
+      "type": "boolean"
     },
     "prize_distribution": {
       "type": "array",

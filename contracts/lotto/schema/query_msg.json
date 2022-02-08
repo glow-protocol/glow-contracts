@@ -123,13 +123,50 @@
       "additionalProperties": false
     },
     {
+      "description": "Prizes for a given lottery id",
+      "type": "object",
+      "required": [
+        "lottery_prize_infos"
+      ],
+      "properties": {
+        "lottery_prize_infos": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "start_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Depositor information by address",
       "type": "object",
       "required": [
-        "depositor"
+        "depositor_info"
       ],
       "properties": {
-        "depositor": {
+        "depositor_info": {
           "type": "object",
           "required": [
             "address"
@@ -137,6 +174,85 @@
           "properties": {
             "address": {
               "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Depositor stats by address",
+      "type": "object",
+      "required": [
+        "depositor_stats_info"
+      ],
+      "properties": {
+        "depositor_stats_info": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "List (paginated) of DepositorInfo",
+      "type": "object",
+      "required": [
+        "depositor_infos"
+      ],
+      "properties": {
+        "depositor_infos": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "start_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "List (paginated) of DepositorStats",
+      "type": "object",
+      "required": [
+        "depositors_stats_infos"
+      ],
+      "properties": {
+        "depositors_stats_infos": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "start_after": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }
@@ -158,35 +274,6 @@
           "properties": {
             "address": {
               "type": "string"
-            }
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "List (paginated) of depositors information",
-      "type": "object",
-      "required": [
-        "depositors"
-      ],
-      "properties": {
-        "depositors": {
-          "type": "object",
-          "properties": {
-            "limit": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
-            "start_after": {
-              "type": [
-                "string",
-                "null"
-              ]
             }
           }
         }

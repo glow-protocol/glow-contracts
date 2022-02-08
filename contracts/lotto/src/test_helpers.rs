@@ -59,14 +59,28 @@ pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
 pub fn calculate_lottery_prize_buckets(
     state_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     number_winners: [u32; NUM_PRIZE_BUCKETS],
-) -> [Uint256; NUM_PRIZE_BUCKETS] {
-    state_prize_buckets
-        .iter()
-        .zip(&number_winners)
-        .map(|(a, b)| if *b == 0 { Uint256::zero() } else { *a })
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap()
+    reserve_factor: u64,
+) -> ([Uint256; NUM_PRIZE_BUCKETS], Uint256) {
+    let mut total_reserve = Uint256::zero();
+
+    (
+        state_prize_buckets
+            .iter()
+            .zip(&number_winners)
+            .map(|(a, b)| {
+                if *b == 0 {
+                    Uint256::zero()
+                } else {
+                    let reserve_fee = *a * Decimal256::percent(reserve_factor);
+                    total_reserve += reserve_fee;
+                    *a - reserve_fee
+                }
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+        total_reserve,
+    )
 }
 
 pub fn calculate_remaining_state_prize_buckets(

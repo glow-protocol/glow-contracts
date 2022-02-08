@@ -63,6 +63,7 @@ pub enum ExecuteMsg {
         epoch_interval: Option<u64>,
         max_holders: Option<u8>,
         max_tickets_per_depositor: Option<u64>,
+        paused: Option<bool>,
         lotto_winner_boost_config: Option<BoostConfig>,
     },
     /// Update lottery configuration - restricted to owner
@@ -106,6 +107,8 @@ pub enum ExecuteMsg {
     ExecutePrize { limit: Option<u32> },
     /// Updates rewards emission rate and transfer outstanding reserve to gov
     ExecuteEpochOps {},
+    /// Handles the migrate loop
+    MigrateOldDepositors { limit: Option<u32> },
 }
 
 /// Migration message
@@ -132,17 +135,23 @@ pub enum QueryMsg {
     TicketInfo { sequence: String },
     /// Prizes for a given address on a given lottery id
     PrizeInfo { address: String, lottery_id: u64 },
+    /// Prizes for a given lottery id
+    LotteryPrizeInfos {
+        lottery_id: u64,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
     /// Depositor information by address
     DepositorInfo { address: String },
     /// Depositor stats by address
-    DepositorStats { address: String },
+    DepositorStatsInfo { address: String },
     /// List (paginated) of DepositorInfo
-    DepositorsInfo {
+    DepositorInfos {
         start_after: Option<String>,
         limit: Option<u32>,
     },
     /// List (paginated) of DepositorStats
-    DepositorsStats {
+    DepositorsStatsInfos {
         start_after: Option<String>,
         limit: Option<u32>,
     },
@@ -176,6 +185,7 @@ pub struct ConfigResponse {
     pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
     pub max_tickets_per_depositor: u64,
+    pub paused: bool,
 }
 
 // We define a custom struct for each query response
@@ -223,8 +233,6 @@ pub struct DepositorInfoResponse {
     pub depositor: String,
     pub lottery_deposit: Uint256,
     pub savings_aust: Uint256,
-    pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }
@@ -235,8 +243,6 @@ pub struct DepositorStatsResponse {
     pub depositor: String,
     pub lottery_deposit: Uint256,
     pub savings_aust: Uint256,
-    pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
     pub num_tickets: usize,
 }
 
@@ -278,6 +284,13 @@ pub struct PrizeInfoResponse {
     pub lottery_id: u64,
     pub claimed: bool,
     pub matches: [u32; NUM_PRIZE_BUCKETS],
+    pub won_ust: Uint128,
+    pub won_glow: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PrizeInfosResponse {
+    pub prize_infos: Vec<PrizeInfoResponse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

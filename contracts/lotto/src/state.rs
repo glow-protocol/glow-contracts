@@ -1,11 +1,14 @@
+use std::convert::TryInto;
+use std::str::from_utf8;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, Deps, Order, StdResult, Storage, Timestamp};
+use cosmwasm_std::{Addr, Deps, Order, StdError, StdResult, Storage, Timestamp};
 use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
-use cw_storage_plus::{Bound, Item, Map, U64Key};
+use cw_storage_plus::{Bound, Item, Map, SnapshotMap, U64Key};
 use glow_protocol::lotto::{BoostConfig, Claim, DepositorInfoResponse, DepositorStatsResponse};
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
@@ -19,10 +22,16 @@ pub const OLDCONFIG: Item<OldConfig> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
 pub const POOL: Item<Pool> = Item::new("pool");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
-pub const PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
+pub const OLD_PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
+pub const PRIZES: Map<(U64Key, &Addr), PrizeInfo> = Map::new("prizes_v2");
 
 pub const DEPOSITOR_DATA: Map<&Addr, DepositorData> = Map::new("depositor_data");
-pub const DEPOSITOR_STATS: Map<&Addr, DepositorStats> = Map::new("depositor_stats");
+pub const DEPOSITOR_STATS: SnapshotMap<&Addr, DepositorStatsInfo> = SnapshotMap::new(
+    "depositor_stats",
+    "depositor_stats__checkpoint",
+    "depositor_stats__changelog",
+    cw_storage_plus::Strategy::EveryBlock,
+);
 
 pub const LOTTERIES: Map<U64Key, LotteryInfo> = Map::new("lo_v2");
 
@@ -57,6 +66,7 @@ pub struct Config {
     pub unbonding_period: Duration,
     pub max_tickets_per_depositor: u64,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub paused: bool,
     pub lotto_winner_boost_config: BoostConfig,
 }
 
@@ -139,7 +149,32 @@ pub struct Pool {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct DepositorStats {
+pub struct DepositorStatsInfo {
+    // Cumulative value of the depositor's lottery deposits
+    // The sums of all depositor deposit amounts equals total_user_lottery_deposits
+    // This is used for:
+    // - calculating how many tickets the user should have access to
+    // - computing the depositor's deposit reward
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub lottery_deposit: Uint256,
+    // Amount of aust in the users savings account
+    // This is used for:
+    // - calculating the depositor's balance (how much they can withdraw)
+    pub savings_aust: Uint256,
+    // The number of tickets owned by the depositor
+    pub num_tickets: usize,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorData {
+    // The number of tickets the user owns.
+    pub vec_binary_tickets: Vec<[u8; 3]>,
+    // Stores information on the user's unbonding claims.
+    pub unbonding_info: Vec<Claim>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldDepositorInfo {
     // Cumulative value of the depositor's lottery deposits
     // The sums of all depositor deposit amounts equals total_user_lottery_deposits
     // This is used for:
@@ -155,14 +190,8 @@ pub struct DepositorStats {
     pub reward_index: Decimal256,
     // Stores the amount rewards that are available for the user to claim.
     pub pending_rewards: Decimal256,
-    // The number of tickets owned by the depositor
-    pub num_tickets: usize,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorData {
     // The number of tickets the user owns.
-    pub vec_binary_tickets: Vec<[u8; 3]>,
+    pub tickets: Vec<String>,
     // Stores information on the user's unbonding claims.
     pub unbonding_info: Vec<Claim>,
 }
@@ -180,10 +209,6 @@ pub struct DepositorInfo {
     // This is used for:
     // - calculating the depositor's balance (how much they can withdraw)
     pub savings_aust: Uint256,
-    // Reward index is used for tracking and calculating the depositor's rewards
-    pub reward_index: Decimal256,
-    // Stores the amount rewards that are available for the user to claim.
-    pub pending_rewards: Decimal256,
     // The number of tickets the user owns.
     pub tickets: Vec<String>,
     // Stores information on the user's unbonding claims.
@@ -230,13 +255,6 @@ pub struct OldLotteryInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PrizeInfo {
-    pub claimed: bool,
-    pub matches: [u32; NUM_PRIZE_BUCKETS],
-    pub lottery_deposit: Uint256,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct OldPrizeInfo {
     pub claimed: bool,
     pub matches: [u32; NUM_PRIZE_BUCKETS],
 }
@@ -290,6 +308,7 @@ pub fn store_depositor_info(
     storage: &mut dyn Storage,
     depositor: &Addr,
     depositor_info: DepositorInfo,
+    height: u64,
 ) -> StdResult<()> {
     // Get the number of tickets
     let num_tickets = depositor_info.tickets.len();
@@ -302,19 +321,21 @@ pub fn store_depositor_info(
         unbonding_info: depositor_info.unbonding_info,
     };
 
-    let depositor_stats = DepositorStats {
+    let depositor_stats_info = DepositorStatsInfo {
         lottery_deposit: depositor_info.lottery_deposit,
         savings_aust: depositor_info.savings_aust,
-        reward_index: depositor_info.reward_index,
-        pending_rewards: depositor_info.pending_rewards,
         num_tickets,
     };
 
     DEPOSITOR_DATA.save(storage, depositor, &depositor_data)?;
 
-    DEPOSITOR_STATS.save(storage, depositor, &depositor_stats)?;
+    DEPOSITOR_STATS.save(storage, depositor, &depositor_stats_info, height)?;
 
     Ok(())
+}
+
+pub fn old_remove_depositor_info(storage: &mut dyn Storage, depositor: &Addr) {
+    bucket::<OldDepositorInfo>(storage, OLD_PREFIX_DEPOSIT).remove(depositor.as_bytes())
 }
 
 /// Store depositor stats
@@ -323,23 +344,24 @@ pub fn store_depositor_info(
 pub fn store_depositor_stats(
     storage: &mut dyn Storage,
     depositor: &Addr,
-    mut depositor_stats: DepositorStats,
+    mut depositor_stats: DepositorStatsInfo,
+    height: u64,
 ) -> StdResult<()> {
-    let update_stats = |maybe_stats: Option<DepositorStats>| -> StdResult<DepositorStats> {
+    let update_stats = |maybe_stats: Option<DepositorStatsInfo>| -> StdResult<DepositorStatsInfo> {
         let stats = maybe_stats.unwrap_or_default();
         depositor_stats.num_tickets = stats.num_tickets;
         Ok(depositor_stats)
     };
 
-    DEPOSITOR_STATS.update(storage, depositor, update_stats)?;
+    DEPOSITOR_STATS.update(storage, depositor, height, update_stats)?;
 
     Ok(())
 }
 
-pub fn old_read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> DepositorInfo {
+pub fn old_read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> OldDepositorInfo {
     match bucket_read(storage, OLD_PREFIX_DEPOSIT).load(depositor.as_bytes()) {
         Ok(v) => v,
-        _ => DepositorInfo {
+        _ => OldDepositorInfo {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
             reward_index: Decimal256::zero(),
@@ -359,13 +381,11 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
         },
     };
 
-    let depositor_stats = match DEPOSITOR_STATS.load(storage, depositor) {
+    let depositor_stats_info = match DEPOSITOR_STATS.load(storage, depositor) {
         Ok(v) => v,
-        _ => DepositorStats {
+        _ => DepositorStatsInfo {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
             num_tickets: 0,
         },
     };
@@ -379,21 +399,32 @@ pub fn read_depositor_info(storage: &dyn Storage, depositor: &Addr) -> Depositor
         unbonding_info: depositor_data.unbonding_info,
 
         // DepositorStats
-        lottery_deposit: depositor_stats.lottery_deposit,
-        savings_aust: depositor_stats.savings_aust,
-        reward_index: depositor_stats.reward_index,
-        pending_rewards: depositor_stats.pending_rewards,
+        lottery_deposit: depositor_stats_info.lottery_deposit,
+        savings_aust: depositor_stats_info.savings_aust,
     }
 }
 
-pub fn read_depositor_stats(storage: &dyn Storage, depositor: &Addr) -> DepositorStats {
+pub fn read_depositor_stats(storage: &dyn Storage, depositor: &Addr) -> DepositorStatsInfo {
     match DEPOSITOR_STATS.load(storage, depositor) {
         Ok(v) => v,
-        _ => DepositorStats {
+        _ => DepositorStatsInfo {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
-            reward_index: Decimal256::zero(),
-            pending_rewards: Decimal256::zero(),
+            num_tickets: 0,
+        },
+    }
+}
+
+pub fn read_depositor_stats_at_height(
+    storage: &dyn Storage,
+    depositor: &Addr,
+    height: u64,
+) -> DepositorStatsInfo {
+    match DEPOSITOR_STATS.may_load_at_height(storage, depositor, height) {
+        Ok(Some(v)) => v,
+        _ => DepositorStatsInfo {
+            lottery_deposit: Uint256::zero(),
+            savings_aust: Uint256::zero(),
             num_tickets: 0,
         },
     }
@@ -450,8 +481,6 @@ pub fn read_depositors_info(
                 depositor,
                 lottery_deposit: v.lottery_deposit,
                 savings_aust: v.savings_aust,
-                reward_index: v.reward_index,
-                pending_rewards: v.pending_rewards,
                 tickets: vec_string_tickets,
                 unbonding_info: depositor_data.unbonding_info,
             })
@@ -477,8 +506,6 @@ pub fn read_depositors_stats(
                 depositor,
                 lottery_deposit: v.lottery_deposit,
                 savings_aust: v.savings_aust,
-                reward_index: v.reward_index,
-                pending_rewards: v.pending_rewards,
                 num_tickets: v.num_tickets,
             })
         })
@@ -489,8 +516,8 @@ pub fn old_read_depositors(
     deps: Deps,
     start_after: Option<Addr>,
     limit: Option<u32>,
-) -> StdResult<Vec<(Addr, DepositorInfo)>> {
-    let liability_bucket: ReadonlyBucket<DepositorInfo> =
+) -> StdResult<Vec<(Addr, OldDepositorInfo)>> {
+    let liability_bucket: ReadonlyBucket<OldDepositorInfo> =
         bucket_read(deps.storage, OLD_PREFIX_DEPOSIT);
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
@@ -506,7 +533,7 @@ pub fn old_read_depositors(
 
             Ok((
                 depositor_addr,
-                DepositorInfo {
+                OldDepositorInfo {
                     lottery_deposit: v.lottery_deposit,
                     savings_aust: v.savings_aust,
                     reward_index: v.reward_index,
@@ -527,7 +554,42 @@ fn old_calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
     })
 }
 
-pub fn query_prizes(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<PrizeInfo> {
+pub fn read_prize(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<PrizeInfo> {
     let lottery_key = U64Key::from(lottery_id);
-    PRIZES.load(deps.storage, (address, lottery_key))
+    PRIZES.load(deps.storage, (lottery_key, address))
+}
+
+pub fn read_lottery_prizes(
+    deps: Deps,
+    lottery_id: u64,
+    start_after: Option<Addr>,
+    limit: Option<u32>,
+) -> StdResult<Vec<(Addr, PrizeInfo)>> {
+    let lottery_key = U64Key::from(lottery_id);
+
+    let start = start_after.map(|a| Bound::Exclusive(a.as_bytes().to_vec()));
+    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
+
+    PRIZES
+        .prefix(lottery_key)
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .map(|item| {
+            let (k, v) = item?;
+
+            let addr = Addr::unchecked(from_utf8(&k)?);
+
+            Ok((addr, v))
+        })
+        .collect::<StdResult<Vec<_>>>()
+}
+
+// helper to deserialize the length
+pub fn parse_length(value: &[u8]) -> StdResult<usize> {
+    Ok(u16::from_be_bytes(
+        value
+            .try_into()
+            .map_err(|_| StdError::generic_err("Could not read 2 byte length"))?,
+    )
+    .into())
 }

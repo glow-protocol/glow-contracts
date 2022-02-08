@@ -104,10 +104,13 @@ pub fn execute_lottery(
         rand_round: lottery_rand_round,
         sequence: "".to_string(),
         awarded: false,
-        timestamp: env.block.height,
         prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
         number_winners: [0; NUM_PRIZE_BUCKETS],
         page: "".to_string(),
+        glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+        block_height: env.block.height,
+        timestamp: env.block.time,
+        total_user_lottery_deposits: pool.total_user_lottery_deposits,
     };
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
@@ -282,27 +285,30 @@ pub fn execute_prize(
 
             sequence.1.iter().for_each(|winner| {
                 // Get the lottery_id
-                let lottery_id: U64Key = state.current_lottery.into();
+                let lottery_key: U64Key = state.current_lottery.into();
 
-                // Update the prizes to show that the winner has a winning ticket
+                // Check if a prize already exist
+                let maybe_prize = PRIZES
+                    .may_load(deps.storage, (lottery_key.clone(), winner))
+                    .unwrap();
+
+                // Calculate updated_prize accordingly
+                let updated_prize = if let Some(mut prize) = maybe_prize {
+                    prize.matches[matches as usize] += 1;
+                    prize
+                } else {
+                    let mut winnings = [0; NUM_PRIZE_BUCKETS];
+                    winnings[matches as usize] = 1;
+
+                    PrizeInfo {
+                        claimed: false,
+                        matches: winnings,
+                    }
+                };
+
+                // Save the updated prize
                 PRIZES
-                    .update(deps.storage, (winner, lottery_id), |hits| -> StdResult<_> {
-                        let result = match hits {
-                            Some(mut prize) => {
-                                prize.matches[matches as usize] += 1;
-                                prize
-                            }
-                            None => {
-                                let mut winnings = [0; NUM_PRIZE_BUCKETS];
-                                winnings[matches as usize] = 1;
-                                PrizeInfo {
-                                    claimed: false,
-                                    matches: winnings,
-                                }
-                            }
-                        };
-                        Ok(result)
-                    })
+                    .save(deps.storage, (lottery_key, winner), &updated_prize)
                     .unwrap();
             });
         });
@@ -317,14 +323,30 @@ pub fn execute_prize(
         // Update the lottery prize buckets based on whether or not there is a winner in the corresponding bucket
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
-                // Increase total_awarded_prize
-                total_awarded_prize += state.prize_buckets[index];
+                // Get the prize to be distributed for this tier
+                let mut awarded_prize_bucket = state.prize_buckets[index];
+
+                // Get the reserve fee for this tier
+                let local_reserve_fee = awarded_prize_bucket * config.reserve_factor;
+
+                // Decrease the prize to be distributed by the reserve fee
+                awarded_prize_bucket = awarded_prize_bucket - local_reserve_fee;
+
+                // Increase the total reserve by the reserve fee
+                state.total_reserve += local_reserve_fee;
+
+                // Increase total_awarded_prize by the prize to be distributed
+                total_awarded_prize += awarded_prize_bucket;
 
                 // Update the corresponding lottery prize bucket
-                lottery_info.prize_buckets[index] = state.prize_buckets[index];
+                lottery_info.prize_buckets[index] = awarded_prize_bucket;
 
                 // Set the corresponding award bucket to 0
                 state.prize_buckets[index] = Uint256::zero();
+
+                // Update the corresponding glow lottery prize bucket
+                // In this case glow_prize_buckets is a config and we don't set it to zero afterwards
+                lottery_info.glow_prize_buckets[index] = config.glow_prize_buckets[index];
             }
         }
 

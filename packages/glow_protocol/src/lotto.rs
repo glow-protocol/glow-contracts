@@ -2,11 +2,18 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::{Addr, Timestamp, Uint128};
 use cw0::{Duration, Expiration};
 
 pub const TICKET_LENGTH: usize = 6;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct BoostConfig {
+    pub base_multiplier: Decimal256,
+    pub max_multiplier: Decimal256,
+    pub total_voting_power_weight: Decimal256,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -30,6 +37,8 @@ pub struct InstantiateMsg {
     pub initial_emission_rate: Decimal256, // initial GLOW emission rate for depositor rewards
     pub initial_lottery_execution: u64, // time in seconds for the first Lotto execution
     pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
+    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS], // glow to be awarded as a bonus to lottery winners
+    pub lotto_winner_boost_config: Option<BoostConfig>, // the boost config to apply to glow emissions for lotto winners
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -37,6 +46,8 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Register Contracts contract address - restricted to owner
     RegisterContracts {
+        /// Gov contract tracks ve balances
+        gov_contract: String,
         /// Community treasury contract that accrues and manages protocol fees
         community_contract: String,
         /// Faucet contract to drip GLOW token to users and update Glow emission rate
@@ -52,6 +63,8 @@ pub enum ExecuteMsg {
         epoch_interval: Option<u64>,
         max_holders: Option<u8>,
         max_tickets_per_depositor: Option<u64>,
+        paused: Option<bool>,
+        lotto_winner_boost_config: Option<BoostConfig>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {
@@ -94,12 +107,17 @@ pub enum ExecuteMsg {
     ExecutePrize { limit: Option<u32> },
     /// Updates rewards emission rate and transfer outstanding reserve to gov
     ExecuteEpochOps {},
+    /// Handles the migrate loop
+    MigrateOldDepositors { limit: Option<u32> },
 }
 
 /// Migration message
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MigrateMsg {
-    pub community_contract: String, // Glow community contract address
+    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS], // glow to be awarded as a bonus to lottery winners
+    pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
+    pub community_contract: String,     // Glow community contract address
+    pub lotto_winner_boost_config: Option<BoostConfig>, // The boost config to apply to glow emissions for lotto winners
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -117,15 +135,28 @@ pub enum QueryMsg {
     TicketInfo { sequence: String },
     /// Prizes for a given address on a given lottery id
     PrizeInfo { address: String, lottery_id: u64 },
-    /// Depositor information by address
-    Depositor { address: String },
-    /// Sponsor information by address
-    Sponsor { address: String },
-    /// List (paginated) of depositors information
-    Depositors {
+    /// Prizes for a given lottery id
+    LotteryPrizeInfos {
+        lottery_id: u64,
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    /// Depositor information by address
+    DepositorInfo { address: String },
+    /// Depositor stats by address
+    DepositorStatsInfo { address: String },
+    /// List (paginated) of DepositorInfo
+    DepositorInfos {
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
+    /// List (paginated) of DepositorStats
+    DepositorsStatsInfos {
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
+    /// Sponsor information by address
+    Sponsor { address: String },
     /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
     /// now.
     LotteryBalance {},
@@ -138,6 +169,7 @@ pub struct ConfigResponse {
     pub stable_denom: String,
     pub a_terra_contract: String,
     pub anchor_contract: String,
+    pub gov_contract: String,
     pub community_contract: String,
     pub distributor_contract: String,
     pub lottery_interval: Duration,
@@ -153,6 +185,7 @@ pub struct ConfigResponse {
     pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
     pub max_tickets_per_depositor: u64,
+    pub paused: bool,
 }
 
 // We define a custom struct for each query response
@@ -185,10 +218,13 @@ pub struct LotteryInfoResponse {
     pub rand_round: u64,
     pub sequence: String,
     pub awarded: bool,
-    pub timestamp: u64,
+    pub timestamp: Timestamp,
+    pub block_height: u64,
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
+    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub total_user_lottery_deposits: Uint256,
 }
 
 // We define a custom struct for each query response
@@ -197,10 +233,17 @@ pub struct DepositorInfoResponse {
     pub depositor: String,
     pub lottery_deposit: Uint256,
     pub savings_aust: Uint256,
-    pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorStatsResponse {
+    pub depositor: String,
+    pub lottery_deposit: Uint256,
+    pub savings_aust: Uint256,
+    pub num_tickets: usize,
 }
 
 // We define a custom struct for each query response
@@ -216,6 +259,12 @@ pub struct SponsorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorsInfoResponse {
     pub depositors: Vec<DepositorInfoResponse>,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DepositorsStatsResponse {
+    pub depositors: Vec<DepositorStatsResponse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -235,6 +284,13 @@ pub struct PrizeInfoResponse {
     pub lottery_id: u64,
     pub claimed: bool,
     pub matches: [u32; NUM_PRIZE_BUCKETS],
+    pub won_ust: Uint128,
+    pub won_glow: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PrizeInfosResponse {
+    pub prize_infos: Vec<PrizeInfoResponse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

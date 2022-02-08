@@ -59,14 +59,28 @@ pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
 pub fn calculate_lottery_prize_buckets(
     state_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     number_winners: [u32; NUM_PRIZE_BUCKETS],
-) -> [Uint256; NUM_PRIZE_BUCKETS] {
-    state_prize_buckets
-        .iter()
-        .zip(&number_winners)
-        .map(|(a, b)| if *b == 0 { Uint256::zero() } else { *a })
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap()
+    reserve_factor: u64,
+) -> ([Uint256; NUM_PRIZE_BUCKETS], Uint256) {
+    let mut total_reserve = Uint256::zero();
+
+    (
+        state_prize_buckets
+            .iter()
+            .zip(&number_winners)
+            .map(|(a, b)| {
+                if *b == 0 {
+                    Uint256::zero()
+                } else {
+                    let reserve_fee = *a * Decimal256::percent(reserve_factor);
+                    total_reserve += reserve_fee;
+                    *a - reserve_fee
+                }
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+        total_reserve,
+    )
 }
 
 pub fn calculate_remaining_state_prize_buckets(
@@ -88,13 +102,13 @@ pub fn generate_sequential_ticket_combinations(num_combinations: u64) -> Vec<Str
         .collect::<Vec<String>>()
 }
 
-pub fn combinations_to_encoded_tickets(combinations: Vec<String>) -> String {
+pub fn vec_string_tickets_to_encoded_tickets(vec_string_tickets: Vec<String>) -> String {
     // Convert each string to
     // when it's a string its taking 8 bits per char
     // but each char only holds 4 bits of information
     // convert it to just 4 bits, but then thats u4 not u8. u8 is 256
 
-    let binary_data = combinations
+    let binary_data = vec_string_tickets
         // Iterate over combinations
         .iter()
         // Take each combination and hex decode it

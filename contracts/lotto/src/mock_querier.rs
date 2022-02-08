@@ -41,6 +41,17 @@ pub enum QueryMsg {
         address: String,
     },
 
+    BalanceAt {
+        address: String,
+        block_height: u64,
+    },
+
+    TotalSupply {},
+
+    TotalSupplyAt {
+        block_height: u64,
+    },
+
     GetRandomness {
         round: u64,
     },
@@ -216,39 +227,43 @@ impl WasmMockQuerier {
                 }
             }
 
-            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => match from_binary(msg)
-                .unwrap()
-            {
-                QueryMsg::EpochState {
-                    block_height: _,
-                    distributed_interest: _,
-                } => {
-                    SystemResult::Ok(ContractResult::from(to_binary(&EpochStateResponse {
-                        exchange_rate: self.exchange_rate_querier.exchange_rate, // Current anchor rate,
-                        aterra_supply: Uint256::one(),
-                    })))
-                }
-                // TODO: revise, currently hard-coded
-                QueryMsg::GlowEmissionRate {
-                    current_award: _,
-                    target_award: _,
-                    current_emission_rate: _,
-                } => SystemResult::Ok(ContractResult::from(to_binary(&GlowEmissionRateResponse {
-                    emission_rate: Decimal256::one(),
-                }))),
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
+                match from_binary::<QueryMsg>(msg).unwrap() {
+                    QueryMsg::EpochState {
+                        block_height: _,
+                        distributed_interest: _,
+                    } => {
+                        SystemResult::Ok(ContractResult::from(to_binary(&EpochStateResponse {
+                            exchange_rate: self.exchange_rate_querier.exchange_rate, // Current anchor rate,
+                            aterra_supply: Uint256::one(),
+                        })))
+                    }
+                    // TODO: revise, currently hard-coded
+                    QueryMsg::GlowEmissionRate {
+                        current_award: _,
+                        target_award: _,
+                        current_emission_rate: _,
+                    } => SystemResult::Ok(ContractResult::from(to_binary(
+                        &GlowEmissionRateResponse {
+                            emission_rate: Decimal256::one(),
+                        },
+                    ))),
 
-                QueryMsg::GetRandomness { round: _ } => {
-                    SystemResult::Ok(ContractResult::from(to_binary(&OracleResponse {
-                        randomness: Binary::from_base64(
-                            "e74c6cfd99371c817e8c3e0099df9074032eec15189c49e5b4740b084ba5ce2b",
-                        )
-                        .unwrap(),
-                        worker: Addr::unchecked(MOCK_CONTRACT_ADDR),
-                    })))
-                }
+                    QueryMsg::GetRandomness { round: _ } => {
+                        SystemResult::Ok(ContractResult::from(to_binary(&OracleResponse {
+                            randomness: Binary::from_base64(
+                                "e74c6cfd99371c817e8c3e0099df9074032eec15189c49e5b4740b084ba5ce2b",
+                            )
+                            .unwrap(),
+                            worker: Addr::unchecked(MOCK_CONTRACT_ADDR),
+                        })))
+                    }
 
-                _ => match from_binary(msg).unwrap() {
-                    Cw20QueryMsg::Balance { address } => {
+                    // TODO fix
+                    QueryMsg::BalanceAt {
+                        address,
+                        block_height: _,
+                    } => {
                         let balances: &HashMap<String, Uint128> =
                             match self.token_querier.balances.get(contract_addr) {
                                 Some(balances) => balances,
@@ -280,9 +295,67 @@ impl WasmMockQuerier {
                         ))
                     }
 
-                    _ => panic!("DO NOT ENTER HERE"),
-                },
-            },
+                    // TODO fix
+                    QueryMsg::TotalSupplyAt { block_height: _ } => {
+                        let balances: &HashMap<String, Uint128> =
+                            match self.token_querier.balances.get(contract_addr) {
+                                Some(balances) => balances,
+                                None => {
+                                    return SystemResult::Err(SystemError::InvalidRequest {
+                                        error: format!(
+                                            "No balance info exists for the contract {}",
+                                            contract_addr
+                                        ),
+                                        request: msg.as_slice().into(),
+                                    })
+                                }
+                            };
+
+                        // Sum over the entire balance
+                        let balance = balances.iter().fold(Uint128::zero(), |sum, x| sum + x.1);
+
+                        SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&Cw20BalanceResponse { balance }).unwrap(),
+                        ))
+                    }
+
+                    _ => match from_binary::<Cw20QueryMsg>(msg).unwrap() {
+                        Cw20QueryMsg::Balance { address } => {
+                            let balances: &HashMap<String, Uint128> =
+                                match self.token_querier.balances.get(contract_addr) {
+                                    Some(balances) => balances,
+                                    None => {
+                                        return SystemResult::Err(SystemError::InvalidRequest {
+                                            error: format!(
+                                                "No balance info exists for the contract {}",
+                                                contract_addr
+                                            ),
+                                            request: msg.as_slice().into(),
+                                        })
+                                    }
+                                };
+
+                            let balance = match balances.get(&address) {
+                                Some(v) => *v,
+                                None => {
+                                    return SystemResult::Ok(ContractResult::Ok(
+                                        to_binary(&Cw20BalanceResponse {
+                                            balance: Uint128::zero(),
+                                        })
+                                        .unwrap(),
+                                    ));
+                                }
+                            };
+
+                            SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&Cw20BalanceResponse { balance }).unwrap(),
+                            ))
+                        }
+
+                        _ => panic!("DO NOT ENTER HERE"),
+                    },
+                }
+            }
             _ => self.base.handle_query(request),
         }
     }

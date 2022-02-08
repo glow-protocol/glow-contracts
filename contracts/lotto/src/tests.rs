@@ -3,22 +3,26 @@ use crate::contract::{
     INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::helpers::{
-    base64_encoded_tickets_to_vec_string_tickets, calculate_max_bound, calculate_winner_prize,
-    get_minimum_matches_for_winning_ticket, uint256_times_decimal256_ceil,
+    base64_encoded_tickets_to_vec_string_tickets, calculate_boost_multiplier, calculate_max_bound,
+    calculate_winner_prize, get_minimum_matches_for_winning_ticket, uint256_times_decimal256_ceil,
 };
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
 };
 use crate::state::{
-    query_prizes, read_depositor_info, read_lottery_info, read_sponsor_info, store_depositor_info,
-    DepositorInfo, LotteryInfo, PrizeInfo, CONFIG, STATE,
+    old_remove_depositor_info, read_depositor_info, read_depositor_stats,
+    read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes, read_prize,
+    read_sponsor_info, store_depositor_info, store_depositor_stats, DepositorInfo,
+    DepositorStatsInfo, LotteryInfo, OldDepositorInfo, PrizeInfo, CONFIG, PRIZES, STATE,
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
     calculate_remaining_state_prize_buckets, generate_sequential_ticket_combinations,
     vec_string_tickets_to_encoded_tickets,
 };
-use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
+use cosmwasm_storage::bucket;
+use cw_storage_plus::U64Key;
+use glow_protocol::lotto::{BoostConfig, PrizeInfoResponse, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use lazy_static::lazy_static;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -56,7 +60,7 @@ const TICKET_PRICE: u64 = 10_000_000; // 10 * 10^6
 
 const SPLIT_FACTOR: u64 = 75; // as a %
 const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
-const RESERVE_FACTOR: u64 = 5; // as a %
+pub const RESERVE_FACTOR: u64 = 5; // as a %
 const MAX_HOLDERS: u8 = 10;
 const WEEK_TIME: u64 = 604800; // in seconds
 const HOUR_TIME: u64 = 3600; // in seconds
@@ -92,16 +96,11 @@ lazy_static! {
     static ref GLOW_PRIZE_BUCKETS: [Uint256; NUM_PRIZE_BUCKETS] = [
         Uint256::from(0u128),
         Uint256::from(0u128),
-        Uint256::from(0u128),
-        Uint256::from(0u128),
-        Uint256::from(0u128),
-        Uint256::from(0u128),
-        Uint256::from(0u128),
-        // Uint256::from(10 * u128::pow(10, 6)),
-        // Uint256::from(10 * u128::pow(10, 6)),
-        // Uint256::from(10 * u128::pow(10, 6)),
-        // Uint256::from(10 * u128::pow(10, 6)),
-        // Uint256::from(10 * u128::pow(10, 6)),
+        Uint256::from(10 * u128::pow(10, 6)),
+        Uint256::from(50 * u128::pow(10, 6)),
+        Uint256::from(100 * u128::pow(10, 6)),
+        Uint256::from(1000 * u128::pow(10, 6)),
+        Uint256::from(100000 * u128::pow(10, 6)),
     ];
 }
 
@@ -272,7 +271,8 @@ fn proper_initialization() {
             split_factor: Decimal256::percent(SPLIT_FACTOR),
             instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
             unbonding_period: WEEK,
-            max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR
+            max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
+            paused: false
         }
     );
 
@@ -565,6 +565,29 @@ fn update_config() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.max_tickets_per_depositor, 100);
+
+    // Try updating paused
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: None,
+        paused: Some(true),
+        lotto_winner_boost_config: None,
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // check paused has changed
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
+    assert!(config_response.paused);
 
     // check only owner can update config
     let info = mock_info("owner2", &[]);
@@ -2092,6 +2115,7 @@ fn claim() {
         &mut deps.storage,
         &deps.api.addr_validate("addr0001").unwrap(),
         dep,
+        env.block.height,
     )
     .unwrap();
 
@@ -2261,9 +2285,10 @@ fn claim_lottery_single_winner() {
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 0, 0, 1];
-    let lottery_prize_buckets =
-        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
-    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+    let (lottery_prize_buckets, total_reserve) =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners, RESERVE_FACTOR);
+    let (glow_prize_buckets, _) =
+        calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners, 0);
 
     let lottery = read_lottery_info(deps.as_ref().storage, 0u64);
     assert_eq!(
@@ -2282,20 +2307,19 @@ fn claim_lottery_single_winner() {
         }
     );
 
-    let prize_info = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
+    let prize_info = read_prize(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(
         prize_info,
         PrizeInfo {
             claimed: false,
             matches: number_winners,
-            lottery_deposit: minted_lottery_aust_value
         }
     );
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
-    assert_eq!(state.total_reserve, Uint256::zero(),);
+    assert_eq!(state.total_reserve, total_reserve);
 
     let remaining_state_prize_buckets =
         calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
@@ -2309,48 +2333,77 @@ fn claim_lottery_single_winner() {
     };
 
     // Claim lottery should work, even if there are no unbonded claims
-    let res = execute(deps.as_mut(), env, info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     let config = CONFIG.load(deps.as_ref().storage).unwrap();
     let lottery_info = read_lottery_info(deps.as_ref().storage, 0u64);
+    let snapshotted_depositor_stats_info = read_depositor_stats_at_height(
+        deps.as_ref().storage,
+        &info.sender,
+        lottery_info.block_height,
+    );
+
     let winner_address = info.sender;
-    let (mut ust_to_send, glow_to_send): (Uint128, Uint128) = calculate_winner_prize(
+
+    let (ust_to_send, glow_to_send): (Uint128, Uint128) = calculate_winner_prize(
         &deps.as_mut().querier,
         &config,
         &prize_info,
         &lottery_info,
+        &snapshotted_depositor_stats_info,
         &winner_address,
     )
     .unwrap();
 
-    let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
+    let prizes = read_prize(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(
         prizes,
         PrizeInfo {
             claimed: true,
             matches: [0, 0, 0, 0, 0, 0, 1],
-            lottery_deposit: minted_lottery_aust_value
         }
     );
 
-    //deduct reserve fee
-    let config = query_config(deps.as_ref()).unwrap();
-    let reserve_fee = Uint256::from(ust_to_send) * config.reserve_factor;
-    ust_to_send -= Uint128::from(reserve_fee);
+    let prize_response: PrizeInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            env,
+            QueryMsg::PrizeInfo {
+                address: "addr0000".to_string(),
+                lottery_id: 0,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(prize_response.won_ust, ust_to_send);
+    assert_eq!(prize_response.won_glow, glow_to_send);
 
     //check total_reserve
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
-    assert_eq!(state.total_reserve, reserve_fee);
+    assert_eq!(state.total_reserve, total_reserve);
 
     assert_eq!(
         res.messages,
-        vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
-            to_address: "addr0000".to_string(),
-            amount: vec![Coin {
-                denom: String::from("uusd"),
-                amount: ust_to_send,
-            }],
-        }))]
+        vec![
+            SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+                to_address: "addr0000".to_string(),
+                amount: vec![Coin {
+                    denom: String::from("uusd"),
+                    amount: ust_to_send,
+                }],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: config.distributor_contract.to_string(),
+                funds: vec![],
+                msg: to_binary(&FaucetExecuteMsg::Spend {
+                    recipient: "addr0000".to_string(),
+                    amount: glow_to_send,
+                })
+                .unwrap(),
+            }))
+        ]
     );
 
     assert_eq!(
@@ -3015,10 +3068,11 @@ fn execute_prize_one_winner() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 0, 0, 1];
-    let lottery_prize_buckets =
-        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
+    let (lottery_prize_buckets, total_reserve) =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners, RESERVE_FACTOR);
 
-    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+    let (glow_prize_buckets, _) =
+        calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners, 0);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -3036,13 +3090,13 @@ fn execute_prize_one_winner() {
         }
     );
 
-    let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
+    let prizes = read_prize(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(prizes.matches, number_winners);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
 
     assert_eq!(state.current_lottery, 1u64);
-    assert_eq!(state.total_reserve, Uint256::zero(),);
+    assert_eq!(state.total_reserve, total_reserve);
 
     let remaining_state_prize_buckets =
         calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
@@ -3058,7 +3112,7 @@ fn execute_prize_one_winner() {
             attr("action", "execute_prize"),
             attr(
                 "total_awarded_prize",
-                state_prize_buckets[NUM_PRIZE_BUCKETS - 1].to_string()
+                lottery_prize_buckets[NUM_PRIZE_BUCKETS - 1].to_string()
             ),
         ]
     );
@@ -3178,9 +3232,10 @@ fn execute_prize_winners_diff_ranks() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 1, 0, 0, 0, 1];
-    let lottery_prize_buckets =
-        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
-    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+    let (lottery_prize_buckets, _total_reserve) =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners, RESERVE_FACTOR);
+    let (glow_prize_buckets, _) =
+        calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners, 0);
 
     // calculate the value of each deposit accounting for rounding errors
     let each_lottery_deposit_amount = (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
@@ -3206,10 +3261,10 @@ fn execute_prize_winners_diff_ranks() {
         }
     );
 
-    let prizes = query_prizes(deps.as_ref(), &address_raw_0, 0u64).unwrap();
+    let prizes = read_prize(deps.as_ref(), &address_raw_0, 0u64).unwrap();
     assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 0, 1]);
 
-    let prizes = query_prizes(deps.as_ref(), &address_raw_1, 0u64).unwrap();
+    let prizes = read_prize(deps.as_ref(), &address_raw_1, 0u64).unwrap();
     assert_eq!(prizes.matches, [0, 0, 1, 0, 0, 0, 0]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
@@ -3356,10 +3411,11 @@ fn execute_prize_winners_same_rank() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 2, 0, 0];
-    let lottery_prize_buckets =
-        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
+    let (lottery_prize_buckets, total_reserve) =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners, RESERVE_FACTOR);
 
-    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+    let (glow_prize_buckets, _) =
+        calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners, 0);
 
     // calculate the value of each deposit accounting for rounding errors
     let each_lottery_deposit_amount = (Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE)
@@ -3387,7 +3443,7 @@ fn execute_prize_winners_same_rank() {
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
-    assert_eq!(state.total_reserve, Uint256::zero(),);
+    assert_eq!(state.total_reserve, total_reserve);
 
     let remaining_state_prize_buckets =
         calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
@@ -3533,10 +3589,11 @@ fn execute_prize_one_winner_multiple_ranks() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 3, 0, 1];
-    let lottery_prize_buckets =
-        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
+    let (lottery_prize_buckets, total_reserve) =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners, RESERVE_FACTOR);
 
-    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+    let (glow_prize_buckets, _) =
+        calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners, 0);
 
     println!(
         "lottery_info: {:x?}",
@@ -3559,12 +3616,12 @@ fn execute_prize_one_winner_multiple_ranks() {
         }
     );
 
-    let prizes = query_prizes(deps.as_ref(), &address_raw, 0u64).unwrap();
+    let prizes = read_prize(deps.as_ref(), &address_raw, 0u64).unwrap();
     assert_eq!(prizes.matches, number_winners);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
-    assert_eq!(state.total_reserve, Uint256::zero());
+    assert_eq!(state.total_reserve, total_reserve);
 
     let remaining_state_prize_buckets =
         calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
@@ -3693,9 +3750,10 @@ fn execute_prize_multiple_winners_one_ticket() {
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
     let number_winners = [0, 0, 0, 0, 0, 0, 3];
-    let lottery_prize_buckets =
-        calculate_lottery_prize_buckets(state_prize_buckets, number_winners);
-    let glow_prize_buckets = calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners);
+    let (lottery_prize_buckets, total_reserve) =
+        calculate_lottery_prize_buckets(state_prize_buckets, number_winners, RESERVE_FACTOR);
+    let (glow_prize_buckets, _) =
+        calculate_lottery_prize_buckets(*GLOW_PRIZE_BUCKETS, number_winners, 0);
 
     assert_eq!(
         read_lottery_info(deps.as_ref().storage, 0u64),
@@ -3713,12 +3771,12 @@ fn execute_prize_multiple_winners_one_ticket() {
         }
     );
 
-    let prizes = query_prizes(deps.as_ref(), &address_0, 0u64).unwrap();
+    let prizes = read_prize(deps.as_ref(), &address_0, 0u64).unwrap();
     assert_eq!(prizes.matches, [0, 0, 0, 0, 0, 0, 1]);
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
     assert_eq!(state.current_lottery, 1u64);
-    assert_eq!(state.total_reserve, Uint256::zero());
+    assert_eq!(state.total_reserve, total_reserve);
 
     let remaining_state_prize_buckets =
         calculate_remaining_state_prize_buckets(state_prize_buckets, number_winners);
@@ -5535,4 +5593,437 @@ pub fn test_ticket_encoding_and_decoding() {
         Err(_) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
+}
+
+#[test]
+pub fn test_query_prizes() {
+    // Add some prizes
+
+    let mut deps = mock_dependencies(&[]);
+
+    // get env
+    let mut _env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    // Query them
+
+    for i in 0..10 {
+        for j in 0..3 {
+            let prize = PrizeInfo {
+                claimed: false,
+                matches: [i, j, 2, 3, 1, 3, 3],
+            };
+
+            PRIZES
+                .save(
+                    deps.as_mut().storage,
+                    (
+                        U64Key::from(i as u64),
+                        &Addr::unchecked(format!("addr000{}", j)),
+                    ),
+                    &prize,
+                )
+                .unwrap();
+        }
+    }
+
+    let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, None, None).unwrap();
+
+    let expected_prizes = (0..3)
+        .map(|i| {
+            (
+                Addr::unchecked(format!("addr000{}", i)),
+                PrizeInfo {
+                    claimed: false,
+                    matches: [2, i, 2, 3, 1, 3, 3],
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(lottery_prizes, expected_prizes);
+
+    println!("{:?}", lottery_prizes);
+
+    // Test start after
+
+    let start_after = Some(Addr::unchecked("addr0002"));
+    let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, start_after, None).unwrap();
+    assert_eq!(lottery_prizes.len(), 0);
+
+    // Test limit
+
+    let limit = Some(1);
+    let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, None, limit).unwrap();
+    assert_eq!(lottery_prizes.len(), 1);
+}
+
+#[test]
+pub fn test_calculate_boost_multiplier() {
+    // Test #1
+
+    let boost_config = BoostConfig {
+        base_multiplier: Decimal256::percent(20),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(200),
+    };
+
+    let snapshotted_user_lottery_deposit = Uint256::from(100u128);
+    let snapshotted_total_user_lottery_deposits = Uint256::from(200u128);
+
+    let snapshotted_user_voting_balance = Uint128::from(20u128);
+    let snapshotted_total_voting_balance = Uint128::from(100u128);
+
+    let multiplier = calculate_boost_multiplier(
+        boost_config,
+        snapshotted_user_lottery_deposit,
+        snapshotted_total_user_lottery_deposits,
+        snapshotted_user_voting_balance,
+        snapshotted_total_voting_balance,
+    );
+
+    println!("{}", multiplier);
+    assert_eq!(multiplier, Decimal256::percent(36));
+
+    // Test #2
+
+    let boost_config = BoostConfig {
+        base_multiplier: Decimal256::percent(20),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(200),
+    };
+
+    let snapshotted_user_lottery_deposit = Uint256::from(100u128);
+    let snapshotted_total_user_lottery_deposits = Uint256::from(200u128);
+
+    let snapshotted_user_voting_balance = Uint128::from(80u128);
+    let snapshotted_total_voting_balance = Uint128::from(100u128);
+
+    let multiplier = calculate_boost_multiplier(
+        boost_config,
+        snapshotted_user_lottery_deposit,
+        snapshotted_total_user_lottery_deposits,
+        snapshotted_user_voting_balance,
+        snapshotted_total_voting_balance,
+    );
+
+    println!("{}", multiplier);
+    assert_eq!(multiplier, Decimal256::percent(84));
+
+    // Hit max (exactly)
+
+    let boost_config = BoostConfig {
+        base_multiplier: Decimal256::percent(20),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(200),
+    };
+
+    let snapshotted_user_lottery_deposit = Uint256::from(100u128);
+    let snapshotted_total_user_lottery_deposits = Uint256::from(200u128);
+
+    let snapshotted_user_voting_balance = Uint128::from(100u128);
+    let snapshotted_total_voting_balance = Uint128::from(100u128);
+
+    let multiplier = calculate_boost_multiplier(
+        boost_config,
+        snapshotted_user_lottery_deposit,
+        snapshotted_total_user_lottery_deposits,
+        snapshotted_user_voting_balance,
+        snapshotted_total_voting_balance,
+    );
+
+    println!("{}", multiplier);
+    assert_eq!(multiplier, Decimal256::percent(100));
+
+    // Hit max (over)
+
+    let boost_config = BoostConfig {
+        base_multiplier: Decimal256::percent(20),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(200),
+    };
+
+    let snapshotted_user_lottery_deposit = Uint256::from(50u128);
+    let snapshotted_total_user_lottery_deposits = Uint256::from(200u128);
+
+    let snapshotted_user_voting_balance = Uint128::from(100u128);
+    let snapshotted_total_voting_balance = Uint128::from(100u128);
+
+    let multiplier = calculate_boost_multiplier(
+        boost_config,
+        snapshotted_user_lottery_deposit,
+        snapshotted_total_user_lottery_deposits,
+        snapshotted_user_voting_balance,
+        snapshotted_total_voting_balance,
+    );
+
+    println!("{}", multiplier);
+    assert_eq!(multiplier, Decimal256::percent(100));
+
+    // Hit min (over)
+
+    let boost_config = BoostConfig {
+        base_multiplier: Decimal256::percent(20),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(200),
+    };
+
+    let snapshotted_user_lottery_deposit = Uint256::from(100u128);
+    let snapshotted_total_user_lottery_deposits = Uint256::from(200u128);
+
+    let snapshotted_user_voting_balance = Uint128::from(0u128);
+    let snapshotted_total_voting_balance = Uint128::from(100u128);
+
+    let multiplier = calculate_boost_multiplier(
+        boost_config,
+        snapshotted_user_lottery_deposit,
+        snapshotted_total_user_lottery_deposits,
+        snapshotted_user_voting_balance,
+        snapshotted_total_voting_balance,
+    );
+
+    println!("{}", multiplier);
+    assert_eq!(multiplier, Decimal256::percent(20));
+}
+
+#[test]
+pub fn test_paused() {
+    // Instantiate contracts
+
+    let mut deps = mock_dependencies(&[]);
+
+    // get env
+    let mut _env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    // Pause the contracts
+
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: None,
+        paused: Some(true),
+        lotto_winner_boost_config: None,
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Try to deposit and fail
+
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
+        }],
+    );
+
+    // Correct deposit - buys two tickets
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
+            String::from(ZERO_MATCH_SEQUENCE),
+            String::from(ONE_MATCH_SEQUENCE),
+        ]),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+
+    match res {
+        Err(ContractError::ContractPaused {}) => {}
+        _ => panic!("DO NOT ENTER HERE"),
+    }
+
+    let depositor_info = OldDepositorInfo {
+        lottery_deposit: Uint256::zero(),
+        savings_aust: Uint256::zero(),
+        reward_index: Decimal256::zero(),
+        pending_rewards: Decimal256::zero(),
+        tickets: vec![],
+        unbonding_info: vec![],
+    };
+
+    // Add something to old depositors
+
+    bucket::<OldDepositorInfo>(deps.as_mut().storage, b"depositor")
+        .save("addr1111".as_bytes(), &depositor_info)
+        .unwrap();
+
+    // Try to unpause and fail
+
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: None,
+        paused: Some(false),
+        lotto_winner_boost_config: None,
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+
+    match res {
+        Err(_) => {}
+        _ => panic!("DO NOT ENTER"),
+    };
+
+    // Remove old depositor
+
+    old_remove_depositor_info(
+        deps.as_mut().storage,
+        &Addr::unchecked("addr1111".to_string()),
+    );
+
+    // Try to unpause and succeed
+
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: None,
+        paused: Some(false),
+        lotto_winner_boost_config: None,
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Try to deposit and succeed
+
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: DENOM.to_string(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
+        }],
+    );
+
+    // Correct deposit - buys two tickets
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
+            String::from(ZERO_MATCH_SEQUENCE),
+            String::from(ONE_MATCH_SEQUENCE),
+        ]),
+    };
+
+    let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+}
+
+#[test]
+pub fn test_update_depositor_stats() {
+    // Instantiate contracts
+
+    let mut deps = mock_dependencies(&[]);
+
+    // get env
+    let mut _env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    // Store depositor stats
+    let addr = Addr::unchecked("addr0000");
+    let depositor = DepositorStatsInfo {
+        lottery_deposit: Uint256::zero(),
+        savings_aust: Uint256::one(),
+        num_tickets: 10,
+    };
+
+    store_depositor_stats(deps.as_mut().storage, &addr, depositor, 10).unwrap();
+
+    // Verify that num_tickets is zero
+
+    let depositor_stats = read_depositor_stats(deps.as_ref().storage, &addr);
+
+    assert_eq!(depositor_stats.savings_aust, Uint256::one());
+    assert_eq!(depositor_stats.num_tickets, 0);
+}
+
+#[test]
+pub fn test_historical_depositor_stats() {
+    // Instantiate contracts
+
+    let mut deps = mock_dependencies(&[]);
+
+    // get env
+    let mut _env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    // Store depositor stats
+
+    let addr = Addr::unchecked("addr0000");
+
+    // Height 10
+    let depositor_10 = DepositorStatsInfo {
+        lottery_deposit: Uint256::zero(),
+        savings_aust: Uint256::one(),
+        num_tickets: 0,
+    };
+
+    store_depositor_stats(deps.as_mut().storage, &addr, depositor_10.clone(), 10).unwrap();
+
+    // Height 15
+    let depositor_15 = DepositorStatsInfo {
+        lottery_deposit: Uint256::zero(),
+        savings_aust: Uint256::from(2u128),
+        num_tickets: 0,
+    };
+
+    store_depositor_stats(deps.as_mut().storage, &addr, depositor_15.clone(), 15).unwrap();
+
+    // Height 20
+
+    let depositor_20 = DepositorStatsInfo {
+        lottery_deposit: Uint256::zero(),
+        savings_aust: Uint256::from(3u128),
+        num_tickets: 0,
+    };
+
+    store_depositor_stats(deps.as_mut().storage, &addr, depositor_20.clone(), 20).unwrap();
+
+    // Verify depositors
+
+    let depositor_stats_0 = read_depositor_stats_at_height(deps.as_ref().storage, &addr, 0);
+
+    assert_eq!(
+        depositor_stats_0,
+        DepositorStatsInfo {
+            lottery_deposit: Uint256::zero(),
+            savings_aust: Uint256::zero(),
+            num_tickets: 0,
+        }
+    );
+
+    let depositor_stats_10 = read_depositor_stats_at_height(deps.as_ref().storage, &addr, 11);
+    assert_eq!(depositor_stats_10, depositor_10);
+
+    let depositor_stats_15 = read_depositor_stats_at_height(deps.as_ref().storage, &addr, 16);
+    assert_eq!(depositor_stats_15, depositor_15);
+
+    let depositor_stats_20 = read_depositor_stats_at_height(deps.as_ref().storage, &addr, 21);
+    assert_eq!(depositor_stats_20, depositor_20);
 }

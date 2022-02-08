@@ -11,15 +11,16 @@ use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
 use crate::state::{
     old_read_depositors, old_read_lottery_info, old_remove_depositor_info, old_remove_lottery_info,
-    read_depositor_info, read_depositor_stats, read_depositors_info, read_depositors_stats,
-    read_lottery_info, read_sponsor_info, store_depositor_info, store_lottery_info,
-    store_sponsor_info, Config, DepositorInfo, LotteryInfo, Pool, PrizeInfo, SponsorInfo, State,
-    CONFIG, OLDCONFIG, POOL, PRIZES, STATE, TICKETS,
+    parse_length, read_depositor_info, read_depositor_stats, read_depositor_stats_at_height,
+    read_depositors_info, read_depositors_stats, read_lottery_info, read_lottery_prizes,
+    read_sponsor_info, store_depositor_info, store_lottery_info, store_sponsor_info, Config,
+    DepositorInfo, LotteryInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, OLD_PRIZES,
+    POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
+    Order, Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
 };
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
@@ -29,12 +30,13 @@ use glow_protocol::lotto::{
     BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorStatsResponse,
     DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg, InstantiateMsg,
     LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse,
-    QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
+    PrizeInfosResponse, QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
+use std::str::from_utf8;
 use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
@@ -206,7 +208,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     if let ExecuteMsg::MigrateOldDepositors { limit } = msg {
-        return migrate_old_depositors(deps, limit);
+        return migrate_old_depositors(deps, env, limit);
     }
 
     if let ExecuteMsg::UpdateConfig {
@@ -240,9 +242,7 @@ pub fn execute(
 
     let config = CONFIG.load(deps.storage)?;
     if config.paused {
-        return Err(ContractError::Std(StdError::generic_err(
-            "The contract is temporarily paused.",
-        )));
+        return Err(ContractError::ContractPaused {});
     }
 
     match msg {
@@ -530,7 +530,7 @@ pub fn deposit(
     state.total_tickets = state.total_tickets.add(amount_tickets.into());
 
     // update depositor and state information
-    store_depositor_info(deps.storage, &depositor, depositor_info)?;
+    store_depositor_info(deps.storage, &depositor, depositor_info, env.block.height)?;
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
@@ -1009,7 +1009,7 @@ pub fn execute_withdraw(
         });
     }
 
-    store_depositor_info(deps.storage, &info.sender, depositor)?;
+    store_depositor_info(deps.storage, &info.sender, depositor, env.block.height)?;
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
@@ -1071,7 +1071,7 @@ pub fn execute_claim_unbonded(
         });
     }
 
-    store_depositor_info(deps.storage, &info.sender, depositor)?;
+    store_depositor_info(deps.storage, &info.sender, depositor, env.block.height)?;
     STATE.save(deps.storage, &state)?;
 
     Ok(Response::new()
@@ -1097,12 +1097,10 @@ pub fn execute_claim_lottery(
     lottery_ids: Vec<u64>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let mut state = STATE.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
 
     let mut ust_to_send = Uint128::zero();
     let mut glow_to_send = Uint128::zero();
-
-    let depositor = read_depositor_info(deps.storage, &info.sender);
 
     let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
     if current_lottery.rand_round != 0 {
@@ -1117,12 +1115,18 @@ pub fn execute_claim_lottery(
         //Calculate and add to to_send
         let lottery_key: U64Key = U64Key::from(lottery_id);
         let prize = PRIZES
-            .may_load(deps.storage, (&info.sender, lottery_key.clone()))
+            .may_load(deps.storage, (lottery_key.clone(), &info.sender))
             .unwrap();
         if let Some(prize) = prize {
             if prize.claimed {
                 return Err(ContractError::InvalidClaimPrizeAlreadyClaimed(lottery_id));
             }
+
+            let snapshotted_depositor_stats_info = read_depositor_stats_at_height(
+                deps.storage,
+                &info.sender,
+                lottery_info.block_height,
+            );
 
             let (local_ust_to_send, local_glow_to_send): (Uint128, Uint128) =
                 calculate_winner_prize(
@@ -1130,6 +1134,7 @@ pub fn execute_claim_lottery(
                     &config,
                     &prize,
                     &lottery_info,
+                    &snapshotted_depositor_stats_info,
                     &info.sender,
                 )?;
 
@@ -1138,7 +1143,7 @@ pub fn execute_claim_lottery(
 
             PRIZES.save(
                 deps.storage,
-                (&info.sender, lottery_key),
+                (lottery_key, &info.sender),
                 &PrizeInfo {
                     claimed: true,
                     ..prize
@@ -1156,11 +1161,6 @@ pub fn execute_claim_lottery(
     let mut msgs: Vec<CosmosMsg> = vec![];
 
     // ust_to_send calculations
-
-    // Deduct reserve fee
-    let reserve_fee = Uint256::from(ust_to_send) * config.reserve_factor;
-    ust_to_send -= Uint128::from(reserve_fee);
-    state.total_reserve += reserve_fee;
 
     // Deduct taxes on the claim
     let net_send = deduct_tax(
@@ -1205,8 +1205,6 @@ pub fn execute_claim_lottery(
     }
 
     // Update storage
-
-    store_depositor_info(deps.storage, &info.sender, depositor)?;
     STATE.save(deps.storage, &state)?;
 
     // Send response
@@ -1520,16 +1518,21 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             address,
             lottery_id,
         } => to_binary(&query_prizes(deps, address, lottery_id)?),
+        QueryMsg::LotteryPrizeInfos {
+            lottery_id,
+            start_after,
+            limit,
+        } => to_binary(&query_lottery_prizes(deps, lottery_id, start_after, limit)?),
         QueryMsg::DepositorInfo { address } => {
             to_binary(&query_depositor_info(deps, env, address)?)
         }
-        QueryMsg::DepositorStats { address } => {
+        QueryMsg::DepositorStatsInfo { address } => {
             to_binary(&query_depositor_stats(deps, env, address)?)
         }
-        QueryMsg::DepositorsInfo { start_after, limit } => {
+        QueryMsg::DepositorInfos { start_after, limit } => {
             to_binary(&query_depositors_info(deps, start_after, limit)?)
         }
-        QueryMsg::DepositorsStats { start_after, limit } => {
+        QueryMsg::DepositorsStatsInfos { start_after, limit } => {
             to_binary(&query_depositors_stats(deps, start_after, limit)?)
         }
         QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, env, address)?),
@@ -1545,17 +1548,94 @@ pub fn query_ticket_info(deps: Deps, ticket: String) -> StdResult<TicketInfoResp
 }
 
 pub fn query_prizes(deps: Deps, address: String, lottery_id: u64) -> StdResult<PrizeInfoResponse> {
+    // Get config
+    let config = CONFIG.load(deps.storage)?;
+
+    // Get lottery info
+    let lottery_info = read_lottery_info(deps.storage, lottery_id);
+
+    // Get prize info
     let lottery_key = U64Key::from(lottery_id);
     let addr = deps.api.addr_validate(&address)?;
-    let prize_info = PRIZES
-        .may_load(deps.storage, (&addr, lottery_key))?
-        .unwrap_or_default();
+    let prize_info =
+        if let Some(prize_info) = PRIZES.may_load(deps.storage, (lottery_key, &addr))? {
+            prize_info
+        } else {
+            return Err(StdError::generic_err(
+                "No prize with the specified address and lottery id.",
+            ));
+        };
+
+    // Get ust and glow to send
+    let snapshotted_depositor_stats_info =
+        read_depositor_stats_at_height(deps.storage, &addr, lottery_info.block_height);
+
+    let (local_ust_to_send, local_glow_to_send): (Uint128, Uint128) = calculate_winner_prize(
+        &deps.querier,
+        &config,
+        &prize_info,
+        &lottery_info,
+        &snapshotted_depositor_stats_info,
+        &addr,
+    )?;
 
     Ok(PrizeInfoResponse {
         holder: addr,
         lottery_id,
         claimed: prize_info.claimed,
         matches: prize_info.matches,
+        won_ust: local_ust_to_send,
+        won_glow: local_glow_to_send,
+    })
+}
+
+pub fn query_lottery_prizes(
+    deps: Deps,
+    lottery_id: u64,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> StdResult<PrizeInfosResponse> {
+    let config = CONFIG.load(deps.storage)?;
+
+    let addr = if let Some(s) = start_after {
+        Some(deps.api.addr_validate(&s)?)
+    } else {
+        None
+    };
+
+    let lottery_info = read_lottery_info(deps.storage, lottery_id);
+
+    let prize_infos = read_lottery_prizes(deps, lottery_id, addr, limit)?;
+
+    let prize_info_responses = prize_infos
+        .into_iter()
+        .map(|(addr, prize_info)| {
+            let snapshotted_depositor_stats_info =
+                read_depositor_stats_at_height(deps.storage, &addr, lottery_info.block_height);
+
+            let (local_ust_to_send, local_glow_to_send): (Uint128, Uint128) =
+                calculate_winner_prize(
+                    &deps.querier,
+                    &config,
+                    &prize_info,
+                    &lottery_info,
+                    &snapshotted_depositor_stats_info,
+                    &addr,
+                )?;
+
+            Ok(PrizeInfoResponse {
+                holder: addr,
+                lottery_id,
+                claimed: prize_info.claimed,
+                matches: prize_info.matches,
+                won_ust: local_ust_to_send,
+                won_glow: local_glow_to_send,
+            })
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    Ok(PrizeInfosResponse {
+        prize_infos: prize_info_responses,
     })
 }
 
@@ -1583,6 +1663,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         instant_withdrawal_fee: config.instant_withdrawal_fee,
         unbonding_period: config.unbonding_period,
         max_tickets_per_depositor: config.max_tickets_per_depositor,
+        paused: config.paused,
     })
 }
 
@@ -1691,13 +1772,13 @@ pub fn query_depositor_stats(
     addr: String,
 ) -> StdResult<DepositorStatsResponse> {
     let address = deps.api.addr_validate(&addr)?;
-    let depositor_stats = read_depositor_stats(deps.storage, &address);
+    let depositor_stats_info = read_depositor_stats(deps.storage, &address);
 
     Ok(DepositorStatsResponse {
         depositor: addr,
-        lottery_deposit: depositor_stats.lottery_deposit,
-        savings_aust: depositor_stats.savings_aust,
-        num_tickets: depositor_stats.num_tickets,
+        lottery_deposit: depositor_stats_info.lottery_deposit,
+        savings_aust: depositor_stats_info.savings_aust,
+        num_tickets: depositor_stats_info.num_tickets,
     })
 }
 
@@ -1849,11 +1930,40 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         old_remove_lottery_info(deps.storage, i);
     }
 
+    // Migrate prize info
+    let old_prizes = OLD_PRIZES
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|item| {
+            let (mut k, v) = item?;
+
+            let mut tu = k.split_off(2);
+            let t_len = parse_length(&k)?;
+            let u = tu.split_off(t_len);
+
+            // U64Key
+            let lottery_id = U64Key::from(tu);
+
+            // Extract address
+            let addr = Addr::unchecked(from_utf8(&u)?);
+
+            Ok((lottery_id, addr, v))
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    for old_prize in old_prizes {
+        let (lottery_id, addr, prize_info) = old_prize;
+        // let lottery_key = U64Key::from()
+        OLD_PRIZES.remove(deps.storage, (&addr, lottery_id.clone()));
+
+        PRIZES.save(deps.storage, (lottery_id, &addr), &prize_info)?;
+    }
+
     Ok(Response::default())
 }
 
 pub fn migrate_old_depositors(
     deps: DepsMut,
+    env: Env,
     limit: Option<u32>,
 ) -> Result<Response, ContractError> {
     let old_depositors = old_read_depositors(deps.as_ref(), None, limit)?;
@@ -1864,17 +1974,15 @@ pub fn migrate_old_depositors(
         // Delete old depositor
         old_remove_depositor_info(deps.storage, &addr);
 
+        let new_depositor_info = DepositorInfo {
+            lottery_deposit: old_depositor_info.lottery_deposit,
+            savings_aust: old_depositor_info.savings_aust,
+            tickets: old_depositor_info.tickets,
+            unbonding_info: old_depositor_info.unbonding_info,
+        };
+
         // Store new depositor
-        store_depositor_info(
-            deps.storage,
-            &addr,
-            DepositorInfo {
-                lottery_deposit: old_depositor_info.lottery_deposit,
-                savings_aust: old_depositor_info.savings_aust,
-                tickets: old_depositor_info.tickets,
-                unbonding_info: old_depositor_info.unbonding_info,
-            },
-        )?;
+        store_depositor_info(deps.storage, &addr, new_depositor_info, env.block.height)?;
 
         // Increment num_migrates_entries
         num_migrated_entries += 1;

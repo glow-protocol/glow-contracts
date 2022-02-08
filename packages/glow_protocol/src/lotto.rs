@@ -135,17 +135,23 @@ pub enum QueryMsg {
     TicketInfo { sequence: String },
     /// Prizes for a given address on a given lottery id
     PrizeInfo { address: String, lottery_id: u64 },
+    /// Prizes for a given lottery id
+    LotteryPrizeInfos {
+        lottery_id: u64,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
     /// Depositor information by address
     DepositorInfo { address: String },
     /// Depositor stats by address
-    DepositorStats { address: String },
+    DepositorStatsInfo { address: String },
     /// List (paginated) of DepositorInfo
-    DepositorsInfo {
+    DepositorInfos {
         start_after: Option<String>,
         limit: Option<u32>,
     },
     /// List (paginated) of DepositorStats
-    DepositorsStats {
+    DepositorsStatsInfos {
         start_after: Option<String>,
         limit: Option<u32>,
     },
@@ -179,6 +185,7 @@ pub struct ConfigResponse {
     pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
     pub max_tickets_per_depositor: u64,
+    pub paused: bool,
 }
 
 // We define a custom struct for each query response
@@ -277,6 +284,13 @@ pub struct PrizeInfoResponse {
     pub lottery_id: u64,
     pub claimed: bool,
     pub matches: [u32; NUM_PRIZE_BUCKETS],
+    pub won_ust: Uint128,
+    pub won_glow: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PrizeInfosResponse {
+    pub prize_infos: Vec<PrizeInfoResponse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

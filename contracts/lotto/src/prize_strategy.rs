@@ -2,8 +2,8 @@ use crate::error::ContractError;
 use crate::querier::{query_exchange_rate, query_oracle};
 
 use crate::state::{
-    read_depositor_info, read_lottery_info, store_lottery_info, DepositorInfo, LotteryInfo,
-    PrizeInfo, CONFIG, POOL, PRIZES, STATE, TICKETS,
+    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
+    TICKETS,
 };
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
@@ -285,11 +285,11 @@ pub fn execute_prize(
 
             sequence.1.iter().for_each(|winner| {
                 // Get the lottery_id
-                let lottery_id: U64Key = state.current_lottery.into();
+                let lottery_key: U64Key = state.current_lottery.into();
 
                 // Check if a prize already exist
                 let maybe_prize = PRIZES
-                    .may_load(deps.storage, (winner, lottery_id.clone()))
+                    .may_load(deps.storage, (lottery_key.clone(), winner))
                     .unwrap();
 
                 // Calculate updated_prize accordingly
@@ -300,19 +300,15 @@ pub fn execute_prize(
                     let mut winnings = [0; NUM_PRIZE_BUCKETS];
                     winnings[matches as usize] = 1;
 
-                    let depositor_info: DepositorInfo =
-                        read_depositor_info(deps.as_ref().storage, winner);
-
                     PrizeInfo {
                         claimed: false,
                         matches: winnings,
-                        lottery_deposit: depositor_info.lottery_deposit,
                     }
                 };
 
                 // Save the updated prize
                 PRIZES
-                    .save(deps.storage, (winner, lottery_id), &updated_prize)
+                    .save(deps.storage, (lottery_key, winner), &updated_prize)
                     .unwrap();
             });
         });
@@ -327,11 +323,23 @@ pub fn execute_prize(
         // Update the lottery prize buckets based on whether or not there is a winner in the corresponding bucket
         for (index, rank) in lottery_info.number_winners.iter().enumerate() {
             if *rank != 0 {
-                // Increase total_awarded_prize
-                total_awarded_prize += state.prize_buckets[index];
+                // Get the prize to be distributed for this tier
+                let mut awarded_prize_bucket = state.prize_buckets[index];
+
+                // Get the reserve fee for this tier
+                let local_reserve_fee = awarded_prize_bucket * config.reserve_factor;
+
+                // Decrease the prize to be distributed by the reserve fee
+                awarded_prize_bucket = awarded_prize_bucket - local_reserve_fee;
+
+                // Increase the total reserve by the reserve fee
+                state.total_reserve += local_reserve_fee;
+
+                // Increase total_awarded_prize by the prize to be distributed
+                total_awarded_prize += awarded_prize_bucket;
 
                 // Update the corresponding lottery prize bucket
-                lottery_info.prize_buckets[index] = state.prize_buckets[index];
+                lottery_info.prize_buckets[index] = awarded_prize_bucket;
 
                 // Set the corresponding award bucket to 0
                 state.prize_buckets[index] = Uint256::zero();

@@ -1,14 +1,16 @@
+use std::convert::TryInto;
+
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, QuerierWrapper, StdError, StdResult, Storage, Uint128};
-use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
+use cosmwasm_std::{Addr, BlockInfo, QuerierWrapper, StdError, StdResult, Uint128};
+use glow_protocol::lotto::{BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
-use crate::{
-    querier::{query_address_voting_balance_at_height, query_total_voting_balance_at_height},
-    state::{
-        read_depositor_info, store_depositor_info, Config, DepositorInfo, LotteryInfo, Pool,
-        PrizeInfo, SponsorInfo, State,
-    },
+use crate::querier::{
+    query_address_voting_balance_at_height, query_total_voting_balance_at_height,
+};
+
+use crate::state::{
+    Config, DepositorInfo, DepositorStatsInfo, LotteryInfo, Pool, PrizeInfo, SponsorInfo, State,
 };
 
 /// Compute distributed reward and update global reward index
@@ -20,19 +22,13 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    let total_deposited = pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits;
-    if !reward_accrued.is_zero() && !total_deposited.is_zero() {
-        state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
+    let total_sponsor_lottery_deposits = pool.total_sponsor_lottery_deposits;
+    if !reward_accrued.is_zero() && !total_sponsor_lottery_deposits.is_zero() {
+        state.global_reward_index +=
+            reward_accrued / Decimal256::from_uint256(total_sponsor_lottery_deposits);
     }
 
     state.last_reward_updated = block_height;
-}
-
-/// Compute reward amount a depositor received
-pub fn compute_depositor_reward(state: &State, depositor: &mut DepositorInfo) {
-    depositor.pending_rewards += Decimal256::from_uint256(depositor.lottery_deposit)
-        * (state.global_reward_index - depositor.reward_index);
-    depositor.reward_index = state.global_reward_index;
 }
 
 /// Compute reward amount a sponsor received
@@ -44,17 +40,15 @@ pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
 
 /// This iterates over all mature claims for the address, and removes them, up to an optional cap.
 /// it removes the finished claims and returns the total amount of tokens to be released.
-pub fn claim_deposits(
-    storage: &mut dyn Storage,
-    addr: &Addr,
+pub fn claim_unbonded_withdrawals(
+    depositor: &mut DepositorInfo,
     block: &BlockInfo,
     cap: Option<Uint128>,
-) -> StdResult<(Uint128, DepositorInfo)> {
+) -> StdResult<Uint128> {
     let mut to_send = Uint128::zero();
-    let mut depositor = read_depositor_info(storage, addr);
 
     if depositor.unbonding_info.is_empty() {
-        return Ok((to_send, depositor));
+        return Ok(to_send);
     }
 
     let (_send, waiting): (Vec<_>, _) = depositor.unbonding_info.iter().cloned().partition(|c| {
@@ -74,8 +68,7 @@ pub fn claim_deposits(
         }
     });
     depositor.unbonding_info = waiting;
-    store_depositor_info(storage, addr, &depositor)?;
-    Ok((to_send, depositor))
+    Ok(to_send)
 }
 
 pub fn calculate_winner_prize(
@@ -83,6 +76,7 @@ pub fn calculate_winner_prize(
     config: &Config,
     prize_info: &PrizeInfo,
     lottery_info: &LotteryInfo,
+    snapshotted_depositor_stats: &DepositorStatsInfo,
     winner_address: &Addr,
 ) -> StdResult<(Uint128, Uint128)> {
     let LotteryInfo {
@@ -90,13 +84,12 @@ pub fn calculate_winner_prize(
         number_winners,
         glow_prize_buckets,
         block_height,
-        total_user_lottery_deposits,
+        total_user_lottery_deposits: snapshotted_total_user_lottery_deposits,
         ..
     } = lottery_info;
 
     let PrizeInfo {
         matches: winner_matches,
-        lottery_deposit: winner_lottery_deposit,
         ..
     } = prize_info;
 
@@ -105,13 +98,19 @@ pub fn calculate_winner_prize(
 
     // Get the values needed for boost calculation
 
+    // User lottery deposit
+
+    let snapshotted_user_lottery_deposit = snapshotted_depositor_stats.lottery_deposit;
+
     // User voting balance
-    let user_voting_balance = if let Ok(response) = query_address_voting_balance_at_height(
-        querier,
-        &config.gov_contract,
-        *block_height,
-        winner_address,
-    ) {
+
+    let snapshotted_user_voting_balance = if let Ok(response) =
+        query_address_voting_balance_at_height(
+            querier,
+            &config.gov_contract,
+            *block_height,
+            winner_address,
+        ) {
         response.balance
     } else {
         Uint128::zero()
@@ -119,7 +118,7 @@ pub fn calculate_winner_prize(
 
     // Total voting balance
 
-    let total_voting_balance = if let Ok(response) =
+    let snapshotted_total_voting_balance = if let Ok(response) =
         query_total_voting_balance_at_height(querier, &config.gov_contract, *block_height)
     {
         response.total_supply
@@ -148,51 +147,71 @@ pub fn calculate_winner_prize(
         let glow_raw_amount =
             glow_prize_available.multiply_ratio(winner_matches[i], number_winners[i]);
 
-        // Glow multiplier formula:
-        // min(
-        //  max_multiplier,
-        //  min_multiplier +
-        //    (TotalDeposited / UserDeposited)
-        //    * (UserVotingBalance / (max_proportional_ratio * TotalVotingBalance))
-        //    * (max_multiplier - min_multiplier)
-        //  )
-
-        // Get the multiplier for users with no voting power
-        let glow_base_multiplier = config.lotto_winner_boost_config.base_multiplier;
-        let glow_max_multiplier = config.lotto_winner_boost_config.max_multiplier;
-
-        // Calculate the additional multiplier for users with voting power
-        let glow_voting_boost = if total_voting_balance > Uint128::zero()
-            && *winner_lottery_deposit > Uint256::zero()
-        {
-            let inverted_user_lottery_deposit_proportion =
-                Decimal256::from_ratio(*total_user_lottery_deposits, *winner_lottery_deposit);
-
-            let user_voting_balance_proportion = Decimal256::from_ratio(
-                Uint256::from(user_voting_balance),
-                config.lotto_winner_boost_config.total_voting_power_weight
-                    * Uint256::from(total_voting_balance),
-            );
-
-            let slope = glow_max_multiplier - glow_base_multiplier;
-
-            inverted_user_lottery_deposit_proportion * user_voting_balance_proportion * slope
-        } else {
-            // If total_voting_balance is zero, then set glow_voting_boost to zero
-            Decimal256::zero()
-        };
-
-        // Sum glow_base_multiplier and glow_voting_boost and set it to 1 if greater than 1
-        let mut glow_multiplier = glow_base_multiplier + glow_voting_boost;
-        if glow_multiplier > glow_max_multiplier {
-            glow_multiplier = glow_max_multiplier;
-        }
+        // Get the glow boost multiplier
+        let glow_boost_multiplier = calculate_boost_multiplier(
+            config.lotto_winner_boost_config.clone(),
+            snapshotted_user_lottery_deposit,
+            *snapshotted_total_user_lottery_deposits,
+            snapshotted_user_voting_balance,
+            snapshotted_total_voting_balance,
+        );
 
         // Get the GLOW to send
-        glow_to_send += Uint128::from(glow_raw_amount * glow_multiplier);
+        glow_to_send += Uint128::from(glow_raw_amount * glow_boost_multiplier);
     }
 
     Ok((ust_to_send, glow_to_send))
+}
+
+pub fn calculate_boost_multiplier(
+    boost_config: BoostConfig,
+    snapshotted_user_lottery_deposit: Uint256,
+    snapshotted_total_user_lottery_deposits: Uint256,
+    snapshotted_user_voting_balance: Uint128,
+    snapshotted_total_voting_balance: Uint128,
+) -> Decimal256 {
+    // Boost formula:
+    // min(
+    //  max_multiplier,
+    //  min_multiplier +
+    //    (TotalDeposited / UserDeposited)
+    //    * (UserVotingBalance / (max_proportional_ratio * TotalVotingBalance))
+    //    * (max_multiplier - min_multiplier)
+    //  )
+
+    // Get the multiplier for users with no voting power
+    let glow_base_multiplier = boost_config.base_multiplier;
+    let glow_max_multiplier = boost_config.max_multiplier;
+
+    // Calculate the additional multiplier for users with voting power
+    let glow_voting_boost = if snapshotted_total_voting_balance > Uint128::zero()
+        && snapshotted_user_lottery_deposit > Uint256::zero()
+    {
+        let inverted_user_lottery_deposit_proportion = Decimal256::from_ratio(
+            snapshotted_total_user_lottery_deposits,
+            snapshotted_user_lottery_deposit,
+        );
+
+        let user_voting_balance_proportion = Decimal256::from_ratio(
+            Uint256::from(snapshotted_user_voting_balance),
+            boost_config.total_voting_power_weight
+                * Uint256::from(snapshotted_total_voting_balance),
+        );
+
+        let slope = glow_max_multiplier - glow_base_multiplier;
+
+        inverted_user_lottery_deposit_proportion * user_voting_balance_proportion * slope
+    } else {
+        // If total_voting_balance is zero, then set glow_voting_boost to zero
+        Decimal256::zero()
+    };
+
+    // Sum glow_base_multiplier and glow_voting_boost and set it to 1 if greater than 1
+    let mut glow_multiplier = glow_base_multiplier + glow_voting_boost;
+    if glow_multiplier > glow_max_multiplier {
+        glow_multiplier = glow_max_multiplier;
+    }
+    glow_multiplier
 }
 
 // Get max bounds
@@ -309,7 +328,9 @@ pub fn calculate_depositor_balance(depositor: DepositorInfo, rate: Decimal256) -
     depositor_aust_balance * rate
 }
 
-pub fn encoded_tickets_to_combinations(encoded_tickets: String) -> StdResult<Vec<String>> {
+pub fn base64_encoded_tickets_to_vec_string_tickets(
+    encoded_tickets: String,
+) -> StdResult<Vec<String>> {
     // Encoded_tickets to binary
     let decoded_binary_tickets = match base64::decode(encoded_tickets) {
         Ok(decoded_binary_tickets) => decoded_binary_tickets,
@@ -331,4 +352,32 @@ pub fn encoded_tickets_to_combinations(encoded_tickets: String) -> StdResult<Vec
         .chunks(3)
         .map(hex::encode)
         .collect::<Vec<String>>())
+}
+
+pub fn vec_string_tickets_to_vec_binary_tickets(
+    vec_string_tickets: Vec<String>,
+) -> StdResult<Vec<[u8; 3]>> {
+    vec_string_tickets
+        .iter()
+        .map(|s| {
+            let vec_ticket = match hex::decode(s) {
+                Ok(b) => b,
+                Err(_) => return Err(StdError::generic_err("Couldn't hex decode string ticket")),
+            };
+
+            match vec_ticket.try_into() {
+                Ok(b) => Ok(b),
+                Err(_) => Err(StdError::generic_err(
+                    "Couldn't convert vec ticket to [u8, 3]",
+                )),
+            }
+        })
+        .collect::<StdResult<Vec<[u8; 3]>>>()
+}
+
+pub fn vec_binary_tickets_to_vec_string_tickets(vec_binary_tickets: Vec<[u8; 3]>) -> Vec<String> {
+    vec_binary_tickets
+        .iter()
+        .map(hex::encode)
+        .collect::<Vec<String>>()
 }

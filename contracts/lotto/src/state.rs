@@ -13,9 +13,9 @@ use glow_protocol::lotto::{BoostConfig, Claim, DepositorInfoResponse, DepositorS
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
-const OLD_PREFIX_LOTTERY: &[u8] = b"lottery";
-const PREFIX_SPONSOR: &[u8] = b"sponsor";
-const OLD_PREFIX_DEPOSIT: &[u8] = b"depositor";
+pub const OLD_PREFIX_LOTTERY: &[u8] = b"lottery";
+pub const PREFIX_SPONSOR: &[u8] = b"sponsor";
+pub const OLD_PREFIX_DEPOSIT: &[u8] = b"depositor";
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const OLDCONFIG: Item<OldConfig> = Item::new("config");

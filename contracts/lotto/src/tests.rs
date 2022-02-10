@@ -1,5 +1,5 @@
 use crate::contract::{
-    execute, instantiate, query, query_config, query_pool, query_state, query_ticket_info,
+    execute, instantiate, migrate, query, query_config, query_pool, query_state, query_ticket_info,
     INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::helpers::{
@@ -10,19 +10,22 @@ use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
 };
 use crate::state::{
-    old_remove_depositor_info, read_depositor_info, read_depositor_stats,
-    read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes, read_prize,
-    read_sponsor_info, store_depositor_info, store_depositor_stats, DepositorInfo,
-    DepositorStatsInfo, LotteryInfo, OldDepositorInfo, PrizeInfo, CONFIG, PRIZES, STATE,
+    old_read_depositor_info, old_read_lottery_info, old_remove_depositor_info, read_depositor_info,
+    read_depositor_stats, read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes,
+    read_prize, read_sponsor_info, store_depositor_info, store_depositor_stats, Config,
+    DepositorInfo, DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, PrizeInfo, CONFIG,
+    OLDCONFIG, OLD_PRIZES, PRIZES, STATE,
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
     calculate_remaining_state_prize_buckets, generate_sequential_ticket_combinations,
-    vec_string_tickets_to_encoded_tickets,
+    old_store_depositor_info, old_store_lottery_info, vec_string_tickets_to_encoded_tickets,
 };
 use cosmwasm_storage::bucket;
 use cw_storage_plus::U64Key;
-use glow_protocol::lotto::{BoostConfig, PrizeInfoResponse, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
+use glow_protocol::lotto::{
+    BoostConfig, MigrateMsg, PrizeInfoResponse, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
+};
 use lazy_static::lazy_static;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -1130,7 +1133,6 @@ fn gift_tickets() {
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
 
-    //TODO: Revise this. Clippy complains as variables not being used
     let expected_tickets_attempted = 2;
     match res {
         Err(ContractError::InsufficientGiftDepositAmount(amount_required)) => {
@@ -1740,7 +1742,6 @@ fn withdraw() {
         )
         .tickets,
         vec![
-            // TODO: Don't hardcode the number of tickets
             // String::from("000005"),
             format!("{:0length$}", 6, length = TICKET_LENGTH),
             format!("{:0length$}", 7, length = TICKET_LENGTH),
@@ -1794,7 +1795,6 @@ fn withdraw() {
         )
         .tickets,
         vec![
-            // TODO Don't hardcode
             // String::from("000006"),
             format!("{:0length$}", 7, length = TICKET_LENGTH),
             format!("{:0length$}", 8, length = TICKET_LENGTH),
@@ -4351,7 +4351,7 @@ fn small_withdraw() {
     // Get the total aust to redeem
     let total_aust_to_redeem = withdrawn_lottery_aust + withdrawn_savings_aust;
 
-    // Get the value of the redeemed aust. aust_to_redeem * rate TODO = depositor_balance * withdraw_ratio
+    // Get the value of the redeemed aust. aust_to_redeem * rate
     let _total_aust_to_redeem_value = total_aust_to_redeem * Decimal256::permille(RATE);
 
     // Message for redeem amount operation of aUST
@@ -5571,7 +5571,6 @@ pub fn test_ticket_encoding_and_decoding() {
 
     // Test inverse functionality #2
     let combinations = vec![String::from("000000")];
-    // TODO Understand why I have to clone in the following line
     let encoded_tickets = vec_string_tickets_to_encoded_tickets(combinations.clone());
     let decoded_combinations =
         base64_encoded_tickets_to_vec_string_tickets(encoded_tickets).unwrap();
@@ -5582,7 +5581,10 @@ pub fn test_ticket_encoding_and_decoding() {
     let encoded_tickets = String::from("aowief");
     let decoded_combinations = base64_encoded_tickets_to_vec_string_tickets(encoded_tickets);
     match decoded_combinations {
-        Err(_) => {}
+        Err(e)
+            if e == StdError::generic_err(
+                "Couldn't base64 decode the encoded tickets.".to_string(),
+            ) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -5590,7 +5592,7 @@ pub fn test_ticket_encoding_and_decoding() {
     let encoded_tickets = String::from("EjRWeA==");
     let decoded_combinations = base64_encoded_tickets_to_vec_string_tickets(encoded_tickets);
     match decoded_combinations {
-        Err(_) => {}
+        Err(e) if e == StdError::generic_err("Decoded tickets wrong length.") => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 }
@@ -5879,7 +5881,8 @@ pub fn test_paused() {
     let res = execute(deps.as_mut(), mock_env(), info, msg);
 
     match res {
-        Err(_) => {}
+        Err(ContractError::Std(e))
+            if e == StdError::generic_err("Cannot unpause contract with old depositors") => {}
         _ => panic!("DO NOT ENTER"),
     };
 
@@ -6026,4 +6029,288 @@ pub fn test_historical_depositor_stats() {
 
     let depositor_stats_20 = read_depositor_stats_at_height(deps.as_ref().storage, &addr, 21);
     assert_eq!(depositor_stats_20, depositor_20);
+}
+
+#[test]
+pub fn test_migrate() {
+    // Instantiate contracts
+    let mut deps = mock_dependencies(&[]);
+
+    // get env
+    let mut _env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    // Increase glow emission rate
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
+    state.current_lottery = 2;
+    STATE.save(deps.as_mut().storage, &state).unwrap();
+
+    // Store old config
+
+    let config = CONFIG.load(deps.as_ref().storage).unwrap();
+
+    let old_config = OldConfig {
+        owner: config.owner,
+        a_terra_contract: config.a_terra_contract,
+        gov_contract: config.gov_contract,
+        distributor_contract: config.distributor_contract,
+        anchor_contract: config.anchor_contract,
+        oracle_contract: config.oracle_contract,
+        stable_denom: config.stable_denom,
+        lottery_interval: config.lottery_interval,
+        epoch_interval: config.epoch_interval,
+        block_time: config.block_time,
+        round_delta: config.round_delta,
+        ticket_price: config.ticket_price,
+        max_holders: config.max_holders,
+        prize_distribution: config.prize_distribution,
+        target_award: config.target_award,
+        reserve_factor: config.reserve_factor,
+        split_factor: config.split_factor,
+        instant_withdrawal_fee: config.instant_withdrawal_fee,
+        unbonding_period: config.unbonding_period,
+    };
+
+    OLDCONFIG.save(deps.as_mut().storage, &old_config).unwrap();
+
+    // Store some old lotteries
+
+    for i in 0..state.current_lottery {
+        let mut old_lottery = old_read_lottery_info(deps.as_ref().storage, 100);
+
+        old_lottery.sequence = format!("00000{}", i);
+
+        old_store_lottery_info(deps.as_mut().storage, i, &old_lottery).unwrap();
+    }
+
+    // Store some old prizes
+
+    for i in 0..3 {
+        for j in 0..3 {
+            let prize_info = PrizeInfo {
+                claimed: false,
+                matches: [i; 7],
+            };
+
+            OLD_PRIZES
+                .save(
+                    deps.as_mut().storage,
+                    (
+                        &Addr::unchecked(format!("addr000{}", i)),
+                        U64Key::from(j as u64),
+                    ),
+                    &prize_info,
+                )
+                .unwrap();
+        }
+    }
+
+    // Store some old depositors
+
+    for i in 0..15 {
+        let mut old_depositor_info =
+            old_read_depositor_info(deps.as_ref().storage, &Addr::unchecked(""));
+
+        old_depositor_info.savings_aust = Uint256::from(i as u128);
+
+        old_store_depositor_info(
+            deps.as_mut().storage,
+            &Addr::unchecked(format!("addr000{}", i)),
+            &old_depositor_info,
+        )
+        .unwrap();
+    }
+
+    // Now migrate
+
+    let migrate_msg = MigrateMsg {
+        glow_prize_buckets: [Uint256::zero(); 7],
+        max_tickets_per_depositor: 10_000,
+        community_contract: COMMUNITY_ADDR.to_string(),
+        lotto_winner_boost_config: None,
+    };
+
+    let _res = migrate(deps.as_mut(), mock_env(), migrate_msg.clone()).unwrap();
+
+    // Now try to unpause and fail
+
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: None,
+        paused: Some(false),
+        lotto_winner_boost_config: None,
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg);
+
+    match res {
+        Err(ContractError::Std(e))
+            if e == StdError::generic_err("Cannot unpause contract with old depositors") => {}
+        _ => panic!("DO NOT ENTER"),
+    };
+
+    // Migration loop
+
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::MigrateOldDepositors { limit: Some(10) };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "migrate_old_depositors"),
+            attr("num_migrated_entries", "10"),
+        ]
+    );
+
+    let info = mock_info(TEST_CREATOR, &[]);
+    let msg = ExecuteMsg::MigrateOldDepositors { limit: Some(10) };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "migrate_old_depositors"),
+            attr("num_migrated_entries", "5"),
+        ]
+    );
+
+    // Now verify that the config is unpaused
+
+    let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+    let config_response: ConfigResponse = from_binary(&res).unwrap();
+    assert!(!config_response.paused);
+
+    // Verify the new states are as expected
+
+    // New Config
+
+    let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
+        base_multiplier: Decimal256::from_ratio(40, 100),
+        max_multiplier: Decimal256::one(),
+        total_voting_power_weight: Decimal256::percent(150),
+    };
+
+    let new_config = Config {
+        owner: old_config.owner,
+        a_terra_contract: old_config.a_terra_contract,
+        gov_contract: old_config.gov_contract,
+        community_contract: deps
+            .api
+            .addr_validate(migrate_msg.community_contract.as_str())
+            .unwrap(),
+        distributor_contract: old_config.distributor_contract,
+        oracle_contract: old_config.oracle_contract,
+        stable_denom: old_config.stable_denom,
+        anchor_contract: old_config.anchor_contract,
+        lottery_interval: old_config.lottery_interval,
+        epoch_interval: old_config.epoch_interval,
+        block_time: old_config.block_time,
+        round_delta: old_config.round_delta,
+        ticket_price: old_config.ticket_price,
+        max_holders: old_config.max_holders,
+        prize_distribution: old_config.prize_distribution,
+        target_award: old_config.target_award,
+        reserve_factor: old_config.reserve_factor,
+        split_factor: old_config.split_factor,
+        instant_withdrawal_fee: old_config.instant_withdrawal_fee,
+        unbonding_period: old_config.unbonding_period,
+        max_tickets_per_depositor: migrate_msg.max_tickets_per_depositor,
+        glow_prize_buckets: migrate_msg.glow_prize_buckets,
+        paused: false,
+        lotto_winner_boost_config: default_lotto_winner_boost_config,
+    };
+
+    assert_eq!(new_config, CONFIG.load(deps.as_ref().storage).unwrap());
+
+    // New Lottery Info
+
+    for i in 0..state.current_lottery {
+        let mut old_lottery = old_read_lottery_info(deps.as_ref().storage, 100);
+
+        old_lottery.sequence = format!("00000{}", i);
+
+        let lottery = read_lottery_info(deps.as_ref().storage, i);
+
+        assert_eq!(
+            lottery,
+            LotteryInfo {
+                rand_round: old_lottery.rand_round,
+                sequence: old_lottery.sequence,
+                awarded: old_lottery.awarded,
+                timestamp: Timestamp::from_seconds(0),
+                block_height: old_lottery.timestamp,
+                prize_buckets: old_lottery.prize_buckets,
+                number_winners: old_lottery.number_winners,
+                page: old_lottery.page,
+                glow_prize_buckets: [Uint256::zero(); 7],
+                total_user_lottery_deposits: Uint256::zero(),
+            }
+        );
+    }
+
+    // New prizes
+
+    for i in 0..3 {
+        for j in 0..3 {
+            let prize_info = PrizeInfo {
+                claimed: false,
+                matches: [i; 7],
+            };
+
+            println!(
+                "Reading from {:?}",
+                (
+                    U64Key::from(j as u64),
+                    &Addr::unchecked(format!("addr000{}", i)).to_string()
+                )
+            );
+            assert_eq!(
+                prize_info,
+                PRIZES
+                    .load(
+                        deps.as_ref().storage,
+                        (
+                            U64Key::from(j as u64),
+                            &Addr::unchecked(format!("addr000{}", i))
+                        )
+                    )
+                    .unwrap()
+            );
+        }
+    }
+
+    // New depositors
+
+    for i in 0..15 {
+        let mut old_depositor_info =
+            old_read_depositor_info(deps.as_ref().storage, &Addr::unchecked(""));
+
+        old_depositor_info.savings_aust = Uint256::from(i as u128);
+
+        let depositor_info = read_depositor_info(
+            deps.as_ref().storage,
+            &Addr::unchecked(format!("addr000{}", i)),
+        );
+
+        assert_eq!(
+            depositor_info,
+            DepositorInfo {
+                lottery_deposit: old_depositor_info.lottery_deposit,
+                savings_aust: old_depositor_info.savings_aust,
+                tickets: old_depositor_info.tickets,
+                unbonding_info: old_depositor_info.unbonding_info
+            }
+        );
+    }
 }

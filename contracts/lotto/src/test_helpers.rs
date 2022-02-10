@@ -1,11 +1,14 @@
 use crate::contract::{query_config, query_pool};
 use crate::mock_querier::MOCK_CONTRACT_ADDR;
-use crate::state::STATE;
+use crate::state::{
+    OldDepositorInfo, OldLotteryInfo, OLD_PREFIX_DEPOSIT, OLD_PREFIX_LOTTERY, STATE,
+};
 use crate::tests::{A_UST, RATE};
+use cosmwasm_storage::bucket;
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{coin, Addr, Deps};
+use cosmwasm_std::{coin, Addr, Deps, StdResult, Storage};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use std::convert::TryInto;
 
@@ -120,4 +123,24 @@ pub fn vec_string_tickets_to_encoded_tickets(vec_string_tickets: Vec<String>) ->
 
     // Encode the vec of u8 with base64
     base64::encode(binary_data)
+}
+
+// Used for testing migration
+pub fn old_store_lottery_info(
+    storage: &mut dyn Storage,
+    lottery_id: u64,
+    lottery_info: &OldLotteryInfo,
+) -> StdResult<()> {
+    bucket::<OldLotteryInfo>(storage, OLD_PREFIX_LOTTERY)
+        .save(&lottery_id.to_be_bytes(), lottery_info)
+}
+
+// Used for testing migration
+pub fn old_store_depositor_info(
+    storage: &mut dyn Storage,
+    depositor: &Addr,
+    depositor_info: &OldDepositorInfo,
+) -> StdResult<()> {
+    bucket::<OldDepositorInfo>(storage, OLD_PREFIX_DEPOSIT)
+        .save(depositor.as_bytes(), depositor_info)
 }

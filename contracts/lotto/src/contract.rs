@@ -1854,6 +1854,13 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    // Migration Notes
+    // The changes to storage:
+    // - CONFIG (reuses storage key)
+    // - LOTTERIES (new storage key)
+    // - PRIZES (new storage key)
+    // - DEPOSITORS (new storage key, paginated migration)
+
     let state = STATE.load(deps.storage)?;
     let pool = POOL.load(deps.storage)?;
 
@@ -1909,6 +1916,9 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
     CONFIG.save(deps.storage, &new_config)?;
 
     // Migrate lottery info
+
+    // Don't need to include state.current_lottery
+    // because nothing has been saved with id state.current_lottery yet
     for i in 0..state.current_lottery {
         let old_lottery_info = old_read_lottery_info(deps.storage, i);
 
@@ -1936,23 +1946,32 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         .map(|item| {
             let (mut k, v) = item?;
 
+            // https://github.com/CosmWasm/cw-plus/issues/466
+
+            // Gets the length prefix from the composite key
             let mut tu = k.split_off(2);
+
+            // Calculate the size of the first key in the composite key
+            // using the length prefix
             let t_len = parse_length(&k)?;
+
+            // Split tu into the first and second key.
+            // u is the second key, and tu is the first key
             let u = tu.split_off(t_len);
 
-            // U64Key
-            let lottery_id = U64Key::from(tu);
+            // Extract address from the first key
+            let addr = Addr::unchecked(from_utf8(&tu)?);
 
-            // Extract address
-            let addr = Addr::unchecked(from_utf8(&u)?);
+            // Extract the lottery id from the second key
+            let lottery_id = U64Key::from(u);
 
+            // Return
             Ok((lottery_id, addr, v))
         })
         .collect::<StdResult<Vec<_>>>()?;
 
     for old_prize in old_prizes {
         let (lottery_id, addr, prize_info) = old_prize;
-        // let lottery_key = U64Key::from()
         OLD_PRIZES.remove(deps.storage, (&addr, lottery_id.clone()));
 
         PRIZES.save(deps.storage, (lottery_id, &addr), &prize_info)?;

@@ -334,11 +334,10 @@ pub fn base64_encoded_tickets_to_vec_string_tickets(
     // Encoded_tickets to binary
     let decoded_binary_tickets = match base64::decode(encoded_tickets) {
         Ok(decoded_binary_tickets) => decoded_binary_tickets,
-        Err(e) => {
-            return Err(StdError::generic_err(format!(
-                "Couldn't base64 decode the encoded tickets. Error: {}",
-                e
-            )));
+        Err(_) => {
+            return Err(StdError::generic_err(
+                "Couldn't base64 decode the encoded tickets.".to_string(),
+            ));
         }
     };
 

@@ -75,11 +75,15 @@ pub enum ExecuteMsg {
         round_delta: Option<u64>,
     },
     /// Deposit amount of stable into the pool
-    Deposit { encoded_tickets: String },
+    Deposit {
+        encoded_tickets: String,
+        operator: Option<String>,
+    },
     /// Deposit amount of stable into the pool in the name of the recipient
     Gift {
         encoded_tickets: String,
         recipient: String,
+        operator: Option<String>,
     },
     /// Sponsor the pool. If award is true, sponsor the award available directly
     Sponsor {
@@ -157,6 +161,8 @@ pub enum QueryMsg {
     },
     /// Sponsor information by address
     Sponsor { address: String },
+    /// Sponsor information by address
+    Operator { address: String },
     /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
     /// now.
     LotteryBalance {},
@@ -209,6 +215,7 @@ pub struct PoolResponse {
     pub total_user_lottery_deposits: Uint256,
     pub total_user_savings_aust: Uint256,
     pub total_sponsor_lottery_deposits: Uint256,
+    pub total_lottery_deposits_operated: Uint256,
 }
 
 // We define a custom struct for each query response
@@ -250,6 +257,15 @@ pub struct DepositorStatsResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SponsorInfoResponse {
     pub sponsor: String,
+    pub lottery_deposit: Uint256,
+    pub reward_index: Decimal256,
+    pub pending_rewards: Decimal256,
+}
+
+// We define a custom struct for each query response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OperatorInfoResponse {
+    pub operator: String,
     pub lottery_deposit: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,

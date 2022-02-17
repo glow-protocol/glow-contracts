@@ -281,6 +281,27 @@
       "additionalProperties": false
     },
     {
+      "description": "Sponsor information by address",
+      "type": "object",
+      "required": [
+        "operator"
+      ],
+      "properties": {
+        "operator": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right now.",
       "type": "object",
       "required": [

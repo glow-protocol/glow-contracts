@@ -24,7 +24,8 @@ use crate::test_helpers::{
 use cosmwasm_storage::bucket;
 use cw_storage_plus::U64Key;
 use glow_protocol::lotto::{
-    BoostConfig, MigrateMsg, PrizeInfoResponse, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
+    BoostConfig, MigrateMsg, OperatorInfoResponse, PrizeInfoResponse, NUM_PRIZE_BUCKETS,
+    TICKET_LENGTH,
 };
 use lazy_static::lazy_static;
 
@@ -321,6 +322,7 @@ fn proper_initialization() {
             total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_aust: Uint256::zero(),
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 
@@ -636,6 +638,7 @@ fn test_max_tickets_per_depositor() {
 
     let msg = ExecuteMsg::Deposit {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(too_many_combinations),
+        operator: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg);
     match res {
@@ -659,6 +662,7 @@ fn test_max_tickets_per_depositor() {
 
     let msg = ExecuteMsg::Deposit {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(too_many_combinations),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -675,6 +679,7 @@ fn test_max_tickets_per_depositor() {
 
     let msg = ExecuteMsg::Deposit {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(too_many_combinations),
+        operator: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg);
 
@@ -720,6 +725,7 @@ fn test_max_tickets_per_depositor() {
 
     let msg = ExecuteMsg::Deposit {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(too_many_combinations),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 }
@@ -738,6 +744,7 @@ fn deposit() {
             String::from(THREE_MATCH_SEQUENCE),
             String::from(ZERO_MATCH_SEQUENCE),
         ]),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -831,6 +838,7 @@ fn deposit() {
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
         ]),
+        operator: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -874,7 +882,8 @@ fn deposit() {
                 String::from(ZERO_MATCH_SEQUENCE),
                 String::from(ONE_MATCH_SEQUENCE)
             ],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -900,6 +909,7 @@ fn deposit() {
             total_user_lottery_deposits: minted_lottery_aust_value,
             total_user_savings_aust: minted_savings_aust,
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 
@@ -947,6 +957,7 @@ fn deposit() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             TWO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -963,6 +974,7 @@ fn deposit() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             THREE_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -978,6 +990,7 @@ fn deposit() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ZERO_MATCH_SEQUENCE_2,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -993,6 +1006,7 @@ fn deposit() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ZERO_MATCH_SEQUENCE_3,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -1009,6 +1023,7 @@ fn deposit() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             FOUR_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -1017,6 +1032,7 @@ fn deposit() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             FOUR_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     // We let users have a repeated ticket
@@ -1035,6 +1051,7 @@ fn deposit() {
             encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
                 ZERO_MATCH_SEQUENCE_4,
             )]),
+            operator: None,
         };
         let info = mock_info(
             address.as_str(),
@@ -1058,6 +1075,7 @@ fn deposit() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ZERO_MATCH_SEQUENCE_4,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr1111",
@@ -1090,6 +1108,7 @@ fn gift_tickets() {
             String::from(ONE_MATCH_SEQUENCE),
         ]),
         recipient: "addr1111".to_string(),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -1147,6 +1166,7 @@ fn gift_tickets() {
             String::from(ZERO_MATCH_SEQUENCE_4),
         ]),
         recipient: "addr0000".to_string(),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -1234,6 +1254,7 @@ fn gift_tickets() {
             String::from(ONE_MATCH_SEQUENCE),
         ]),
         recipient: "addr1111".to_string(),
+        operator: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1277,7 +1298,8 @@ fn gift_tickets() {
                 String::from(ZERO_MATCH_SEQUENCE),
                 String::from(ONE_MATCH_SEQUENCE)
             ],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -1303,6 +1325,7 @@ fn gift_tickets() {
             total_user_lottery_deposits: minted_lottery_aust_value,
             total_user_savings_aust: minted_savings_aust,
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 
@@ -1554,6 +1577,7 @@ fn withdraw() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ONE_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1619,7 +1643,8 @@ fn withdraw() {
             unbonding_info: vec![Claim {
                 amount: Uint256::from(sent_amount) * Decimal256::permille(RATE),
                 release_at: WEEK.after(&mock_env().block),
-            }]
+            }],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -1645,6 +1670,7 @@ fn withdraw() {
             total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_aust: Uint256::zero(),
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 
@@ -1690,6 +1716,7 @@ fn withdraw() {
                 index,
                 length = TICKET_LENGTH
             )]),
+            operator: None,
         };
         let info = mock_info(
             "addr2222",
@@ -1844,6 +1871,7 @@ fn instant_withdraw() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ZERO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1919,7 +1947,8 @@ fn instant_withdraw() {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
             tickets: vec![],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -1945,6 +1974,7 @@ fn instant_withdraw() {
             total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_aust: Uint256::zero(),
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 
@@ -2005,6 +2035,7 @@ fn claim() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ZERO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -2138,7 +2169,8 @@ fn claim() {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
             tickets: vec![],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -2176,6 +2208,7 @@ fn claim_lottery_single_winner() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             SIX_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -2208,7 +2241,8 @@ fn claim_lottery_single_winner() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -2486,6 +2520,7 @@ fn execute_lottery() {
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
         ]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -2871,6 +2906,7 @@ fn execute_prize_no_winners() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ZERO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -2903,7 +2939,8 @@ fn execute_prize_no_winners() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(ZERO_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -2995,6 +3032,7 @@ fn execute_prize_one_winner() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             SIX_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -3027,7 +3065,8 @@ fn execute_prize_one_winner() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -3131,6 +3170,7 @@ fn execute_prize_winners_diff_ranks() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             SIX_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -3163,7 +3203,8 @@ fn execute_prize_winners_diff_ranks() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(SIX_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -3172,6 +3213,7 @@ fn execute_prize_winners_diff_ranks() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             TWO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0001",
@@ -3192,7 +3234,8 @@ fn execute_prize_winners_diff_ranks() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(TWO_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -3307,6 +3350,7 @@ fn execute_prize_winners_same_rank() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             FOUR_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -3339,7 +3383,8 @@ fn execute_prize_winners_same_rank() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(FOUR_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -3348,6 +3393,7 @@ fn execute_prize_winners_same_rank() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             FOUR_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0001",
@@ -3368,7 +3414,8 @@ fn execute_prize_winners_same_rank() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(FOUR_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -3481,6 +3528,7 @@ fn execute_prize_one_winner_multiple_ranks() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             SIX_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let info = mock_info(
         "addr0000",
@@ -3496,6 +3544,7 @@ fn execute_prize_one_winner_multiple_ranks() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ONE_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
@@ -3503,6 +3552,7 @@ fn execute_prize_one_winner_multiple_ranks() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             FOUR_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
@@ -3510,6 +3560,7 @@ fn execute_prize_one_winner_multiple_ranks() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             FOUR_MATCH_SEQUENCE_2,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
@@ -3517,6 +3568,7 @@ fn execute_prize_one_winner_multiple_ranks() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             FOUR_MATCH_SEQUENCE_3,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -3547,7 +3599,8 @@ fn execute_prize_one_winner_multiple_ranks() {
                 String::from(FOUR_MATCH_SEQUENCE_2),
                 String::from(FOUR_MATCH_SEQUENCE_3),
             ],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -3658,6 +3711,7 @@ fn execute_prize_multiple_winners_one_ticket() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             SIX_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
 
     // User 0 buys winning ticket - 5 hits
@@ -3823,6 +3877,7 @@ fn execute_prize_pagination() {
                 100 + index,
                 length = TICKET_LENGTH - 2
             )]),
+            operator: None,
         };
         let info = mock_info(
             address.as_str(),
@@ -4143,6 +4198,138 @@ fn claim_rewards_one_sponsor() {
 }
 
 #[test]
+fn claim_rewards_one_referrer() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[Coin {
+        denom: DENOM.to_string(),
+        amount: Uint128::from(INITIAL_DEPOSIT_AMOUNT),
+    }]);
+
+    mock_instantiate(&mut deps);
+    mock_register_contracts(deps.as_mut());
+
+    let info = mock_info("operator", &[]);
+
+    let mut state = STATE.load(deps.as_mut().storage).unwrap();
+    state.glow_emission_rate = Decimal256::one();
+    STATE.save(deps.as_mut().storage, &state).unwrap();
+
+    // User has no deposits, so no claimable rewards and empty msg returned
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // Deposit of 20_000_000 uusd
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![
+            String::from(THREE_MATCH_SEQUENCE),
+            String::from(ZERO_MATCH_SEQUENCE),
+        ]),
+        operator: Some(String::from("operator")),
+    };
+
+    let deposit_amount = Uint256::from(2 * TICKET_PRICE).into();
+
+    let info = mock_info(
+        "addr0000",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(2 * TICKET_PRICE).into(),
+        }],
+    );
+
+    let mut env = mock_env();
+
+    let _res = execute(deps.as_mut(), env.clone(), info, msg);
+
+    // User has deposits but zero blocks have passed, so no rewards accrued
+    let info = mock_info("operator", &[]);
+    let msg = ExecuteMsg::ClaimRewards {};
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // After 100 blocks
+    env.block.height += 100;
+
+    deps.querier.update_balance(
+        MOCK_CONTRACT_ADDR.to_string(),
+        vec![Coin {
+            denom: "uusd".to_string(),
+            amount: deposit_amount,
+        }],
+    );
+
+    let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
+    )]);
+
+    // User withdraws all its deposits
+    let msg = ExecuteMsg::Withdraw {
+        amount: None,
+        instant: None,
+    };
+    let info = mock_info("addr0000", &[]);
+
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // Another 100 blocks pass
+    env.block.height += 100;
+
+    let info = mock_info("operator", &[]);
+    let msg = ExecuteMsg::ClaimRewards {};
+
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+
+    // Get the number of minted aust
+    let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+
+    // Get the number of minted aust that will go towards the lottery
+    let minted_lottery_aust = minted_aust * Decimal256::percent(SPLIT_FACTOR);
+
+    // Get the value of minted aust going towards the lottery
+    let minted_lottery_aust_value = minted_lottery_aust * Decimal256::permille(RATE);
+
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: DISTRIBUTOR_ADDR.to_string(),
+            funds: vec![],
+            msg: to_binary(&FaucetExecuteMsg::Spend {
+                recipient: "operator".to_string(),
+                amount: (Decimal256::from_str("100").unwrap()
+                    / Decimal256::from_uint256(minted_lottery_aust_value)
+                    * Decimal256::from_uint256(minted_lottery_aust_value)
+                    * Uint256::one())
+                .into(),
+            })
+            .unwrap(),
+        }))]
+    );
+
+    let res: OperatorInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::Operator {
+                address: "operator".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(res.pending_rewards, Decimal256::zero());
+    assert_eq!(
+        res.reward_index,
+        (Decimal256::from_str("100").unwrap()
+            / Decimal256::from_uint256(minted_lottery_aust_value))
+    );
+}
+
+#[test]
 fn execute_epoch_operations() {
     // Initialize contract
     let mut deps = mock_dependencies(&[]);
@@ -4234,6 +4421,7 @@ fn small_withdraw() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ONE_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4282,7 +4470,8 @@ fn small_withdraw() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(ONE_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -4308,6 +4497,7 @@ fn small_withdraw() {
             total_user_lottery_deposits: minted_lottery_aust_value,
             total_user_savings_aust: minted_savings_aust,
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 
@@ -4392,7 +4582,8 @@ fn small_withdraw() {
             unbonding_info: vec![Claim {
                 amount: Uint256::from(sent_amount) * Decimal256::permille(RATE),
                 release_at: WEEK.after(&env.block),
-            }]
+            }],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -4419,6 +4610,7 @@ fn small_withdraw() {
                 - ceil_withdrawn_lottery_aust_value,
             total_sponsor_lottery_deposits: Uint256::zero(),
             total_user_savings_aust: minted_savings_aust - withdrawn_savings_aust,
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 }
@@ -4452,6 +4644,7 @@ pub fn lottery_deposit_floor_edge_case() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ONE_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4467,6 +4660,7 @@ pub fn lottery_deposit_floor_edge_case() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             TWO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4518,6 +4712,7 @@ pub fn lottery_pool_solvency_edge_case() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             ONE_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -4567,7 +4762,8 @@ pub fn lottery_pool_solvency_edge_case() {
             lottery_deposit: minted_lottery_aust_value,
             savings_aust: minted_savings_aust,
             tickets: vec![String::from(ONE_MATCH_SEQUENCE)],
-            unbonding_info: vec![]
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -4593,6 +4789,7 @@ pub fn lottery_pool_solvency_edge_case() {
             total_user_lottery_deposits: minted_lottery_aust_value,
             total_user_savings_aust: minted_savings_aust,
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         }
     );
 
@@ -4680,6 +4877,7 @@ pub fn simulate_many_lotteries_with_one_depositor() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             TWO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -5097,6 +5295,7 @@ pub fn simulate_many_lotteries_with_one_depositor_and_sponsor() {
         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
             TWO_MATCH_SEQUENCE,
         )]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -5345,6 +5544,7 @@ pub fn simulate_jackpot_growth_with_one_depositor() {
             String::from(THREE_MATCH_SEQUENCE),
             String::from(FOUR_MATCH_SEQUENCE),
         ]),
+        operator: None,
     };
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
@@ -5838,6 +6038,7 @@ pub fn test_paused() {
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
         ]),
+        operator: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -5927,6 +6128,7 @@ pub fn test_paused() {
             String::from(ZERO_MATCH_SEQUENCE),
             String::from(ONE_MATCH_SEQUENCE),
         ]),
+        operator: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -5951,6 +6153,7 @@ pub fn test_update_depositor_stats() {
         lottery_deposit: Uint256::zero(),
         savings_aust: Uint256::one(),
         num_tickets: 10,
+        operator_addr: Addr::unchecked(""),
     };
 
     store_depositor_stats(deps.as_mut().storage, &addr, depositor, 10).unwrap();
@@ -5985,6 +6188,7 @@ pub fn test_historical_depositor_stats() {
         lottery_deposit: Uint256::zero(),
         savings_aust: Uint256::one(),
         num_tickets: 0,
+        operator_addr: Addr::unchecked(""),
     };
 
     store_depositor_stats(deps.as_mut().storage, &addr, depositor_10.clone(), 10).unwrap();
@@ -5994,6 +6198,7 @@ pub fn test_historical_depositor_stats() {
         lottery_deposit: Uint256::zero(),
         savings_aust: Uint256::from(2u128),
         num_tickets: 0,
+        operator_addr: Addr::unchecked(""),
     };
 
     store_depositor_stats(deps.as_mut().storage, &addr, depositor_15.clone(), 15).unwrap();
@@ -6004,6 +6209,7 @@ pub fn test_historical_depositor_stats() {
         lottery_deposit: Uint256::zero(),
         savings_aust: Uint256::from(3u128),
         num_tickets: 0,
+        operator_addr: Addr::unchecked(""),
     };
 
     store_depositor_stats(deps.as_mut().storage, &addr, depositor_20.clone(), 20).unwrap();
@@ -6018,6 +6224,7 @@ pub fn test_historical_depositor_stats() {
             lottery_deposit: Uint256::zero(),
             savings_aust: Uint256::zero(),
             num_tickets: 0,
+            operator_addr: Addr::unchecked("")
         }
     );
 
@@ -6309,7 +6516,8 @@ pub fn test_migrate() {
                 lottery_deposit: old_depositor_info.lottery_deposit,
                 savings_aust: old_depositor_info.savings_aust,
                 tickets: old_depositor_info.tickets,
-                unbonding_info: old_depositor_info.unbonding_info
+                unbonding_info: old_depositor_info.unbonding_info,
+                operator_addr: Addr::unchecked("")
             }
         );
     }

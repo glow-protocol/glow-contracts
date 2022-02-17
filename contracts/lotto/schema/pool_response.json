@@ -3,11 +3,15 @@
   "title": "PoolResponse",
   "type": "object",
   "required": [
+    "total_lottery_deposits_operated",
     "total_sponsor_lottery_deposits",
     "total_user_lottery_deposits",
     "total_user_savings_aust"
   ],
   "properties": {
+    "total_lottery_deposits_operated": {
+      "$ref": "#/definitions/Uint256"
+    },
     "total_sponsor_lottery_deposits": {
       "$ref": "#/definitions/Uint256"
     },

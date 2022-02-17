@@ -1,7 +1,8 @@
 use std::convert::TryInto;
+use std::ops::Add;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, QuerierWrapper, StdError, StdResult, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, DepsMut, QuerierWrapper, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
@@ -10,7 +11,8 @@ use crate::querier::{
 };
 
 use crate::state::{
-    Config, DepositorInfo, DepositorStatsInfo, LotteryInfo, Pool, PrizeInfo, SponsorInfo, State,
+    read_operator_info, store_operator_info, Config, DepositorInfo, DepositorStatsInfo,
+    LotteryInfo, OperatorInfo, Pool, PrizeInfo, SponsorInfo, State,
 };
 
 /// Compute distributed reward and update global reward index
@@ -22,13 +24,21 @@ pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
     let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
     let reward_accrued = passed_blocks * state.glow_emission_rate;
 
-    let total_sponsor_lottery_deposits = pool.total_sponsor_lottery_deposits;
-    if !reward_accrued.is_zero() && !total_sponsor_lottery_deposits.is_zero() {
+    let total_deposits_rewards =
+        pool.total_lottery_deposits_operated + pool.total_sponsor_lottery_deposits;
+    if !reward_accrued.is_zero() && !total_deposits_rewards.is_zero() {
         state.global_reward_index +=
-            reward_accrued / Decimal256::from_uint256(total_sponsor_lottery_deposits);
+            reward_accrued / Decimal256::from_uint256(total_deposits_rewards);
     }
 
     state.last_reward_updated = block_height;
+}
+
+/// Compute reward amount an operator/referrer received
+pub fn compute_operator_reward(state: &State, operator: &mut OperatorInfo) {
+    operator.pending_rewards += Decimal256::from_uint256(operator.lottery_deposit)
+        * (state.global_reward_index - operator.reward_index);
+    operator.reward_index = state.global_reward_index;
 }
 
 /// Compute reward amount a sponsor received
@@ -36,6 +46,73 @@ pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
     sponsor.pending_rewards += Decimal256::from_uint256(sponsor.lottery_deposit)
         * (state.global_reward_index - sponsor.reward_index);
     sponsor.reward_index = state.global_reward_index;
+}
+
+/// Handles all changes to operator's following a deposit
+/// Modifies state and depositor_info, but doesn't save them to storage.
+/// Call this function before modifying depositor_stats following a deposit.
+pub fn handle_depositor_operator_updates(
+    deps: DepsMut,
+    state: &mut State,
+    pool: &mut Pool,
+    depositor: &Addr,
+    depositor_info: &mut DepositorInfo,
+    minted_lottery_aust_value: Uint256,
+    new_operator_addr: Option<String>,
+) -> StdResult<()> {
+    // If an operator is already registered, add to its deposits. If not, handle relevant updates
+    if depositor_info.operator_registered() {
+        // Read existing operator info
+        let mut operator = read_operator_info(deps.storage, &depositor_info.operator_addr);
+        // Update reward index for the operator
+        compute_operator_reward(state, &mut operator);
+        // Then add the new deposit on the operator
+        operator.lottery_deposit = operator.lottery_deposit.add(minted_lottery_aust_value);
+        // store operator info
+        store_operator_info(deps.storage, &depositor_info.operator_addr, operator)?;
+        // update pool
+        pool.total_lottery_deposits_operated = pool
+            .total_lottery_deposits_operated
+            .add(minted_lottery_aust_value);
+    } else {
+        // If there is no operator registered and a new operator address is provided
+        if let Some(new_operator_addr) = new_operator_addr {
+            let new_operator_addr = deps.api.addr_validate(&new_operator_addr)?;
+
+            // Validate that a user cannot set itself as its own operator
+            if &new_operator_addr == depositor {
+                return Err(StdError::generic_err(
+                    "You cannot assign yourself as your own operator",
+                ));
+            }
+
+            // Set the new depositor_info operator_addr
+            depositor_info.operator_addr = new_operator_addr;
+
+            // Read the new operator in question
+            let mut new_operator = read_operator_info(deps.storage, &depositor_info.operator_addr);
+
+            // Update the reward index for the new operator
+            compute_operator_reward(state, &mut new_operator);
+
+            // Update new operator info deposits
+            let depositor_total_lottery_deposit =
+                depositor_info.lottery_deposit + minted_lottery_aust_value;
+
+            new_operator.lottery_deposit = new_operator
+                .lottery_deposit
+                .add(depositor_total_lottery_deposit);
+
+            // store new operator info
+            store_operator_info(deps.storage, &depositor_info.operator_addr, new_operator)?;
+            // update pool
+            pool.total_lottery_deposits_operated = pool
+                .total_lottery_deposits_operated
+                .add(depositor_total_lottery_deposit);
+        }
+    }
+
+    Ok(())
 }
 
 /// This iterates over all mature claims for the address, and removes them, up to an optional cap.

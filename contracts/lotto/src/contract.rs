@@ -4,8 +4,9 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     base64_encoded_tickets_to_vec_string_tickets, calculate_lottery_balance,
-    calculate_winner_prize, claim_unbonded_withdrawals, compute_reward, compute_sponsor_reward,
-    is_valid_sequence, pseudo_random_seq, uint256_times_decimal256_ceil,
+    calculate_winner_prize, claim_unbonded_withdrawals, compute_operator_reward, compute_reward,
+    compute_sponsor_reward, handle_depositor_operator_updates, is_valid_sequence,
+    pseudo_random_seq, uint256_times_decimal256_ceil,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -13,9 +14,10 @@ use crate::state::{
     old_read_depositors, old_read_lottery_info, old_remove_depositor_info, old_remove_lottery_info,
     parse_length, read_depositor_info, read_depositor_stats, read_depositor_stats_at_height,
     read_depositors_info, read_depositors_stats, read_lottery_info, read_lottery_prizes,
-    read_sponsor_info, store_depositor_info, store_lottery_info, store_sponsor_info, Config,
-    DepositorInfo, LotteryInfo, Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, OLD_PRIZES,
-    POOL, PRIZES, STATE, TICKETS,
+    read_operator_info, read_sponsor_info, store_depositor_info, store_lottery_info,
+    store_operator_info, store_sponsor_info, Config, DepositorInfo, LotteryInfo, OperatorInfo,
+    Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLD_PRIZES, POOL, PRIZES,
+    STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -29,8 +31,9 @@ use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorStatsResponse,
     DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg, InstantiateMsg,
-    LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse,
-    PrizeInfosResponse, QueryMsg, SponsorInfoResponse, StateResponse, TicketInfoResponse,
+    LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, OperatorInfoResponse, PoolResponse,
+    PrizeInfoResponse, PrizeInfosResponse, QueryMsg, SponsorInfoResponse, StateResponse,
+    TicketInfoResponse,
 };
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
@@ -175,6 +178,7 @@ pub fn instantiate(
             total_user_lottery_deposits: Uint256::zero(),
             total_user_savings_aust: Uint256::zero(),
             total_sponsor_lottery_deposits: Uint256::zero(),
+            total_lottery_deposits_operated: Uint256::zero(),
         },
     )?;
 
@@ -257,13 +261,15 @@ pub fn execute(
             community_contract,
             distributor_contract,
         ),
-        ExecuteMsg::Deposit { encoded_tickets } => {
-            execute_deposit(deps, env, info, encoded_tickets)
-        }
+        ExecuteMsg::Deposit {
+            encoded_tickets,
+            operator,
+        } => execute_deposit(deps, env, info, encoded_tickets, operator),
         ExecuteMsg::Gift {
             encoded_tickets,
             recipient,
-        } => execute_gift(deps, env, info, encoded_tickets, recipient),
+            operator,
+        } => execute_gift(deps, env, info, encoded_tickets, recipient, operator),
         ExecuteMsg::Sponsor {
             award,
             prize_distribution,
@@ -354,10 +360,11 @@ pub fn execute_register_contracts(
 }
 
 pub fn deposit(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
     recipient: Option<String>,
+    new_operator_addr: Option<String>,
     encoded_tickets: String,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
@@ -509,6 +516,19 @@ pub fn deposit(
         // add the combination to the depositor_info
         depositor_info.tickets.push(combination);
     }
+    // Update the global reward index
+    compute_reward(&mut state, &pool, env.block.height);
+
+    // Update operator information
+    handle_depositor_operator_updates(
+        deps.branch(),
+        &mut state,
+        &mut pool,
+        &depositor,
+        &mut depositor_info,
+        minted_lottery_aust_value,
+        new_operator_addr,
+    )?;
 
     // Increase the depositor's lottery_deposit by the value of the minted lottery aust
     depositor_info.lottery_deposit = depositor_info
@@ -560,8 +580,16 @@ pub fn execute_deposit(
     env: Env,
     info: MessageInfo,
     encoded_tickets: String,
+    operator_addr: Option<String>,
 ) -> Result<Response, ContractError> {
-    deposit(deps.branch(), env, info, None, encoded_tickets)
+    deposit(
+        deps.branch(),
+        env,
+        info,
+        None,
+        operator_addr,
+        encoded_tickets,
+    )
 }
 
 // Gift several tickets at once to a given address
@@ -571,11 +599,19 @@ pub fn execute_gift(
     info: MessageInfo,
     encoded_tickets: String,
     to: String,
+    operator_addr: Option<String>,
 ) -> Result<Response, ContractError> {
     if to == info.sender {
         return Err(ContractError::GiftToSelf {});
     }
-    deposit(deps.branch(), env, info, Some(to), encoded_tickets)
+    deposit(
+        deps.branch(),
+        env,
+        info,
+        Some(to),
+        operator_addr,
+        encoded_tickets,
+    )
 }
 
 // Make a donation deposit to the lottery pool
@@ -931,6 +967,24 @@ pub fn execute_withdraw(
     // Get the value of the redeemed aust. total_aust_to_redeem * rate
     let total_aust_to_redeem_value = total_aust_to_redeem * rate;
 
+    // Update operator information
+    if depositor.operator_registered() {
+        let mut operator = read_operator_info(deps.storage, &depositor.operator_addr);
+        // update the glow reward index
+        compute_reward(&mut state, &pool, env.block.height);
+        // update the glow depositor reward for the depositor
+        compute_operator_reward(&state, &mut operator);
+        // add new deposit amount
+        operator.lottery_deposit = operator
+            .lottery_deposit
+            .sub(ceil_withdrawn_lottery_aust_value);
+        // store new operator info
+        store_operator_info(deps.storage, &depositor.operator_addr, operator)?;
+        pool.total_lottery_deposits_operated = pool
+            .total_lottery_deposits_operated
+            .sub(ceil_withdrawn_lottery_aust_value);
+    }
+
     // Update depositor info
 
     depositor.savings_aust = depositor.savings_aust.sub(withdrawn_savings_aust);
@@ -944,8 +998,6 @@ pub fn execute_withdraw(
     pool.total_user_lottery_deposits = pool
         .total_user_lottery_deposits
         .sub(ceil_withdrawn_lottery_aust_value);
-
-    // Update state
 
     // Remove withdrawn_tickets from total_tickets
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
@@ -1311,6 +1363,7 @@ pub fn execute_claim_rewards(
 
     let depositor_address = info.sender.as_str();
     let mut sponsor: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
+    let mut operator: OperatorInfo = read_operator_info(deps.storage, &info.sender);
 
     // Validate distributor contract has already been registered
     if !config.contracts_registered() {
@@ -1320,12 +1373,15 @@ pub fn execute_claim_rewards(
     // Compute Glow depositor rewards
     compute_reward(&mut state, &pool, env.block.height);
     compute_sponsor_reward(&state, &mut sponsor);
+    compute_operator_reward(&state, &mut operator);
 
-    let claim_amount = sponsor.pending_rewards * Uint256::one();
+    let claim_amount = (operator.pending_rewards + sponsor.pending_rewards) * Uint256::one();
     sponsor.pending_rewards = Decimal256::zero();
+    operator.pending_rewards = Decimal256::zero();
 
     STATE.save(deps.storage, &state)?;
     store_sponsor_info(deps.storage, &info.sender, sponsor)?;
+    store_operator_info(deps.storage, &info.sender, operator)?;
 
     let messages: Vec<CosmosMsg> = if !claim_amount.is_zero() {
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -1536,6 +1592,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_depositors_stats(deps, start_after, limit)?)
         }
         QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, env, address)?),
+        QueryMsg::Operator { address } => to_binary(&query_operator(deps, env, address)?),
         QueryMsg::LotteryBalance {} => to_binary(&query_lottery_balance(deps, env)?),
     }
 }
@@ -1707,6 +1764,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
         total_user_lottery_deposits: pool.total_user_lottery_deposits,
         total_user_savings_aust: pool.total_user_savings_aust,
         total_sponsor_lottery_deposits: pool.total_sponsor_lottery_deposits,
+        total_lottery_deposits_operated: pool.total_lottery_deposits_operated,
     })
 }
 
@@ -1798,6 +1856,25 @@ pub fn query_sponsor(deps: Deps, env: Env, addr: String) -> StdResult<SponsorInf
         lottery_deposit: sponsor.lottery_deposit,
         reward_index: sponsor.reward_index,
         pending_rewards: sponsor.pending_rewards,
+    })
+}
+
+pub fn query_operator(deps: Deps, env: Env, addr: String) -> StdResult<OperatorInfoResponse> {
+    let address = deps.api.addr_validate(&addr)?;
+    let mut operator = read_operator_info(deps.storage, &address);
+
+    let mut state = STATE.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+
+    // compute rewards
+    compute_reward(&mut state, &pool, env.block.height);
+    compute_operator_reward(&state, &mut operator);
+
+    Ok(OperatorInfoResponse {
+        operator: addr,
+        lottery_deposit: operator.lottery_deposit,
+        reward_index: operator.reward_index,
+        pending_rewards: operator.pending_rewards,
     })
 }
 
@@ -1915,6 +1992,17 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
 
     CONFIG.save(deps.storage, &new_config)?;
 
+    // migrate pool to include total lottery deposits delegated/operated
+    let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
+    let new_pool = Pool {
+        total_user_lottery_deposits: old_pool.total_user_lottery_deposits,
+        total_user_savings_aust: old_pool.total_user_savings_aust,
+        total_sponsor_lottery_deposits: old_pool.total_sponsor_lottery_deposits,
+        total_lottery_deposits_operated: Uint256::zero(),
+    };
+
+    POOL.save(deps.storage, &new_pool)?;
+
     // Migrate lottery info
 
     // Don't need to include state.current_lottery
@@ -1998,6 +2086,7 @@ pub fn migrate_old_depositors(
             savings_aust: old_depositor_info.savings_aust,
             tickets: old_depositor_info.tickets,
             unbonding_info: old_depositor_info.unbonding_info,
+            operator_addr: Addr::unchecked(""),
         };
 
         // Store new depositor

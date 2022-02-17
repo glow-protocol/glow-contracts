@@ -204,6 +204,12 @@
           "properties": {
             "encoded_tickets": {
               "type": "string"
+            },
+            "operator": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }
@@ -226,6 +232,12 @@
           "properties": {
             "encoded_tickets": {
               "type": "string"
+            },
+            "operator": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "recipient": {
               "type": "string"

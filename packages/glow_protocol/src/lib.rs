@@ -6,6 +6,7 @@ pub mod gov;
 pub mod lotto;
 pub mod querier;
 pub mod staking;
+pub mod ve_token;
 pub mod vesting;
 
 #[cfg(test)]

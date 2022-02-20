@@ -6,28 +6,8 @@ use cosmwasm_std::{
     QueryRequest, StdResult, WasmQuery,
 };
 use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
+use glow_protocol::ve_token::{QueryMsg as VEQueryMessage, StakerResponse, StateResponse};
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum QueryMsg {
-    Balance { address: String },
-    BalanceAt { address: String, block_height: u64 },
-    TotalSupply {},
-    TotalSupplyAt { block_height: u64 },
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
-pub struct BalanceResponse {
-    pub balance: Uint128,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
-pub struct TotalSupplyResponse {
-    pub total_supply: Uint128,
-}
 
 pub fn query_exchange_rate(
     deps: Deps,
@@ -78,35 +58,37 @@ pub fn query_glow_emission_rate(
     Ok(glow_emission_rate)
 }
 
-pub fn query_address_voting_balance_at_height(
+pub fn query_address_voting_balance_at_timestamp(
     querier: &QuerierWrapper,
-    gov: &Addr,
-    block_height: u64,
+    ve_addr: &Addr,
+    timestamp: u64,
     address: &Addr,
-) -> StdResult<BalanceResponse> {
-    let balance: BalanceResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: gov.to_string(),
-        msg: to_binary(&QueryMsg::BalanceAt {
+) -> StdResult<Uint128> {
+    let balance: StdResult<StakerResponse> = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: ve_addr.to_string(),
+        msg: to_binary(&VEQueryMessage::Staker {
             address: address.to_string(),
-            block_height,
+            timestamp: Some(timestamp),
         })?,
-    }))?;
+    }));
 
-    Ok(balance)
+    Ok(balance.map_or(Uint128::zero(), |s| s.balance))
 }
 
-pub fn query_total_voting_balance_at_height(
+pub fn query_total_voting_balance_at_timestamp(
     querier: &QuerierWrapper,
-    gov: &Addr,
-    block_height: u64,
-) -> StdResult<TotalSupplyResponse> {
-    let total_supply: TotalSupplyResponse =
+    ve_addr: &Addr,
+    timestamp: u64,
+) -> StdResult<Uint128> {
+    let total_supply: StdResult<StateResponse> =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: gov.to_string(),
-            msg: to_binary(&QueryMsg::TotalSupplyAt { block_height })?,
-        }))?;
+            contract_addr: ve_addr.to_string(),
+            msg: to_binary(&VEQueryMessage::State {
+                timestamp: Some(timestamp),
+            })?,
+        }));
 
-    Ok(total_supply)
+    Ok(total_supply.map_or(Uint128::zero(), |t| t.total_balance))
 }
 
 pub fn query_oracle(deps: Deps, oracle_addr: String, round: u64) -> StdResult<OracleResponse> {

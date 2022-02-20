@@ -1,3 +1,4 @@
+use glow_protocol::ve_token::{StakerResponse, StateResponse};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -41,15 +42,13 @@ pub enum QueryMsg {
         address: String,
     },
 
-    BalanceAt {
-        address: String,
-        block_height: u64,
+    State {
+        timestamp: Option<u64>,
     },
 
-    TotalSupply {},
-
-    TotalSupplyAt {
-        block_height: u64,
+    Staker {
+        address: String,
+        timestamp: Option<u64>,
     },
 
     GetRandomness {
@@ -259,11 +258,7 @@ impl WasmMockQuerier {
                         })))
                     }
 
-                    // TODO fix
-                    QueryMsg::BalanceAt {
-                        address,
-                        block_height: _,
-                    } => {
+                    QueryMsg::Staker { address, .. } => {
                         let balances: &HashMap<String, Uint128> =
                             match self.token_querier.balances.get(contract_addr) {
                                 Some(balances) => balances,
@@ -291,12 +286,16 @@ impl WasmMockQuerier {
                         };
 
                         SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&Cw20BalanceResponse { balance }).unwrap(),
+                            to_binary(&StakerResponse {
+                                deposited_amount: balance,
+                                balance,
+                                locked_amount: balance,
+                            })
+                            .unwrap(),
                         ))
                     }
 
-                    // TODO fix
-                    QueryMsg::TotalSupplyAt { block_height: _ } => {
+                    QueryMsg::State { .. } => {
                         let balances: &HashMap<String, Uint128> =
                             match self.token_querier.balances.get(contract_addr) {
                                 Some(balances) => balances,
@@ -315,7 +314,12 @@ impl WasmMockQuerier {
                         let balance = balances.iter().fold(Uint128::zero(), |sum, x| sum + x.1);
 
                         SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&Cw20BalanceResponse { balance }).unwrap(),
+                            to_binary(&StateResponse {
+                                total_deposited_amount: balance,
+                                total_balance: balance,
+                                total_locked_amount: balance,
+                            })
+                            .unwrap(),
                         ))
                     }
 

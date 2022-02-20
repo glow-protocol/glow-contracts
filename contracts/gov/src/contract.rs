@@ -2,9 +2,12 @@
 use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
+use crate::querier::{
+    query_address_voting_balance_at_timestamp, query_total_voting_balance_at_timestamp,
+};
 use crate::staking::{query_staker, stake_voting_tokens, withdraw_voting_tokens};
 use crate::state::{
-    bank_read, bank_store, config_read, config_store, poll_indexer_store, poll_read, poll_store,
+    config_read, config_store, old_config_read, poll_indexer_store, poll_read, poll_store,
     poll_voter_read, poll_voter_store, read_poll_voters, read_polls, state_read, state_store,
     Config, ExecuteData, Poll, State,
 };
@@ -24,7 +27,7 @@ use glow_protocol::gov::{
 
 use terraswap::asset::{Asset, AssetInfo, PairInfo};
 use terraswap::pair::ExecuteMsg as TerraswapExecuteMsg;
-use terraswap::querier::{query_balance, query_pair_info, query_token_balance};
+use terraswap::querier::{query_balance, query_pair_info};
 
 const MIN_TITLE_LENGTH: usize = 4;
 const MAX_TITLE_LENGTH: usize = 64;
@@ -45,6 +48,7 @@ pub fn instantiate(
 
     let config = Config {
         glow_token: CanonicalAddr::from(vec![]),
+        ve_token: CanonicalAddr::from(vec![]),
         terraswap_factory: CanonicalAddr::from(vec![]),
         owner: deps.api.addr_canonicalize(info.sender.as_str())?,
         quorum: msg.quorum,
@@ -80,8 +84,9 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::RegisterContracts {
             glow_token,
+            ve_token,
             terraswap_factory,
-        } => register_contracts(deps, glow_token, terraswap_factory),
+        } => register_contracts(deps, glow_token, ve_token, terraswap_factory),
         ExecuteMsg::Sweep { denom } => sweep(deps, env, denom),
         ExecuteMsg::UpdateConfig {
             owner,
@@ -105,15 +110,10 @@ pub fn execute(
             snapshot_period,
         ),
         ExecuteMsg::WithdrawVotingTokens { amount } => withdraw_voting_tokens(deps, info, amount),
-        ExecuteMsg::CastVote {
-            poll_id,
-            vote,
-            amount,
-        } => cast_vote(deps, env, info, poll_id, vote, amount),
+        ExecuteMsg::CastVote { poll_id, vote } => cast_vote(deps, env, info, poll_id, vote),
         ExecuteMsg::EndPoll { poll_id } => end_poll(deps, env, poll_id),
         ExecuteMsg::ExecutePoll { poll_id } => execute_poll(deps, env, poll_id),
         ExecuteMsg::ExpirePoll { poll_id } => expire_poll(deps, env, poll_id),
-        ExecuteMsg::SnapshotPoll { poll_id } => snapshot_poll(deps, env, poll_id),
     }
 }
 
@@ -156,6 +156,7 @@ pub fn receive_cw20(
 pub fn register_contracts(
     deps: DepsMut,
     glow_token: String,
+    ve_token: String,
     terraswap_factory: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = config_read(deps.storage).load()?;
@@ -164,6 +165,7 @@ pub fn register_contracts(
     }
 
     config.glow_token = deps.api.addr_canonicalize(&glow_token)?;
+    config.ve_token = deps.api.addr_canonicalize(&ve_token)?;
     config.terraswap_factory = deps.api.addr_canonicalize(&terraswap_factory)?;
     config_store(deps.storage).save(&config)?;
 
@@ -386,6 +388,12 @@ pub fn create_poll(
         None
     };
 
+    let staked_amount = query_total_voting_balance_at_timestamp(
+        &deps.querier,
+        &deps.api.addr_humanize(&config.ve_token)?,
+        Some(env.block.time.seconds()),
+    )?;
+
     let sender_address_raw = deps.api.addr_canonicalize(&proposer)?;
     let new_poll = Poll {
         id: poll_id,
@@ -393,6 +401,7 @@ pub fn create_poll(
         status: PollStatus::InProgress,
         yes_votes: Uint128::zero(),
         no_votes: Uint128::zero(),
+        start_time: env.block.time.seconds(),
         end_height: env.block.height + config.voting_period,
         title,
         description,
@@ -400,7 +409,7 @@ pub fn create_poll(
         execute_data: all_execute_data,
         deposit_amount,
         total_balance_at_end_poll: None,
-        staked_amount: None,
+        staked_amount: Some(staked_amount),
     };
 
     poll_store(deps.storage).save(&poll_id.to_be_bytes(), &new_poll)?;
@@ -450,24 +459,14 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> Result<Response, Contr
     let config: Config = config_read(deps.storage).load()?;
     let mut state: State = state_read(deps.storage).load()?;
 
-    let (quorum, staked_weight) = if state.total_share.u128() == 0 {
+    let staked_amount = a_poll.staked_amount.unwrap();
+
+    let (quorum, staked_weight) = if staked_amount.u128() == 0 {
         (Decimal::zero(), Uint128::zero())
-    } else if let Some(staked_amount) = a_poll.staked_amount {
+    } else {
         (
             Decimal::from_ratio(tallied_weight, staked_amount),
             staked_amount,
-        )
-    } else {
-        let staked_weight = query_token_balance(
-            &deps.querier,
-            deps.api.addr_humanize(&config.glow_token)?,
-            deps.api.addr_humanize(&state.contract_addr)?,
-        )?
-        .checked_sub(state.total_deposit)?;
-
-        (
-            Decimal::from_ratio(tallied_weight, staked_weight),
-            staked_weight,
         )
     };
 
@@ -590,53 +589,12 @@ pub fn expire_poll(deps: DepsMut, env: Env, poll_id: u64) -> Result<Response, Co
     ]))
 }
 
-/// SnapshotPoll is used to take a snapshot of the staked amount for quorum calculation
-pub fn snapshot_poll(deps: DepsMut, env: Env, poll_id: u64) -> Result<Response, ContractError> {
-    let config: Config = config_read(deps.storage).load()?;
-    let mut a_poll: Poll = poll_store(deps.storage).load(&poll_id.to_be_bytes())?;
-
-    if a_poll.status != PollStatus::InProgress {
-        return Err(ContractError::PollNotInProgress {});
-    }
-
-    let time_to_end = a_poll.end_height - env.block.height;
-
-    if time_to_end > config.snapshot_period {
-        return Err(ContractError::SnapshotHeight {});
-    }
-
-    if a_poll.staked_amount.is_some() {
-        return Err(ContractError::SnapshotAlreadyOccurred {});
-    }
-
-    // store the current staked amount for quorum calculation
-    let state: State = state_store(deps.storage).load()?;
-
-    let staked_amount = query_token_balance(
-        &deps.querier,
-        deps.api.addr_humanize(&config.glow_token)?,
-        deps.api.addr_humanize(&state.contract_addr)?,
-    )?
-    .checked_sub(state.total_deposit)?;
-
-    a_poll.staked_amount = Some(staked_amount);
-
-    poll_store(deps.storage).save(&poll_id.to_be_bytes(), &a_poll)?;
-
-    Ok(Response::new().add_attributes(vec![
-        attr("action", "snapshot_poll"),
-        attr("poll_id", poll_id.to_string().as_str()),
-        attr("staked_amount", staked_amount.to_string().as_str()),
-    ]))
-}
-
 pub fn cast_vote(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     poll_id: u64,
     vote: VoteOption,
-    amount: Uint128,
 ) -> Result<Response, ContractError> {
     let sender_address_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
     let config = config_read(deps.storage).load()?;
@@ -658,25 +616,12 @@ pub fn cast_vote(
         return Err(ContractError::AlreadyVoted {});
     }
 
-    let key = &sender_address_raw.as_slice();
-    let mut token_manager = bank_read(deps.storage).may_load(key)?.unwrap_or_default();
-
-    // convert share to amount
-    let total_share = state.total_share;
-    let total_balance = query_token_balance(
+    let amount = query_address_voting_balance_at_timestamp(
         &deps.querier,
-        deps.api.addr_humanize(&config.glow_token)?,
-        deps.api.addr_humanize(&state.contract_addr)?,
-    )?
-    .checked_sub(state.total_deposit)?;
-
-    if token_manager
-        .share
-        .multiply_ratio(total_balance, total_share)
-        < amount
-    {
-        return Err(ContractError::InsufficientStaked {});
-    }
+        &deps.api.addr_humanize(&config.ve_token)?,
+        Some(a_poll.start_time),
+        &info.sender,
+    )?;
 
     // update tally info
     if VoteOption::Yes == vote {
@@ -689,20 +634,9 @@ pub fn cast_vote(
         vote,
         balance: amount,
     };
-    token_manager
-        .locked_balance
-        .push((poll_id, vote_info.clone()));
-    bank_store(deps.storage).save(key, &token_manager)?;
 
     // store poll voter && and update poll data
     poll_voter_store(deps.storage, poll_id).save(sender_address_raw.as_slice(), &vote_info)?;
-
-    // processing snapshot
-    let time_to_end = a_poll.end_height - env.block.height;
-
-    if time_to_end < config.snapshot_period && a_poll.staked_amount.is_none() {
-        a_poll.staked_amount = Some(total_balance);
-    }
 
     poll_store(deps.storage).save(&poll_id.to_be_bytes(), &a_poll)?;
 
@@ -790,6 +724,7 @@ fn query_poll(deps: Deps, poll_id: u64) -> Result<PollResponse, ContractError> {
         id: poll.id,
         creator: deps.api.addr_humanize(&poll.creator)?.to_string(),
         status: poll.status,
+        start_time: poll.start_time,
         end_height: poll.end_height,
         title: poll.title,
         description: poll.description,
@@ -831,6 +766,7 @@ fn query_polls(
                 id: poll.id,
                 creator: deps.api.addr_humanize(&poll.creator)?.to_string(),
                 status: poll.status.clone(),
+                start_time: poll.start_time,
                 end_height: poll.end_height,
                 title: poll.title.to_string(),
                 description: poll.description.to_string(),
@@ -908,6 +844,24 @@ fn query_voters(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    let old_config = old_config_read(deps.storage).load()?;
+
+    let new_config = Config {
+        owner: old_config.owner,
+        glow_token: old_config.glow_token,
+        ve_token: deps.api.addr_canonicalize(&msg.ve_token)?,
+        terraswap_factory: old_config.terraswap_factory,
+        quorum: old_config.quorum,
+        threshold: old_config.threshold,
+        voting_period: old_config.voting_period,
+        timelock_period: old_config.timelock_period,
+        expiration_period: old_config.expiration_period,
+        proposal_deposit: old_config.proposal_deposit,
+        snapshot_period: old_config.snapshot_period,
+    };
+
+    config_store(deps.storage).save(&new_config)?;
+
     Ok(Response::default())
 }

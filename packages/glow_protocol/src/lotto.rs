@@ -52,6 +52,8 @@ pub enum ExecuteMsg {
         community_contract: String,
         /// Faucet contract to drip GLOW token to users and update Glow emission rate
         distributor_contract: String,
+        /// veGLOW contract for calculating boost multipliers
+        ve_contract: String,
     },
     /// Update contract configuration - restricted to owner
     UpdateConfig {
@@ -122,6 +124,7 @@ pub struct MigrateMsg {
     pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
     pub community_contract: String,     // Glow community contract address
     pub lotto_winner_boost_config: Option<BoostConfig>, // The boost config to apply to glow emissions for lotto winners
+    pub ve_contract: String,                            // Glow ve token contract address
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -176,6 +179,7 @@ pub struct ConfigResponse {
     pub a_terra_contract: String,
     pub anchor_contract: String,
     pub gov_contract: String,
+    pub ve_contract: String,
     pub community_contract: String,
     pub distributor_contract: String,
     pub lottery_interval: Duration,

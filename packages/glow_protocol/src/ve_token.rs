@@ -58,7 +58,7 @@ pub struct ConfigResponse {
     pub cw20_address: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
+#[derive(Default, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct StateResponse {
     pub total_deposited_amount: Uint128,
     pub total_locked_amount: Uint128,

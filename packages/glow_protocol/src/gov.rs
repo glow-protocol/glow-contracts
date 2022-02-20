@@ -23,6 +23,7 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     RegisterContracts {
         glow_token: String,
+        ve_token: String,
         terraswap_factory: String,
     },
     /// Public Message
@@ -43,7 +44,6 @@ pub enum ExecuteMsg {
     CastVote {
         poll_id: u64,
         vote: VoteOption,
-        amount: Uint128,
     },
     WithdrawVotingTokens {
         amount: Option<Uint128>,
@@ -55,9 +55,6 @@ pub enum ExecuteMsg {
         poll_id: u64,
     },
     ExpirePoll {
-        poll_id: u64,
-    },
-    SnapshotPoll {
         poll_id: u64,
     },
 }
@@ -87,7 +84,9 @@ pub struct PollExecuteMsg {
 
 /// We currently take no arguments for migrations
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MigrateMsg {}
+pub struct MigrateMsg {
+    pub ve_token: String,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -140,6 +139,7 @@ pub struct PollResponse {
     pub id: u64,
     pub creator: String,
     pub status: PollStatus,
+    pub start_time: u64,
     pub end_height: u64,
     pub title: String,
     pub description: String,

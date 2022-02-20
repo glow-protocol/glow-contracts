@@ -1,33 +1,27 @@
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
 use crate::mock_querier::mock_dependencies;
-use crate::state::{
-    bank_read, bank_store, config_read, poll_store, poll_voter_read, poll_voter_store, state_read,
-    Config, Poll, State, TokenManager,
-};
+use crate::state::{config_read, poll_voter_read, state_read, Config, State};
 
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    attr, coins, from_binary, to_binary, Addr, Api, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, ReplyOn, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
+    attr, coins, from_binary, to_binary, Addr, Api, CanonicalAddr, CosmosMsg, Decimal, Deps,
+    DepsMut, Env, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use glow_protocol::common::OrderBy;
 use glow_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollExecuteMsg, PollResponse,
-    PollStatus, PollsResponse, QueryMsg, StakerResponse, VoteOption, VoterInfo, VotersResponse,
-    VotersResponseItem,
+    PollStatus, PollsResponse, QueryMsg, VoteOption, VoterInfo, VotersResponse, VotersResponseItem,
 };
-use terraswap::asset::{Asset, AssetInfo};
-use terraswap::pair::ExecuteMsg as TerraswapExecuteMsg;
-use terraswap::querier::query_token_balance;
 
 const VOTING_TOKEN: &str = "voting_token";
+const VE_TOKEN: &str = "ve_token";
 const TERRASWAP_FACTORY: &str = "terraswap_factory";
 const TEST_CREATOR: &str = "creator";
 const TEST_VOTER: &str = "voter1";
 const TEST_VOTER_2: &str = "voter2";
-const TEST_VOTER_3: &str = "voter3";
+// const TEST_VOTER_3: &str = "voter3";
 const DEFAULT_QUORUM: u64 = 30u64;
 const DEFAULT_THRESHOLD: u64 = 50u64;
 const DEFAULT_VOTING_PERIOD: u64 = 10000u64;
@@ -56,6 +50,7 @@ fn mock_register_contracts(deps: DepsMut) {
     let info = mock_info(TEST_CREATOR, &[]);
     let msg = ExecuteMsg::RegisterContracts {
         glow_token: VOTING_TOKEN.to_string(),
+        ve_token: VE_TOKEN.to_string(),
         terraswap_factory: TERRASWAP_FACTORY.to_string(),
     };
     let _res = execute(deps, mock_env(), info, msg)
@@ -95,6 +90,7 @@ fn proper_initialization() {
         config,
         Config {
             glow_token: CanonicalAddr::from(vec![]),
+            ve_token: CanonicalAddr::from(vec![]),
             terraswap_factory: CanonicalAddr::from(vec![]),
             owner: deps.api.addr_canonicalize(TEST_CREATOR).unwrap(),
             quorum: Decimal::percent(DEFAULT_QUORUM),
@@ -109,6 +105,7 @@ fn proper_initialization() {
 
     let msg = ExecuteMsg::RegisterContracts {
         glow_token: VOTING_TOKEN.to_string(),
+        ve_token: VE_TOKEN.to_string(),
         terraswap_factory: TERRASWAP_FACTORY.to_string(),
     };
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -124,67 +121,9 @@ fn proper_initialization() {
         State {
             contract_addr: deps.api.addr_canonicalize(MOCK_CONTRACT_ADDR).unwrap(),
             poll_count: 0,
-            total_share: Uint128::zero(),
             total_deposit: Uint128::zero(),
+            total_share: Uint128::zero(),
         }
-    );
-}
-
-#[test]
-fn test_sweep() {
-    let mut deps = mock_dependencies(&[Coin {
-        denom: "uusd".to_string(),
-        amount: Uint128::from(100u128),
-    }]);
-
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    deps.querier.with_tax(
-        Decimal::percent(1),
-        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
-    );
-
-    deps.querier.with_terraswap_pairs(&[(
-        &"uusdvoting_token".to_string(),
-        &"pairvoting_token".to_string(),
-    )]);
-
-    let msg = ExecuteMsg::Sweep {
-        denom: "uusd".to_string(),
-    };
-
-    let info = mock_info("addr0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-    // tax deduct 100 => 99
-    assert_eq!(
-        res.messages,
-        vec![SubMsg {
-            id: 0,
-            msg: WasmMsg::Execute {
-                contract_addr: "pairvoting_token".to_string(),
-                msg: to_binary(&TerraswapExecuteMsg::Swap {
-                    offer_asset: Asset {
-                        info: AssetInfo::NativeToken {
-                            denom: "uusd".to_string()
-                        },
-                        amount: Uint128::from(99u128),
-                    },
-                    max_spread: None,
-                    belief_price: None,
-                    to: None,
-                })
-                .unwrap(),
-                funds: vec![Coin {
-                    denom: "uusd".to_string(),
-                    amount: Uint128::from(99u128),
-                }],
-            }
-            .into(),
-            gas_limit: None,
-            reply_on: ReplyOn::Never //TODO: should not be OnSuccess??
-        }]
     );
 }
 
@@ -271,6 +210,7 @@ fn fails_contract_already_registered() {
 
     let msg = ExecuteMsg::RegisterContracts {
         glow_token: VOTING_TOKEN.to_string(),
+        ve_token: VE_TOKEN.to_string(),
         terraswap_factory: TERRASWAP_FACTORY.to_string(),
     };
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
@@ -519,6 +459,7 @@ fn query_polls() {
                 id: 1u64,
                 creator: TEST_CREATOR.to_string(),
                 status: PollStatus::InProgress,
+                start_time: 10000u64,
                 end_height: 10000u64,
                 title: "test".to_string(),
                 description: "test".to_string(),
@@ -527,13 +468,14 @@ fn query_polls() {
                 execute_data: Some(execute_msgs.clone()),
                 yes_votes: Uint128::zero(),
                 no_votes: Uint128::zero(),
-                staked_amount: None,
+                staked_amount: Some(Uint128::zero()),
                 total_balance_at_end_poll: None,
             },
             PollResponse {
                 id: 2u64,
                 creator: TEST_CREATOR.to_string(),
                 status: PollStatus::InProgress,
+                start_time: 10000u64,
                 end_height: 10000u64,
                 title: "test2".to_string(),
                 description: "test2".to_string(),
@@ -542,7 +484,7 @@ fn query_polls() {
                 execute_data: None,
                 yes_votes: Uint128::zero(),
                 no_votes: Uint128::zero(),
-                staked_amount: None,
+                staked_amount: Some(Uint128::zero()),
                 total_balance_at_end_poll: None,
             },
         ]
@@ -566,6 +508,7 @@ fn query_polls() {
             id: 2u64,
             creator: TEST_CREATOR.to_string(),
             status: PollStatus::InProgress,
+            start_time: 10000u64,
             end_height: 10000u64,
             title: "test2".to_string(),
             description: "test2".to_string(),
@@ -574,7 +517,7 @@ fn query_polls() {
             execute_data: None,
             yes_votes: Uint128::zero(),
             no_votes: Uint128::zero(),
-            staked_amount: None,
+            staked_amount: Some(Uint128::zero()),
             total_balance_at_end_poll: None,
         },]
     );
@@ -597,6 +540,7 @@ fn query_polls() {
             id: 1u64,
             creator: TEST_CREATOR.to_string(),
             status: PollStatus::InProgress,
+            start_time: 10000u64,
             end_height: 10000u64,
             title: "test".to_string(),
             description: "test".to_string(),
@@ -605,7 +549,7 @@ fn query_polls() {
             execute_data: Some(execute_msgs),
             yes_votes: Uint128::zero(),
             no_votes: Uint128::zero(),
-            staked_amount: None,
+            staked_amount: Some(Uint128::zero()),
             total_balance_at_end_poll: None,
         }]
     );
@@ -628,6 +572,7 @@ fn query_polls() {
             id: 2u64,
             creator: TEST_CREATOR.to_string(),
             status: PollStatus::InProgress,
+            start_time: 10000u64,
             end_height: 10000u64,
             title: "test2".to_string(),
             description: "test2".to_string(),
@@ -636,7 +581,7 @@ fn query_polls() {
             execute_data: None,
             yes_votes: Uint128::zero(),
             no_votes: Uint128::zero(),
-            staked_amount: None,
+            staked_amount: Some(Uint128::zero()),
             total_balance_at_end_poll: None,
         },]
     );
@@ -721,6 +666,24 @@ fn happy_days_end_poll() {
     let mut deps = mock_dependencies(&coins(1000, VOTING_TOKEN));
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
+
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from(DEFAULT_PROPOSAL_DEPOSIT as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER.to_string(),
+                &Uint128::from((stake_amount) as u128),
+            )],
+        ),
+    ]);
+
     let mut creator_env = mock_env_height(POLL_START_HEIGHT, 10000);
     let mut creator_info = mock_info(VOTING_TOKEN, &coins(2, VOTING_TOKEN));
 
@@ -781,35 +744,17 @@ fn happy_days_end_poll() {
         deps.as_ref(),
     );
 
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((stake_amount + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_stake_tokens_result(
         stake_amount,
         DEFAULT_PROPOSAL_DEPOSIT,
         stake_amount,
         1,
-        execute_res,
         deps.as_ref(),
     );
 
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(stake_amount),
     };
     let env = mock_env_height(POLL_START_HEIGHT, 10000);
     let info = mock_info(TEST_VOTER, &[]);
@@ -820,7 +765,7 @@ fn happy_days_end_poll() {
         vec![
             attr("action", "cast_vote"),
             attr("poll_id", POLL_ID.to_string().as_str()),
-            attr("amount", "1000"),
+            attr("amount", 1000.to_string()),
             attr("voter", TEST_VOTER),
             attr("vote_option", "yes"),
         ]
@@ -983,25 +928,6 @@ fn happy_days_end_poll() {
     let response: VotersResponse = from_binary(&res).unwrap();
     assert_eq!(response.voters.len(), 0);
 
-    // staker locked token must be disappeared
-    let res = query(
-        deps.as_ref(),
-        mock_env(),
-        QueryMsg::Staker {
-            address: TEST_VOTER.to_string(),
-        },
-    )
-    .unwrap();
-    let response: StakerResponse = from_binary(&res).unwrap();
-    assert_eq!(
-        response,
-        StakerResponse {
-            balance: Uint128::from(stake_amount),
-            share: Uint128::from(stake_amount),
-            locked_balance: vec![]
-        }
-    );
-
     // But the data is still in the store
     let voter_addr_raw = deps.api.addr_canonicalize(TEST_VOTER).unwrap();
     let voter = poll_voter_read(&deps.storage, 1u64)
@@ -1014,20 +940,6 @@ fn happy_days_end_poll() {
             balance: Uint128::from(stake_amount),
         }
     );
-
-    let token_manager = bank_read(&deps.storage)
-        .load(voter_addr_raw.as_slice())
-        .unwrap();
-    assert_eq!(
-        token_manager.locked_balance,
-        vec![(
-            1u64,
-            VoterInfo {
-                vote: VoteOption::Yes,
-                balance: Uint128::from(stake_amount),
-            }
-        )]
-    );
 }
 
 #[test]
@@ -1039,6 +951,24 @@ fn expire_poll() {
     let mut deps = mock_dependencies(&coins(1000, VOTING_TOKEN));
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
+
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER.to_string(),
+                &Uint128::from((stake_amount) as u128),
+            )],
+        ),
+    ]);
+
     let mut creator_env = mock_env_height(POLL_START_HEIGHT, 10000);
     let creator_info = mock_info(VOTING_TOKEN, &coins(2, VOTING_TOKEN));
 
@@ -1074,35 +1004,17 @@ fn expire_poll() {
         deps.as_ref(),
     );
 
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((stake_amount + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_stake_tokens_result(
         stake_amount,
         DEFAULT_PROPOSAL_DEPOSIT,
         stake_amount,
         1,
-        execute_res,
         deps.as_ref(),
     );
 
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(stake_amount),
     };
     let env = mock_env_height(POLL_START_HEIGHT, 10000);
     let info = mock_info(TEST_VOTER, &[]);
@@ -1239,22 +1151,23 @@ fn end_poll_zero_quorum() {
         deps.as_ref(),
     );
     let stake_amount = 100;
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(100u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
 
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER.to_string(),
+                &Uint128::from((stake_amount) as u128),
+            )],
+        ),
+    ]);
 
     let msg = ExecuteMsg::EndPoll { poll_id: 1 };
     creator_info.sender = Addr::unchecked(TEST_CREATOR);
@@ -1345,35 +1258,34 @@ fn end_poll_quorum_rejected() {
     );
 
     let stake_amount = 100;
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(100u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER.to_string(),
+                &Uint128::from((stake_amount) as u128),
+            )],
+        ),
+    ]);
 
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_stake_tokens_result(
         stake_amount,
         DEFAULT_PROPOSAL_DEPOSIT,
         stake_amount,
         1,
-        execute_res,
         deps.as_ref(),
     );
 
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(10u128),
     };
     let info = mock_info(TEST_VOTER, &[]);
     let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1383,7 +1295,7 @@ fn end_poll_quorum_rejected() {
         vec![
             attr("action", "cast_vote"),
             attr("poll_id", "1"),
-            attr("amount", "10"),
+            attr("amount", "100"),
             attr("voter", TEST_VOTER),
             attr("vote_option", "yes"),
         ]
@@ -1456,6 +1368,31 @@ fn end_poll_nay_rejected() {
     let mut deps = mock_dependencies(&[]);
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
+
+    deps.querier.with_token_balances(&[
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER.to_string(),
+                &Uint128::from((voter1_stake) as u128),
+            )],
+        ),
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER_2.to_string(),
+                &Uint128::from((voter2_stake) as u128),
+            )],
+        ),
+    ]);
+
     let mut creator_env = mock_env();
     let mut creator_info = mock_info(VOTING_TOKEN, &coins(2, VOTING_TOKEN));
 
@@ -1478,61 +1415,10 @@ fn end_poll_nay_rejected() {
         ]
     );
 
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((voter1_stake + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(voter1_stake as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(
-        voter1_stake,
-        DEFAULT_PROPOSAL_DEPOSIT,
-        voter1_stake,
-        1,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((voter1_stake + voter2_stake + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER_2.to_string(),
-        amount: Uint128::from(voter2_stake as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(
-        voter1_stake + voter2_stake,
-        DEFAULT_PROPOSAL_DEPOSIT,
-        voter2_stake,
-        1,
-        execute_res,
-        deps.as_ref(),
-    );
-
     let info = mock_info(TEST_VOTER_2, &[]);
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::No,
-        amount: Uint128::from(voter2_stake),
     };
     let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_cast_vote_success(TEST_VOTER_2, voter2_stake, 1, VoteOption::No, execute_res);
@@ -1554,67 +1440,6 @@ fn end_poll_nay_rejected() {
 }
 
 #[test]
-fn fails_cast_vote_not_enough_staked() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-    let env = mock_env_height(0, 10000);
-    let info = mock_info(VOTING_TOKEN, &[]);
-
-    let msg = create_poll_msg("test".to_string(), "test".to_string(), None, None);
-
-    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
-    assert_create_poll_result(
-        1,
-        DEFAULT_VOTING_PERIOD,
-        TEST_CREATOR,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(10u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(10u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(
-        10,
-        DEFAULT_PROPOSAL_DEPOSIT,
-        10,
-        1,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    let env = mock_env_height(0, 10000);
-    let info = mock_info(TEST_VOTER, &coins(11, VOTING_TOKEN));
-    let msg = ExecuteMsg::CastVote {
-        poll_id: 1,
-        vote: VoteOption::Yes,
-        amount: Uint128::from(11u128),
-    };
-
-    let res = execute(deps.as_mut(), env, info, msg);
-
-    match res {
-        Ok(_) => panic!("Must return error"),
-        Err(ContractError::InsufficientStaked {}) => (),
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
-}
-
-#[test]
 fn happy_days_cast_vote() {
     let mut deps = mock_dependencies(&[]);
     mock_instantiate(deps.as_mut());
@@ -1633,42 +1458,31 @@ fn happy_days_cast_vote() {
         deps.as_ref(),
     );
 
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(11u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(&TEST_VOTER.to_string(), &Uint128::from(6u128))],
+        ),
+    ]);
 
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(
-        11,
-        DEFAULT_PROPOSAL_DEPOSIT,
-        11,
-        1,
-        execute_res,
-        deps.as_ref(),
-    );
+    assert_stake_tokens_result(6, DEFAULT_PROPOSAL_DEPOSIT, 6, 1, deps.as_ref());
 
     let env = mock_env_height(0, 10000);
     let info = mock_info(TEST_VOTER, &coins(11, VOTING_TOKEN));
-    let amount = 10u128;
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(amount),
     };
 
     let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
-    assert_cast_vote_success(TEST_VOTER, amount, 1, VoteOption::Yes, execute_res);
+    assert_cast_vote_success(TEST_VOTER, 6, 1, VoteOption::Yes, execute_res);
 
     // balance be double
     deps.querier.with_token_balances(&[(
@@ -1678,31 +1492,6 @@ fn happy_days_cast_vote() {
             &Uint128::from(22u128 + DEFAULT_PROPOSAL_DEPOSIT),
         )],
     )]);
-
-    // Query staker
-    let res = query(
-        deps.as_ref(),
-        mock_env(),
-        QueryMsg::Staker {
-            address: TEST_VOTER.to_string(),
-        },
-    )
-    .unwrap();
-    let response: StakerResponse = from_binary(&res).unwrap();
-    assert_eq!(
-        response,
-        StakerResponse {
-            balance: Uint128::from(22u128),
-            share: Uint128::from(11u128),
-            locked_balance: vec![(
-                1u64,
-                VoterInfo {
-                    vote: VoteOption::Yes,
-                    balance: Uint128::from(amount),
-                }
-            )]
-        }
-    );
 
     // Query voters
     let res = query(
@@ -1722,7 +1511,7 @@ fn happy_days_cast_vote() {
         vec![VotersResponseItem {
             voter: TEST_VOTER.to_string(),
             vote: VoteOption::Yes,
-            balance: Uint128::from(amount),
+            balance: Uint128::from(6u128),
         }]
     );
 
@@ -1739,345 +1528,6 @@ fn happy_days_cast_vote() {
     .unwrap();
     let response: VotersResponse = from_binary(&res).unwrap();
     assert_eq!(response.voters.len(), 0);
-}
-
-#[test]
-fn happy_days_withdraw_voting_tokens() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(11u128))],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(11, 0, 11, 0, execute_res, deps.as_ref());
-
-    let state: State = state_read(deps.as_ref().storage).load().unwrap();
-    assert_eq!(
-        state,
-        State {
-            contract_addr: deps.api.addr_canonicalize(MOCK_CONTRACT_ADDR).unwrap(),
-            poll_count: 0,
-            total_share: Uint128::from(11u128),
-            total_deposit: Uint128::zero(),
-        }
-    );
-
-    // double the balance, only half will be withdrawn
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(22u128))],
-    )]);
-
-    let info = mock_info(TEST_VOTER, &[]);
-    let msg = ExecuteMsg::WithdrawVotingTokens {
-        amount: Some(Uint128::from(11u128)),
-    };
-
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    let msg = execute_res.messages.get(0).expect("no message");
-
-    assert_eq!(
-        msg,
-        &SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: VOTING_TOKEN.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: TEST_VOTER.to_string(),
-                amount: Uint128::from(11u128),
-            })
-            .unwrap(),
-            funds: vec![],
-        }))
-    );
-
-    let state: State = state_read(deps.as_ref().storage).load().unwrap();
-    assert_eq!(
-        state,
-        State {
-            contract_addr: deps.api.addr_canonicalize(MOCK_CONTRACT_ADDR).unwrap(),
-            poll_count: 0,
-            total_share: Uint128::from(6u128),
-            total_deposit: Uint128::zero(),
-        }
-    );
-}
-
-#[test]
-fn happy_days_withdraw_voting_tokens_all() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(11u128))],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(11, 0, 11, 0, execute_res, deps.as_ref());
-
-    let state: State = state_read(deps.as_ref().storage).load().unwrap();
-    assert_eq!(
-        state,
-        State {
-            contract_addr: deps.api.addr_canonicalize(MOCK_CONTRACT_ADDR).unwrap(),
-            poll_count: 0,
-            total_share: Uint128::from(11u128),
-            total_deposit: Uint128::zero(),
-        }
-    );
-
-    // double the balance, all balance withdrawn
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(22u128))],
-    )]);
-
-    let info = mock_info(TEST_VOTER, &[]);
-    let msg = ExecuteMsg::WithdrawVotingTokens { amount: None };
-
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    let msg = execute_res.messages.get(0).expect("no message");
-
-    assert_eq!(
-        msg,
-        &SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: VOTING_TOKEN.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: TEST_VOTER.to_string(),
-                amount: Uint128::from(22u128),
-            })
-            .unwrap(),
-            funds: vec![],
-        }))
-    );
-
-    let state: State = state_read(deps.as_ref().storage).load().unwrap();
-    assert_eq!(
-        state,
-        State {
-            contract_addr: deps.api.addr_canonicalize(MOCK_CONTRACT_ADDR).unwrap(),
-            poll_count: 0,
-            total_share: Uint128::zero(),
-            total_deposit: Uint128::zero(),
-        }
-    );
-}
-
-#[test]
-fn withdraw_voting_tokens_remove_not_in_progress_poll_voter_info() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(11u128))],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(11, 0, 11, 0, execute_res, deps.as_ref());
-
-    // make fake polls; one in progress & one in passed
-    poll_store(&mut deps.storage)
-        .save(
-            &1u64.to_be_bytes(),
-            &Poll {
-                id: 1u64,
-                creator: CanonicalAddr::from(vec![]),
-                status: PollStatus::InProgress,
-                yes_votes: Uint128::zero(),
-                no_votes: Uint128::zero(),
-                end_height: 0u64,
-                title: "title".to_string(),
-                description: "description".to_string(),
-                deposit_amount: Uint128::zero(),
-                link: None,
-                execute_data: None,
-                total_balance_at_end_poll: None,
-                staked_amount: None,
-            },
-        )
-        .unwrap();
-
-    poll_store(&mut deps.storage)
-        .save(
-            &2u64.to_be_bytes(),
-            &Poll {
-                id: 1u64,
-                creator: CanonicalAddr::from(vec![]),
-                status: PollStatus::Passed,
-                yes_votes: Uint128::zero(),
-                no_votes: Uint128::zero(),
-                end_height: 0u64,
-                title: "title".to_string(),
-                description: "description".to_string(),
-                deposit_amount: Uint128::zero(),
-                link: None,
-                execute_data: None,
-                total_balance_at_end_poll: None,
-                staked_amount: None,
-            },
-        )
-        .unwrap();
-
-    let voter_addr_raw = deps.api.addr_canonicalize(TEST_VOTER).unwrap();
-    poll_voter_store(&mut deps.storage, 1u64)
-        .save(
-            voter_addr_raw.as_slice(),
-            &VoterInfo {
-                vote: VoteOption::Yes,
-                balance: Uint128::from(5u128),
-            },
-        )
-        .unwrap();
-    poll_voter_store(&mut deps.storage, 2u64)
-        .save(
-            voter_addr_raw.as_slice(),
-            &VoterInfo {
-                vote: VoteOption::Yes,
-                balance: Uint128::from(5u128),
-            },
-        )
-        .unwrap();
-    bank_store(&mut deps.storage)
-        .save(
-            voter_addr_raw.as_slice(),
-            &TokenManager {
-                share: Uint128::from(11u128),
-                locked_balance: vec![
-                    (
-                        1u64,
-                        VoterInfo {
-                            vote: VoteOption::Yes,
-                            balance: Uint128::from(5u128),
-                        },
-                    ),
-                    (
-                        2u64,
-                        VoterInfo {
-                            vote: VoteOption::Yes,
-                            balance: Uint128::from(5u128),
-                        },
-                    ),
-                ],
-            },
-        )
-        .unwrap();
-
-    // withdraw voting token must remove not in-progress votes infos from the store
-    let info = mock_info(TEST_VOTER, &[]);
-    let msg = ExecuteMsg::WithdrawVotingTokens {
-        amount: Some(Uint128::from(5u128)),
-    };
-
-    let _ = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    let voter = poll_voter_read(&deps.storage, 1u64)
-        .load(voter_addr_raw.as_slice())
-        .unwrap();
-    assert_eq!(
-        voter,
-        VoterInfo {
-            vote: VoteOption::Yes,
-            balance: Uint128::from(5u128),
-        }
-    );
-    assert!(poll_voter_read(&deps.storage, 2u64)
-        .load(voter_addr_raw.as_slice())
-        .is_err(),);
-
-    let token_manager = bank_read(&deps.storage)
-        .load(voter_addr_raw.as_slice())
-        .unwrap();
-    assert_eq!(
-        token_manager.locked_balance,
-        vec![(
-            1u64,
-            VoterInfo {
-                vote: VoteOption::Yes,
-                balance: Uint128::from(5u128),
-            }
-        )]
-    );
-}
-
-#[test]
-fn fails_withdraw_voting_tokens_no_stake() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    let info = mock_info(TEST_VOTER, &coins(11, VOTING_TOKEN));
-    let msg = ExecuteMsg::WithdrawVotingTokens {
-        amount: Some(Uint128::from(11u128)),
-    };
-
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
-
-    match res {
-        Ok(_) => panic!("Must return error"),
-        Err(ContractError::NothingStaked {}) => (),
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
-}
-
-#[test]
-fn fails_withdraw_too_many_tokens() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(10u128))],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(10u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(10, 0, 10, 0, execute_res, deps.as_ref());
-
-    let info = mock_info(TEST_VOTER, &[]);
-    let msg = ExecuteMsg::WithdrawVotingTokens {
-        amount: Some(Uint128::from(11u128)),
-    };
-
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
-
-    match res {
-        Ok(_) => panic!("Must return error"),
-        Err(ContractError::InvalidWithdrawAmount {}) => (),
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
 }
 
 #[test]
@@ -2100,46 +1550,34 @@ fn fails_cast_vote_twice() {
         deps.as_ref(),
     );
 
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(11u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(&TEST_VOTER.to_string(), &Uint128::from(11u128))],
+        ),
+    ]);
 
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
+    assert_stake_tokens_result(11, DEFAULT_PROPOSAL_DEPOSIT, 11, 1, deps.as_ref());
 
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(
-        11,
-        DEFAULT_PROPOSAL_DEPOSIT,
-        11,
-        1,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    let amount = 1u128;
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(amount),
     };
     let env = mock_env_height(0, 10000);
     let info = mock_info(TEST_VOTER, &[]);
     let execute_res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    assert_cast_vote_success(TEST_VOTER, amount, 1, VoteOption::Yes, execute_res);
+    assert_cast_vote_success(TEST_VOTER, 11u128, 1, VoteOption::Yes, execute_res);
 
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(amount),
     };
     let res = execute(deps.as_mut(), env, info, msg);
 
@@ -2159,7 +1597,6 @@ fn fails_cast_vote_without_poll() {
     let msg = ExecuteMsg::CastVote {
         poll_id: 0,
         vote: VoteOption::Yes,
-        amount: Uint128::from(1u128),
     };
     let info = mock_info(TEST_VOTER, &coins(11, VOTING_TOKEN));
 
@@ -2173,165 +1610,7 @@ fn fails_cast_vote_without_poll() {
 }
 
 #[test]
-fn happy_days_stake_voting_tokens() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(11u128))],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(11, 0, 11, 0, execute_res, deps.as_ref());
-}
-
-#[test]
-fn fails_insufficient_funds() {
-    let mut deps = mock_dependencies(&[]);
-
-    // initialize the store
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    // insufficient token
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(0u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
-
-    match res {
-        Ok(_) => panic!("Must return error"),
-        Err(ContractError::InsufficientFunds {}) => (),
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
-}
-
-#[test]
-fn fails_staking_wrong_token() {
-    let mut deps = mock_dependencies(&[]);
-
-    // initialize the store
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(11u128))],
-    )]);
-
-    // wrong token
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(&(VOTING_TOKEN.to_string() + "2"), &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg);
-
-    match res {
-        Ok(_) => panic!("Must return error"),
-        Err(ContractError::Unauthorized {}) => (),
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
-}
-
-#[test]
-fn share_calculation() {
-    let mut deps = mock_dependencies(&[]);
-
-    // initialize the store
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    // create 100 share
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(100u128))],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(100u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let _res = execute(deps.as_mut(), mock_env(), info, msg);
-
-    // add more balance(100) to make share:balance = 1:2
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(200u128 + 100u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(100u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![
-            attr("action", "staking"),
-            attr("sender", TEST_VOTER),
-            attr("share", "50"),
-            attr("amount", "100"),
-        ]
-    );
-
-    let msg = ExecuteMsg::WithdrawVotingTokens {
-        amount: Some(Uint128::from(100u128)),
-    };
-    let info = mock_info(TEST_VOTER, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![
-            attr("action", "withdraw"),
-            attr("recipient", TEST_VOTER),
-            attr("amount", "100"),
-        ]
-    );
-
-    // 100 tokens withdrawn
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(200u128))],
-    )]);
-
-    let res = query(
-        deps.as_ref(),
-        mock_env(),
-        QueryMsg::Staker {
-            address: TEST_VOTER.to_string(),
-        },
-    )
-    .unwrap();
-    let stake_info: StakerResponse = from_binary(&res).unwrap();
-    assert_eq!(stake_info.share, Uint128::new(100));
-    assert_eq!(stake_info.balance, Uint128::new(200));
-    assert_eq!(stake_info.locked_balance, vec![]);
-}
+fn share_calculation() {}
 
 // helper to confirm the expected create_poll response
 fn assert_create_poll_result(
@@ -2358,33 +1637,27 @@ fn assert_create_poll_result(
         State {
             contract_addr: deps.api.addr_canonicalize(MOCK_CONTRACT_ADDR).unwrap(),
             poll_count: 1,
-            total_share: Uint128::zero(),
             total_deposit: Uint128::from(DEFAULT_PROPOSAL_DEPOSIT),
+            total_share: Uint128::zero()
         }
     );
 }
 
 fn assert_stake_tokens_result(
-    total_share: u128,
+    _total_share: u128,
     total_deposit: u128,
-    new_share: u128,
+    _new_share: u128,
     poll_count: u64,
-    execute_res: Response,
     deps: Deps,
 ) {
-    assert_eq!(
-        execute_res.attributes.get(2).expect("no log"),
-        &attr("share", new_share.to_string())
-    );
-
     let state: State = state_read(deps.storage).load().unwrap();
     assert_eq!(
         state,
         State {
             contract_addr: deps.api.addr_canonicalize(MOCK_CONTRACT_ADDR).unwrap(),
             poll_count,
-            total_share: Uint128::from(total_share),
             total_deposit: Uint128::from(total_deposit),
+            total_share: Uint128::zero()
         }
     );
 }
@@ -2563,6 +1836,24 @@ fn execute_poll_with_order() {
     let mut deps = mock_dependencies(&coins(1000, VOTING_TOKEN));
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
+
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER.to_string(),
+                &Uint128::from((stake_amount) as u128),
+            )],
+        ),
+    ]);
+
     let mut creator_env = mock_env_height(POLL_START_HEIGHT, 10000);
     let mut creator_info = mock_info(VOTING_TOKEN, &coins(2, VOTING_TOKEN));
 
@@ -2641,35 +1932,17 @@ fn execute_poll_with_order() {
         deps.as_ref(),
     );
 
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((stake_amount + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_stake_tokens_result(
         stake_amount,
         DEFAULT_PROPOSAL_DEPOSIT,
         stake_amount,
         1,
-        execute_res,
         deps.as_ref(),
     );
 
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(stake_amount),
     };
     let env = mock_env_height(POLL_START_HEIGHT, 10000);
     let info = mock_info(TEST_VOTER, &[]);
@@ -2769,392 +2042,6 @@ fn execute_poll_with_order() {
 }
 
 #[test]
-fn snapshot_poll() {
-    let stake_amount = 1000;
-
-    let mut deps = mock_dependencies(&coins(100, VOTING_TOKEN));
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    let msg = create_poll_msg("test".to_string(), "test".to_string(), None, None);
-    let mut creator_env = mock_env();
-    let creator_info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(
-        deps.as_mut(),
-        creator_env.clone(),
-        creator_info.clone(),
-        msg,
-    )
-    .unwrap();
-    assert_eq!(
-        execute_res.attributes,
-        vec![
-            attr("action", "create_poll"),
-            attr("creator", TEST_CREATOR),
-            attr("poll_id", "1"),
-            attr("end_height", "22345"),
-        ]
-    );
-
-    //must not be executed
-    let snapshot_err = execute(
-        deps.as_mut(),
-        creator_env.clone(),
-        creator_info.clone(),
-        ExecuteMsg::SnapshotPoll { poll_id: 1 },
-    )
-    .unwrap_err();
-    assert_eq!(ContractError::SnapshotHeight {}, snapshot_err);
-
-    // change time
-    creator_env.block.height = 22345 - 10;
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((stake_amount + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let fix_res = execute(
-        deps.as_mut(),
-        creator_env.clone(),
-        creator_info.clone(),
-        ExecuteMsg::SnapshotPoll { poll_id: 1 },
-    )
-    .unwrap();
-
-    assert_eq!(
-        fix_res.attributes,
-        vec![
-            attr("action", "snapshot_poll"),
-            attr("poll_id", "1"),
-            attr("staked_amount", stake_amount.to_string().as_str()),
-        ]
-    );
-
-    //must not be executed
-    let snapshot_error = execute(
-        deps.as_mut(),
-        creator_env,
-        creator_info,
-        ExecuteMsg::SnapshotPoll { poll_id: 1 },
-    )
-    .unwrap_err();
-    assert_eq!(ContractError::SnapshotAlreadyOccurred {}, snapshot_error);
-}
-
-#[test]
-fn happy_days_cast_vote_with_snapshot() {
-    let mut deps = mock_dependencies(&[]);
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    let env = mock_env_height(0, 10000);
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let msg = create_poll_msg("test".to_string(), "test".to_string(), None, None);
-
-    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
-    assert_create_poll_result(
-        1,
-        DEFAULT_VOTING_PERIOD,
-        TEST_CREATOR,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(11u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(
-        11,
-        DEFAULT_PROPOSAL_DEPOSIT,
-        11,
-        1,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    //cast_vote without snapshot
-    let env = mock_env_height(0, 10000);
-    let info = mock_info(TEST_VOTER, &coins(11, VOTING_TOKEN));
-    let amount = 10u128;
-
-    let msg = ExecuteMsg::CastVote {
-        poll_id: 1,
-        vote: VoteOption::Yes,
-        amount: Uint128::from(amount),
-    };
-
-    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
-    assert_cast_vote_success(TEST_VOTER, amount, 1, VoteOption::Yes, execute_res);
-
-    // balance be double
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(22u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
-
-    let res = query(deps.as_ref(), mock_env(), QueryMsg::Poll { poll_id: 1 }).unwrap();
-    let value: PollResponse = from_binary(&res).unwrap();
-    assert_eq!(value.staked_amount, None);
-    let end_height = value.end_height;
-
-    //cast another vote
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER_2.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let _execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-    // another voter cast a vote
-    let msg = ExecuteMsg::CastVote {
-        poll_id: 1,
-        vote: VoteOption::Yes,
-        amount: Uint128::from(10u128),
-    };
-    let env = mock_env_height(end_height - 9, 10000);
-    let info = mock_info(TEST_VOTER_2, &[]);
-    let execute_res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    assert_cast_vote_success(TEST_VOTER_2, amount, 1, VoteOption::Yes, execute_res);
-
-    let res = query(deps.as_ref(), mock_env(), QueryMsg::Poll { poll_id: 1 }).unwrap();
-    let value: PollResponse = from_binary(&res).unwrap();
-    assert_eq!(value.staked_amount, Some(Uint128::new(22)));
-
-    // snanpshot poll will not go through
-    let snap_error = execute(
-        deps.as_mut(),
-        env,
-        info,
-        ExecuteMsg::SnapshotPoll { poll_id: 1 },
-    )
-    .unwrap_err();
-    assert_eq!(ContractError::SnapshotAlreadyOccurred {}, snap_error);
-
-    // balance be double
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(33u128 + DEFAULT_PROPOSAL_DEPOSIT),
-        )],
-    )]);
-
-    // another voter cast a vote but the snapshot is already occurred
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER_3.to_string(),
-        amount: Uint128::from(11u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let _execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    let msg = ExecuteMsg::CastVote {
-        poll_id: 1,
-        vote: VoteOption::Yes,
-        amount: Uint128::from(10u128),
-    };
-    let env = mock_env_height(end_height - 8, 10000);
-    let info = mock_info(TEST_VOTER_3, &[]);
-    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
-    assert_cast_vote_success(TEST_VOTER_3, amount, 1, VoteOption::Yes, execute_res);
-
-    let res = query(deps.as_ref(), mock_env(), QueryMsg::Poll { poll_id: 1 }).unwrap();
-    let value: PollResponse = from_binary(&res).unwrap();
-    assert_eq!(value.staked_amount, Some(Uint128::new(22)));
-}
-
-#[test]
-fn fails_end_poll_quorum_inflation_without_snapshot_poll() {
-    const POLL_START_HEIGHT: u64 = 1000;
-    const POLL_ID: u64 = 1;
-    let stake_amount = 1000;
-
-    let mut deps = mock_dependencies(&coins(1000, VOTING_TOKEN));
-    mock_instantiate(deps.as_mut());
-    mock_register_contracts(deps.as_mut());
-
-    let mut creator_env = mock_env_height(POLL_START_HEIGHT, 10000);
-    let mut creator_info = mock_info(VOTING_TOKEN, &coins(2, VOTING_TOKEN));
-
-    let exec_msg_bz = to_binary(&Cw20ExecuteMsg::Burn {
-        amount: Uint128::new(123),
-    })
-    .unwrap();
-
-    //add two messages
-    let execute_msgs: Vec<PollExecuteMsg> = vec![
-        PollExecuteMsg {
-            order: 1u64,
-            contract: VOTING_TOKEN.to_string(),
-            msg: exec_msg_bz.clone(),
-        },
-        PollExecuteMsg {
-            order: 2u64,
-            contract: VOTING_TOKEN.to_string(),
-            msg: exec_msg_bz,
-        },
-    ];
-
-    let msg = create_poll_msg(
-        "test".to_string(),
-        "test".to_string(),
-        None,
-        Some(execute_msgs),
-    );
-
-    let execute_res = execute(
-        deps.as_mut(),
-        creator_env.clone(),
-        creator_info.clone(),
-        msg,
-    )
-    .unwrap();
-
-    assert_create_poll_result(
-        1,
-        creator_env.block.height + DEFAULT_VOTING_PERIOD,
-        TEST_CREATOR,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((stake_amount + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_stake_tokens_result(
-        stake_amount,
-        DEFAULT_PROPOSAL_DEPOSIT,
-        stake_amount,
-        1,
-        execute_res,
-        deps.as_ref(),
-    );
-
-    let msg = ExecuteMsg::CastVote {
-        poll_id: 1,
-        vote: VoteOption::Yes,
-        amount: Uint128::from(stake_amount),
-    };
-    let env = mock_env_height(POLL_START_HEIGHT, 10000);
-    let info = mock_info(TEST_VOTER, &[]);
-    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
-
-    assert_eq!(
-        execute_res.attributes,
-        vec![
-            attr("action", "cast_vote"),
-            attr("poll_id", POLL_ID.to_string().as_str()),
-            attr("amount", "1000"),
-            attr("voter", TEST_VOTER),
-            attr("vote_option", "yes"),
-        ]
-    );
-
-    creator_env.block.height += DEFAULT_VOTING_PERIOD - 10;
-
-    // did not SnapshotPoll
-
-    // staked amount get increased 10 times
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(((10 * stake_amount) + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    //cast another vote
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER_2.to_string(),
-        amount: Uint128::from(8 * stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let _execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-    // another voter cast a vote
-    let msg = ExecuteMsg::CastVote {
-        poll_id: 1,
-        vote: VoteOption::Yes,
-        amount: Uint128::from(stake_amount),
-    };
-    let env = mock_env_height(creator_env.block.height, 10000);
-    let info = mock_info(TEST_VOTER_2, &[]);
-    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
-
-    assert_eq!(
-        execute_res.attributes,
-        vec![
-            attr("action", "cast_vote"),
-            attr("poll_id", POLL_ID.to_string().as_str()),
-            attr("amount", "1000"),
-            attr("voter", TEST_VOTER_2),
-            attr("vote_option", "yes"),
-        ]
-    );
-
-    creator_info.sender = Addr::unchecked(TEST_CREATOR);
-    creator_env.block.height += 10;
-
-    // quorum must reach
-    let msg = ExecuteMsg::EndPoll { poll_id: 1 };
-    let execute_res = execute(deps.as_mut(), creator_env, creator_info, msg).unwrap();
-
-    assert_eq!(
-        execute_res.attributes,
-        vec![
-            attr("action", "end_poll"),
-            attr("poll_id", "1"),
-            attr("rejected_reason", "Quorum not reached"),
-            attr("passed", "false"),
-        ]
-    );
-
-    let res = query(deps.as_ref(), mock_env(), QueryMsg::Poll { poll_id: 1 }).unwrap();
-    let value: PollResponse = from_binary(&res).unwrap();
-    assert_eq!(
-        10 * stake_amount,
-        value.total_balance_at_end_poll.unwrap().u128()
-    );
-}
-
-#[test]
 fn happy_days_end_poll_with_controlled_quorum() {
     const POLL_START_HEIGHT: u64 = 1000;
     const POLL_ID: u64 = 1;
@@ -3164,6 +2051,23 @@ fn happy_days_end_poll_with_controlled_quorum() {
     mock_instantiate(deps.as_mut());
     mock_register_contracts(deps.as_mut());
 
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(
+                &MOCK_CONTRACT_ADDR.to_string(),
+                &Uint128::from((DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            )],
+        ),
+        (
+            &VE_TOKEN.to_string(),
+            &[(
+                &TEST_VOTER.to_string(),
+                &Uint128::from((stake_amount) as u128),
+            )],
+        ),
+    ]);
+
     let mut creator_env = mock_env_height(POLL_START_HEIGHT, 10000);
     let mut creator_info = mock_info(VOTING_TOKEN, &coins(2, VOTING_TOKEN));
 
@@ -3209,35 +2113,17 @@ fn happy_days_end_poll_with_controlled_quorum() {
         deps.as_ref(),
     );
 
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from((stake_amount + DEFAULT_PROPOSAL_DEPOSIT) as u128),
-        )],
-    )]);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER.to_string(),
-        amount: Uint128::from(stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_stake_tokens_result(
         stake_amount,
         DEFAULT_PROPOSAL_DEPOSIT,
         stake_amount,
         1,
-        execute_res,
         deps.as_ref(),
     );
 
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(stake_amount),
     };
     let env = mock_env_height(POLL_START_HEIGHT, 10000);
     let info = mock_info(TEST_VOTER, &[]);
@@ -3256,47 +2142,17 @@ fn happy_days_end_poll_with_controlled_quorum() {
 
     creator_env.block.height += DEFAULT_VOTING_PERIOD - 10;
 
-    // send SnapshotPoll
-    let fix_res = execute(
-        deps.as_mut(),
-        creator_env.clone(),
-        creator_info.clone(),
-        ExecuteMsg::SnapshotPoll { poll_id: 1 },
-    )
-    .unwrap();
-
-    assert_eq!(
-        fix_res.attributes,
-        vec![
-            attr("action", "snapshot_poll"),
-            attr("poll_id", "1"),
-            attr("staked_amount", stake_amount.to_string().as_str()),
-        ]
-    );
-
-    // staked amount get increased 10 times
     deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
+        &VE_TOKEN.to_string(),
         &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::from(((10 * stake_amount) + DEFAULT_PROPOSAL_DEPOSIT) as u128),
+            &TEST_VOTER_2.to_string(),
+            &Uint128::from((8 * stake_amount) as u128),
         )],
     )]);
-
-    //cast another vote
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: TEST_VOTER_2.to_string(),
-        amount: Uint128::from(8 * stake_amount as u128),
-        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
-    });
-
-    let info = mock_info(VOTING_TOKEN, &[]);
-    let _execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let msg = ExecuteMsg::CastVote {
         poll_id: 1,
         vote: VoteOption::Yes,
-        amount: Uint128::from(8 * stake_amount),
     };
     let env = mock_env_height(creator_env.block.height, 10000);
     let info = mock_info(TEST_VOTER_2, &[]);
@@ -3351,15 +2207,15 @@ fn happy_days_end_poll_with_controlled_quorum() {
 
     assert_eq!(value.yes_votes.u128(), 9 * stake_amount);
 
-    // actual staked amount is 10 times bigger than staked amount
-    let actual_staked_weight = query_token_balance(
-        &deps.as_ref().querier,
-        Addr::unchecked(VOTING_TOKEN),
-        Addr::unchecked(MOCK_CONTRACT_ADDR),
-    )
-    .unwrap()
-    .checked_sub(Uint128::from(DEFAULT_PROPOSAL_DEPOSIT))
-    .unwrap();
+    // // actual staked amount is 10 times bigger than staked amount
+    // let actual_staked_weight = query_token_balance(
+    //     &deps.as_ref().querier,
+    //     Addr::unchecked(VOTING_TOKEN),
+    //     Addr::unchecked(MOCK_CONTRACT_ADDR),
+    // )
+    // .unwrap()
+    // .checked_sub(Uint128::from(DEFAULT_PROPOSAL_DEPOSIT))
+    // .unwrap();
 
-    assert_eq!(actual_staked_weight.u128(), (10 * stake_amount))
+    // assert_eq!(actual_staked_weight.u128(), (10 * stake_amount))
 }

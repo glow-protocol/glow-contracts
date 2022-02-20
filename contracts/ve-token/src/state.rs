@@ -57,8 +57,7 @@ impl QuadraticEquationCoefficients {
         .unwrap()
     }
 
-    // Notice that we can also express rla as a linear function:
-    // and that
+    // Notice that we can also express rla as a linear function and that:
     // - the linear coefficient of this function is the negative quadratic coefficient for vp
     // - the constant coefficient of this function is the negative linear coefficient over two for vp
     // This means we can calculate the corresponding locked amount without storing more coefficients separately!

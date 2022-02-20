@@ -56,6 +56,7 @@ pub const DENOM: &str = "uusd";
 pub const GOV_ADDR: &str = "gov";
 pub const COMMUNITY_ADDR: &str = "community";
 pub const DISTRIBUTOR_ADDR: &str = "distributor";
+pub const VE_ADDR: &str = "ve_addr";
 pub const ORACLE_ADDR: &str = "oracle";
 
 pub const RATE: u64 = 1023; // as a permille
@@ -217,6 +218,7 @@ fn mock_register_contracts(deps: DepsMut) {
         gov_contract: GOV_ADDR.to_string(),
         community_contract: COMMUNITY_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
+        ve_contract: VE_ADDR.to_string(),
     };
     let _res = execute(deps, mock_env(), info, msg)
         .expect("contract successfully executes RegisterContracts");
@@ -259,6 +261,7 @@ fn proper_initialization() {
             owner: TEST_CREATOR.to_string(),
             a_terra_contract: A_UST.to_string(),
             gov_contract: "".to_string(),
+            ve_contract: "".to_string(),
             community_contract: "".to_string(),
             distributor_contract: "".to_string(),
             anchor_contract: ANCHOR.to_string(),
@@ -290,6 +293,7 @@ fn proper_initialization() {
         gov_contract: GOV_ADDR.to_string(),
         community_contract: COMMUNITY_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
+        ve_contract: VE_ADDR.to_string(),
     };
 
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
@@ -6338,6 +6342,7 @@ pub fn test_migrate() {
         max_tickets_per_depositor: 10_000,
         community_contract: COMMUNITY_ADDR.to_string(),
         lotto_winner_boost_config: None,
+        ve_contract: VE_ADDR.to_string(),
     };
 
     let _res = migrate(deps.as_mut(), mock_env(), migrate_msg.clone()).unwrap();
@@ -6412,6 +6417,10 @@ pub fn test_migrate() {
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
         gov_contract: old_config.gov_contract,
+        ve_contract: deps
+            .api
+            .addr_validate(migrate_msg.ve_contract.as_str())
+            .unwrap(),
         community_contract: deps
             .api
             .addr_validate(migrate_msg.community_contract.as_str())

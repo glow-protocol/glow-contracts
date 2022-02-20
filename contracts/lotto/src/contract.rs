@@ -125,6 +125,7 @@ pub fn instantiate(
             owner: deps.api.addr_validate(msg.owner.as_str())?,
             a_terra_contract: deps.api.addr_validate(msg.aterra_contract.as_str())?,
             gov_contract: Addr::unchecked(""),
+            ve_contract: Addr::unchecked(""),
             community_contract: Addr::unchecked(""),
             distributor_contract: Addr::unchecked(""),
             oracle_contract: deps.api.addr_validate(msg.oracle_contract.as_str())?,
@@ -254,12 +255,14 @@ pub fn execute(
             gov_contract,
             community_contract,
             distributor_contract,
+            ve_contract,
         } => execute_register_contracts(
             deps,
             info,
             gov_contract,
             community_contract,
             distributor_contract,
+            ve_contract,
         ),
         ExecuteMsg::Deposit {
             encoded_tickets,
@@ -338,6 +341,7 @@ pub fn execute_register_contracts(
     gov_contract: String,
     community_contract: String,
     distributor_contract: String,
+    ve_contract: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -354,6 +358,7 @@ pub fn execute_register_contracts(
     config.gov_contract = deps.api.addr_validate(&gov_contract)?;
     config.community_contract = deps.api.addr_validate(&community_contract)?;
     config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
+    config.ve_contract = deps.api.addr_validate(&ve_contract)?;
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
@@ -1705,6 +1710,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         a_terra_contract: config.a_terra_contract.to_string(),
         anchor_contract: config.anchor_contract.to_string(),
         gov_contract: config.gov_contract.to_string(),
+        ve_contract: config.ve_contract.to_string(),
         community_contract: config.community_contract.to_string(),
         distributor_contract: config.distributor_contract.to_string(),
         lottery_interval: config.lottery_interval,
@@ -1942,7 +1948,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
     let pool = POOL.load(deps.storage)?;
 
     let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
-        base_multiplier: Decimal256::from_ratio(40, 100),
+        base_multiplier: Decimal256::from_ratio(40u64, 100u64),
         max_multiplier: Decimal256::one(),
         total_voting_power_weight: Decimal256::percent(150),
     };
@@ -1967,6 +1973,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
         gov_contract: old_config.gov_contract,
+        ve_contract: deps.api.addr_validate(msg.ve_contract.as_str())?,
         community_contract: deps.api.addr_validate(msg.community_contract.as_str())?,
         distributor_contract: old_config.distributor_contract,
         oracle_contract: old_config.oracle_contract,

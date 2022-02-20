@@ -7,7 +7,7 @@ use glow_protocol::lotto::{BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
 use crate::querier::{
-    query_address_voting_balance_at_height, query_total_voting_balance_at_height,
+    query_address_voting_balance_at_timestamp, query_total_voting_balance_at_timestamp,
 };
 
 use crate::state::{
@@ -181,27 +181,17 @@ pub fn calculate_winner_prize(
 
     // User voting balance
 
-    let snapshotted_user_voting_balance = if let Ok(response) =
-        query_address_voting_balance_at_height(
-            querier,
-            &config.gov_contract,
-            *block_height,
-            winner_address,
-        ) {
-        response.balance
-    } else {
-        Uint128::zero()
-    };
+    let snapshotted_user_voting_balance = query_address_voting_balance_at_timestamp(
+        querier,
+        &config.ve_contract,
+        *block_height,
+        winner_address,
+    )?;
 
     // Total voting balance
 
-    let snapshotted_total_voting_balance = if let Ok(response) =
-        query_total_voting_balance_at_height(querier, &config.gov_contract, *block_height)
-    {
-        response.total_supply
-    } else {
-        Uint128::zero()
-    };
+    let snapshotted_total_voting_balance =
+        query_total_voting_balance_at_timestamp(querier, &config.ve_contract, *block_height)?;
 
     for i in 0..NUM_PRIZE_BUCKETS {
         if number_winners[i] == 0 {

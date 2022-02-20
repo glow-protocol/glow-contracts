@@ -19,9 +19,24 @@ static PREFIX_POLL: &[u8] = b"poll";
 static PREFIX_BANK: &[u8] = b"bank";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldConfig {
+    pub owner: CanonicalAddr,
+    pub glow_token: CanonicalAddr,
+    pub terraswap_factory: CanonicalAddr,
+    pub quorum: Decimal,
+    pub threshold: Decimal,
+    pub voting_period: u64,
+    pub timelock_period: u64,
+    pub expiration_period: u64,
+    pub proposal_deposit: Uint128,
+    pub snapshot_period: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: CanonicalAddr,
     pub glow_token: CanonicalAddr,
+    pub ve_token: CanonicalAddr,
     pub terraswap_factory: CanonicalAddr,
     pub quorum: Decimal,
     pub threshold: Decimal,
@@ -53,6 +68,7 @@ pub struct Poll {
     pub status: PollStatus,
     pub yes_votes: Uint128,
     pub no_votes: Uint128,
+    pub start_time: u64,
     pub end_height: u64,
     pub title: String,
     pub description: String,
@@ -92,6 +108,10 @@ impl PartialEq for ExecuteData {
 
 pub fn config_store(storage: &mut dyn Storage) -> Singleton<Config> {
     singleton(storage, KEY_CONFIG)
+}
+
+pub fn old_config_read(storage: &dyn Storage) -> ReadonlySingleton<OldConfig> {
+    singleton_read(storage, KEY_CONFIG)
 }
 
 pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<Config> {

@@ -48,6 +48,7 @@ const DEFAULT_LIMIT: u32 = 10;
 pub struct Config {
     pub owner: Addr,
     pub a_terra_contract: Addr,
+    pub ve_contract: Addr,
     pub gov_contract: Addr,
     pub community_contract: Addr,
     pub distributor_contract: Addr,

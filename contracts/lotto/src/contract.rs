@@ -1695,11 +1695,23 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     })
 }
 
-pub fn query_state(deps: Deps, env: Env, _block_height: Option<u64>) -> StdResult<StateResponse> {
+pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let block_height = env.block.height;
+    let block_height = if let Some(block_height) = block_height {
+        block_height
+    } else {
+        env.block.height
+    };
+
+    if block_height < state.operator_reward_emission_index.last_reward_updated
+        || block_height < state.sponsor_reward_emission_index.last_reward_updated
+    {
+        return Err(StdError::generic_err(
+            "Block_height must be greater than both operator and sponsor last_reward_updated",
+        ));
+    }
 
     // Compute reward rate with given block height
     compute_global_operator_reward(&mut state, &pool, block_height);

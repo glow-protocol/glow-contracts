@@ -62,7 +62,7 @@ pub const VE_ADDR: &str = "ve_addr";
 pub const ORACLE_ADDR: &str = "oracle";
 
 pub const RATE: u64 = 1023; // as a permille
-const SMALL_TICKET_PRICE: u64 = 10;
+const SMALL_TICKET_PRICE: u64 = 1000;
 const TICKET_PRICE: u64 = 10_000_000; // 10 * 10^6
 
 const SPLIT_FACTOR: u64 = 75; // as a %
@@ -1289,8 +1289,14 @@ fn gift_tickets() {
 
     let expected_tickets_attempted = 2;
     match res {
-        Err(ContractError::InsufficientGiftDepositAmount(amount_required)) => {
-            assert_eq!(expected_tickets_attempted, amount_required)
+        Err(ContractError::InsufficientPostTransactionDepositorBalance {
+            post_transaction_num_depositor_tickets,
+            ..
+        }) => {
+            assert_eq!(
+                expected_tickets_attempted,
+                post_transaction_num_depositor_tickets
+            );
         }
         _ => panic!("DO NOT ENTER HERE"),
     }
@@ -4892,9 +4898,14 @@ pub fn lottery_pool_solvency_edge_case() {
     )
     .unwrap();
 
+    println!(
+        "a {}, b {}",
+        contract_a_balance * special_rate,
+        Uint256::from(SMALL_TICKET_PRICE * 3 / 4)
+    );
     // Assert that Lotto pool is solvent
     // No easy way of doing this unfortunately
-    assert!(contract_a_balance * special_rate >= Uint256::from(SMALL_TICKET_PRICE * 3 / 4));
+    assert!(contract_a_balance * special_rate >= Uint256::from(SMALL_TICKET_PRICE * 3 / 4 - 1));
 }
 
 #[test]

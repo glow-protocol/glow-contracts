@@ -458,20 +458,6 @@ pub fn deposit(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Validate that the deposit size is greater than or equal to the corresponding cost of the requested number of tickets
-    let required_amount = config.ticket_price * Uint256::from(number_of_new_tickets);
-    if deposit_amount < required_amount {
-        return if recipient.is_some() {
-            Err(ContractError::InsufficientGiftDepositAmount(
-                number_of_new_tickets,
-            ))
-        } else {
-            Err(ContractError::InsufficientDepositAmount(
-                number_of_new_tickets,
-            ))
-        };
-    }
-
     // deduct tx taxes when calculating the net deposited amount in anchor
     let net_coin_amount = deduct_tax(
         deps.as_ref(),
@@ -497,9 +483,13 @@ pub fn deposit(
         * aust_exchange_rate;
 
     let post_transaction_max_depositor_tickets = Uint128::from(
-        post_transaction_depositor_balance / Decimal256::from_uint256(config.ticket_price),
+        post_transaction_depositor_balance
+            / Decimal256::from_uint256(config.ticket_price 
+            // Subtract 10^-5 in order to offset rounding problems
+            // relies on ticket price being at least 10^-5 UST
+                - Uint256::from(10u128)) 
     )
-    .u128();
+    .u128() as u64;
 
     // Get the number of tickets the user would have post transaction (without accounting for round up)
     let mut post_transaction_num_depositor_tickets =
@@ -508,15 +498,14 @@ pub fn deposit(
     // Check if we need to round up the number of combinations based on the depositor's mixed_tax_post_transaction_lottery_deposit
     let mut new_combinations = combinations;
     for _ in 0..100 {
-        if post_transaction_max_depositor_tickets <= post_transaction_num_depositor_tickets as u128
-        {
+        if post_transaction_max_depositor_tickets <= post_transaction_num_depositor_tickets {
             break;
         }
 
         let current_time = env.block.time.nanos();
         let sequence = pseudo_random_seq(
             info.sender.clone().into_string(),
-            post_transaction_num_depositor_tickets as u64,
+            post_transaction_num_depositor_tickets,
             current_time,
         );
 
@@ -525,6 +514,15 @@ pub fn deposit(
         // Increment number_of_new_tickets and post_transaction_num_depositor_tickets
         number_of_new_tickets += 1;
         post_transaction_num_depositor_tickets += 1;
+    }
+
+    // Validate that the post_transaction_max_depositor_tickets is less than or equal to the post_transaction_num_depositor_tickets
+    if post_transaction_num_depositor_tickets > post_transaction_max_depositor_tickets {
+        return Err(ContractError::InsufficientPostTransactionDepositorBalance {
+            post_transaction_depositor_balance,
+            post_transaction_num_depositor_tickets,
+            post_transaction_max_depositor_tickets,
+        });
     }
 
     // Validate that the depositor won't go over max_tickets_per_depositor

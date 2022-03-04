@@ -18,8 +18,8 @@ use crate::state::{
     read_depositors_info, read_depositors_stats, read_lottery_info, read_lottery_prizes,
     read_operator_info, read_sponsor_info, store_depositor_info, store_lottery_info,
     store_operator_info, store_sponsor_info, Config, DepositorInfo, LotteryInfo, OperatorInfo,
-    Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLD_PRIZES, POOL, PRIZES,
-    STATE, TICKETS,
+    Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL,
+    PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -1929,16 +1929,15 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> {
     // Migration Notes
     // The changes to storage:
     // - CONFIG (reuses storage key)
     // - LOTTERIES (new storage key)
     // - PRIZES (new storage key)
     // - DEPOSITORS (new storage key, paginated migration)
-
-    let state = STATE.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
+    // - STATE (reuses storage key)
+    // - POOL (reuses storage key)
 
     let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
         base_multiplier: Decimal256::from_ratio(40u64, 100u64),
@@ -1992,6 +1991,42 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
 
     CONFIG.save(deps.storage, &new_config)?;
 
+    // Query exchange_rate from anchor money market
+    let aust_exchange_rate: Decimal256 = query_exchange_rate(
+        deps.as_ref(),
+        deps.api
+            .addr_validate(new_config.anchor_contract.as_str())?
+            .to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
+    let old_state = OLDSTATE.load(deps.storage)?;
+
+    let state = State {
+        total_tickets: old_state.total_tickets,
+        total_reserve: old_state.total_reserve,
+        prize_buckets: old_state.prize_buckets,
+        current_lottery: old_state.current_lottery,
+        next_lottery_time: old_state.next_lottery_time,
+        next_lottery_exec_time: old_state.next_lottery_exec_time,
+        next_epoch: old_state.next_epoch,
+        operator_reward_emission_index: RewardEmissionsIndex {
+            global_reward_index: old_state.global_reward_index,
+            glow_emission_rate: old_state.glow_emission_rate,
+            last_reward_updated: old_state.last_reward_updated,
+        },
+        sponsor_reward_emission_index: RewardEmissionsIndex {
+            global_reward_index: old_state.global_reward_index,
+            glow_emission_rate: old_state.glow_emission_rate,
+            last_reward_updated: old_state.last_reward_updated,
+        },
+        // TODO Think about what happens if exchange rate changes during migration
+        last_lottery_execution_aust_exchange_rate: aust_exchange_rate,
+    };
+
+    STATE.save(deps.storage, &state)?;
+
     // migrate pool to include total lottery deposits delegated/operated
     let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
     // TODO Revisit
@@ -2003,31 +2038,6 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
     };
 
     POOL.save(deps.storage, &new_pool)?;
-
-    // Migrate lottery info
-
-    // Don't need to include state.current_lottery
-    // because nothing has been saved with id state.current_lottery yet
-    for i in 0..state.current_lottery {
-        let old_lottery_info = old_read_lottery_info(deps.storage, i);
-
-        let new_lottery_info = LotteryInfo {
-            rand_round: old_lottery_info.rand_round,
-            sequence: old_lottery_info.sequence,
-            awarded: old_lottery_info.awarded,
-            timestamp: Timestamp::from_seconds(0),
-            prize_buckets: old_lottery_info.prize_buckets,
-            number_winners: old_lottery_info.number_winners,
-            page: old_lottery_info.page,
-            glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-            block_height: old_lottery_info.timestamp,
-            total_user_shares: pool.total_user_shares,
-        };
-
-        store_lottery_info(deps.storage, i, &new_lottery_info)?;
-
-        old_remove_lottery_info(deps.storage, i);
-    }
 
     // Migrate prize info
     let old_prizes = OLD_PRIZES
@@ -2074,22 +2084,42 @@ pub fn migrate_old_depositors(
     env: Env,
     limit: Option<u32>,
 ) -> Result<Response, ContractError> {
+    let mut config = CONFIG.load(deps.storage)?;
+
+    let aust_exchange_rate: Decimal256 = query_exchange_rate(
+        deps.as_ref(),
+        deps.api
+            .addr_validate(config.anchor_contract.as_str())?
+            .to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
     let old_depositors = old_read_depositors(deps.as_ref(), None, limit)?;
 
     let mut num_migrated_entries: u32 = 0;
+
+    let mut pool = POOL.load(deps.storage)?;
 
     for (addr, old_depositor_info) in old_depositors {
         // Delete old depositor
         old_remove_depositor_info(deps.storage, &addr);
 
-        // TODO revisit shares calculation. basically have to perform a deposit every time
-        // to build up the shares
+        // Get the depositors balance, add the value of the savings aust with the lottery_deposit
+        // Then at the end there will be some left over aust.
+        // This will be captured by the sponsors.
+        let depositor_aust_balance = old_depositor_info.savings_aust
+            + old_depositor_info.lottery_deposit / aust_exchange_rate;
+
         let new_depositor_info = DepositorInfo {
-            shares: Uint256::zero(),
+            shares: depositor_aust_balance,
             tickets: old_depositor_info.tickets,
             unbonding_info: old_depositor_info.unbonding_info,
             operator_addr: Addr::unchecked(""),
         };
+
+        pool.total_user_shares += depositor_aust_balance;
+        pool.total_user_aust += depositor_aust_balance;
 
         // Store new depositor
         store_depositor_info(deps.storage, &addr, new_depositor_info, env.block.height)?;
@@ -2100,11 +2130,39 @@ pub fn migrate_old_depositors(
 
     let old_depositors = old_read_depositors(deps.as_ref(), None, Some(1))?;
     if old_depositors.is_empty() {
+        // Migrate lottery info
+
+        let state = STATE.load(deps.storage)?;
+
+        // Don't need to include state.current_lottery
+        // because nothing has been saved with id state.current_lottery yet
+        for i in 0..state.current_lottery {
+            let old_lottery_info = old_read_lottery_info(deps.storage, i);
+
+            let new_lottery_info = LotteryInfo {
+                rand_round: old_lottery_info.rand_round,
+                sequence: old_lottery_info.sequence,
+                awarded: old_lottery_info.awarded,
+                timestamp: Timestamp::from_seconds(0),
+                prize_buckets: old_lottery_info.prize_buckets,
+                number_winners: old_lottery_info.number_winners,
+                page: old_lottery_info.page,
+                glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+                block_height: old_lottery_info.timestamp,
+                total_user_shares: pool.total_user_shares,
+            };
+
+            store_lottery_info(deps.storage, i, &new_lottery_info)?;
+
+            old_remove_lottery_info(deps.storage, i);
+        }
+
         // Set paused to false and save
-        let mut config: Config = CONFIG.load(deps.storage)?;
         config.paused = false;
         CONFIG.save(deps.storage, &config)?;
     }
+
+    POOL.save(deps.storage, &pool)?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "migrate_old_depositors"),

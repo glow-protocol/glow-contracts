@@ -15,8 +15,8 @@ use crate::state::{
     old_read_depositor_info, old_read_lottery_info, old_remove_depositor_info, read_depositor_info,
     read_depositor_stats, read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes,
     read_prize, read_sponsor_info, store_depositor_info, store_depositor_stats, Config,
-    DepositorInfo, DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, PrizeInfo, CONFIG,
-    OLDCONFIG, OLD_PRIZES, POOL, PRIZES, STATE,
+    DepositorInfo, DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, OldPool, OldState,
+    Pool, PrizeInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
@@ -6204,10 +6204,21 @@ pub fn test_migrate() {
     mock_instantiate(&mut deps);
     mock_register_contracts(deps.as_mut());
 
-    // Increase glow emission rate
-    let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.current_lottery = 2;
-    STATE.save(deps.as_mut().storage, &state).unwrap();
+    // Increase current lottery
+    let state = STATE.load(deps.as_mut().storage).unwrap();
+    let old_state = OldState {
+        total_tickets: state.total_tickets,
+        total_reserve: state.total_reserve,
+        prize_buckets: state.prize_buckets,
+        current_lottery: 2,
+        next_lottery_time: state.next_lottery_time,
+        next_lottery_exec_time: state.next_lottery_exec_time,
+        next_epoch: state.next_epoch,
+        global_reward_index: state.operator_reward_emission_index.global_reward_index,
+        glow_emission_rate: state.operator_reward_emission_index.glow_emission_rate,
+        last_reward_updated: state.operator_reward_emission_index.last_reward_updated,
+    };
+    OLDSTATE.save(deps.as_mut().storage, &old_state).unwrap();
 
     // Store old config
 
@@ -6237,9 +6248,19 @@ pub fn test_migrate() {
 
     OLDCONFIG.save(deps.as_mut().storage, &old_config).unwrap();
 
+    // Store old pool
+
+    let old_pool = OldPool {
+        total_user_lottery_deposits: Uint256::from(1u128),
+        total_user_savings_aust: Uint256::from(1u128),
+        total_sponsor_lottery_deposits: Uint256::from(1u128),
+    };
+
+    OLDPOOL.save(deps.as_mut().storage, &old_pool).unwrap();
+
     // Store some old lotteries
 
-    for i in 0..state.current_lottery {
+    for i in 0..old_state.current_lottery {
         let mut old_lottery = old_read_lottery_info(deps.as_ref().storage, 100);
 
         old_lottery.sequence = format!("00000{}", i);
@@ -6458,11 +6479,18 @@ pub fn test_migrate() {
 
     // New depositors
 
+    let mut new_user_total_aust = Uint256::zero();
+
     for i in 0..15 {
         let mut old_depositor_info =
             old_read_depositor_info(deps.as_ref().storage, &Addr::unchecked(""));
 
         old_depositor_info.savings_aust = Uint256::from(i as u128);
+
+        let old_depositor_aust_balance = old_depositor_info.savings_aust
+            + old_depositor_info.lottery_deposit / Decimal256::permille(RATE);
+
+        new_user_total_aust += old_depositor_aust_balance;
 
         let depositor_info = read_depositor_info(
             deps.as_ref().storage,
@@ -6472,11 +6500,47 @@ pub fn test_migrate() {
         assert_eq!(
             depositor_info,
             DepositorInfo {
-                shares: old_depositor_info.lottery_deposit,
+                shares: old_depositor_aust_balance,
                 tickets: old_depositor_info.tickets,
                 unbonding_info: old_depositor_info.unbonding_info,
                 operator_addr: Addr::unchecked("")
             }
         );
     }
+
+    // New State
+
+    let new_state = State {
+        total_tickets: old_state.total_tickets,
+        total_reserve: old_state.total_reserve,
+        prize_buckets: old_state.prize_buckets,
+        current_lottery: old_state.current_lottery,
+        next_lottery_time: old_state.next_lottery_time,
+        next_lottery_exec_time: old_state.next_lottery_exec_time,
+        next_epoch: old_state.next_epoch,
+        operator_reward_emission_index: RewardEmissionsIndex {
+            global_reward_index: old_state.global_reward_index,
+            glow_emission_rate: old_state.glow_emission_rate,
+            last_reward_updated: old_state.last_reward_updated,
+        },
+        sponsor_reward_emission_index: RewardEmissionsIndex {
+            global_reward_index: old_state.global_reward_index,
+            glow_emission_rate: old_state.glow_emission_rate,
+            last_reward_updated: old_state.last_reward_updated,
+        },
+        last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE),
+    };
+
+    assert_eq!(new_state, STATE.load(deps.as_ref().storage).unwrap());
+
+    // New Pool
+
+    let new_pool = Pool {
+        total_user_aust: new_user_total_aust,
+        total_user_shares: new_user_total_aust,
+        total_sponsor_lottery_deposits: old_pool.total_sponsor_lottery_deposits,
+        total_operator_shares: Uint256::zero(),
+    };
+
+    assert_eq!(new_pool, POOL.load(deps.as_ref().storage).unwrap());
 }

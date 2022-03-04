@@ -23,6 +23,7 @@ pub const OLD_PREFIX_DEPOSIT: &[u8] = b"depositor";
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const OLDCONFIG: Item<OldConfig> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
+pub const OLDSTATE: Item<OldState> = Item::new("state");
 pub const POOL: Item<Pool> = Item::new("pool");
 pub const OLDPOOL: Item<OldPool> = Item::new("pool");
 pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");

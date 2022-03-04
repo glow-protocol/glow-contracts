@@ -766,13 +766,6 @@ pub fn execute_sponsor_withdraw(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    // Get the contract's aust balance
-    let _contract_a_balance = query_token_balance(
-        &deps.querier,
-        config.a_terra_contract.clone(),
-        env.clone().contract.address,
-    )?;
-
     // Get the aust exchange rate
     let rate = query_exchange_rate(
         deps.as_ref(),
@@ -863,13 +856,6 @@ pub fn execute_withdraw(
     let mut pool = POOL.load(deps.storage)?;
 
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
-
-    // Get the contract's aust balance
-    let _contract_a_balance = query_token_balance(
-        &deps.querier,
-        config.a_terra_contract.clone(),
-        env.clone().contract.address,
-    )?;
 
     // Get the aust exchange rate
     let aust_exchange_rate = query_exchange_rate(

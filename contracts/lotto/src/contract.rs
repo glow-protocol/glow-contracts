@@ -248,6 +248,8 @@ pub fn execute(
         max_tickets_per_depositor,
         paused,
         lotto_winner_boost_config,
+        operator_glow_emission_rate,
+        sponsor_glow_emission_rate,
     } = msg
     {
         return execute_update_config(
@@ -263,6 +265,8 @@ pub fn execute(
             max_tickets_per_depositor,
             paused,
             lotto_winner_boost_config,
+            operator_glow_emission_rate,
+            sponsor_glow_emission_rate,
         );
     }
 
@@ -321,6 +325,8 @@ pub fn execute(
             max_tickets_per_depositor,
             paused,
             lotto_winner_boost_config,
+            operator_glow_emission_rate,
+            sponsor_glow_emission_rate,
         } => execute_update_config(
             deps,
             info,
@@ -334,6 +340,8 @@ pub fn execute(
             max_tickets_per_depositor,
             paused,
             lotto_winner_boost_config,
+            operator_glow_emission_rate,
+            sponsor_glow_emission_rate,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -1262,21 +1270,6 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
         return Err(ContractError::NotRegistered {});
     }
 
-    // // Get the contract's aust balance
-    // let contract_a_balance = Uint256::from(query_token_balance(
-    //     &deps.querier,
-    //     config.a_terra_contract.clone(),
-    //     env.clone().contract.address,
-    // )?);
-
-    // // Get the aust exchange rate
-    // let rate = query_exchange_rate(
-    //     deps.as_ref(),
-    //     config.anchor_contract.to_string(),
-    //     env.block.height,
-    // )?
-    // .exchange_rate;
-
     // Validate that executing epoch will follow rate limiting
     if !state.next_epoch.is_expired(&env.block) {
         return Err(ContractError::InvalidEpochExecution {});
@@ -1292,32 +1285,6 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     // Compute global Glow rewards
     compute_global_operator_reward(&mut state, &pool, env.block.height);
     compute_global_sponsor_reward(&mut state, &pool, env.block.height);
-
-    // let carry_over_value = state
-    //     .prize_buckets
-    //     .iter()
-    //     .fold(Uint256::zero(), |sum, val| sum + *val);
-
-    // let ExecuteLotteryRedeemedAustInfo {
-    //     aust_to_redeem_value,
-    //     ..
-    // } = calculate_value_of_aust_to_be_redeemed_for_lottery(
-    //     &state,
-    //     &pool,
-    //     &config,
-    //     contract_a_balance,
-    //     rate,
-    // );
-
-    // // Query updated Glow emission rate and update state
-    // state.operator_reward_emission_index.glow_emission_rate = query_glow_emission_rate(
-    //     &deps.querier,
-    //     config.distributor_contract,
-    //     aust_to_redeem_value + carry_over_value,
-    //     config.target_award,
-    //     state.operator_reward_emission_index.glow_emission_rate,
-    // )?
-    // .emission_rate;
 
     // Compute total_reserves to fund gov contract
     let total_reserves = state.total_reserve;
@@ -1345,13 +1312,6 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "execute_epoch_operations"),
         attr("total_reserves", total_reserves.to_string()),
-        attr(
-            "operator_emission_rate",
-            state
-                .operator_reward_emission_index
-                .glow_emission_rate
-                .to_string(),
-        ),
     ]))
 }
 
@@ -1419,6 +1379,8 @@ pub fn execute_update_config(
     max_tickets_per_depositor: Option<u64>,
     paused: Option<bool>,
     lotto_winner_boost_config: Option<BoostConfig>,
+    operator_glow_emission_rate: Option<Decimal256>,
+    sponsor_glow_emission_rate: Option<Decimal256>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -1505,6 +1467,18 @@ pub fn execute_update_config(
     }
 
     CONFIG.save(deps.storage, &config)?;
+
+    let mut state = STATE.load(deps.storage)?;
+
+    if let Some(operator_glow_emission_rate) = operator_glow_emission_rate {
+        state.operator_reward_emission_index.glow_emission_rate = operator_glow_emission_rate;
+    }
+
+    if let Some(sponsor_glow_emission_rate) = sponsor_glow_emission_rate {
+        state.sponsor_reward_emission_index.glow_emission_rate = sponsor_glow_emission_rate;
+    }
+
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
 }
@@ -1926,6 +1900,7 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
         sponsor_aust_to_redeem,
         aust_to_redeem,
         aust_to_redeem_value,
+        prize_buckets: state.prize_buckets,
     })
 }
 
@@ -2013,13 +1988,13 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> 
         next_lottery_exec_time: old_state.next_lottery_exec_time,
         next_epoch: old_state.next_epoch,
         operator_reward_emission_index: RewardEmissionsIndex {
-            global_reward_index: old_state.global_reward_index,
-            glow_emission_rate: old_state.glow_emission_rate,
-            last_reward_updated: old_state.last_reward_updated,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: msg.operator_glow_emission_rate,
+            last_reward_updated: env.block.height,
         },
         sponsor_reward_emission_index: RewardEmissionsIndex {
             global_reward_index: old_state.global_reward_index,
-            glow_emission_rate: old_state.glow_emission_rate,
+            glow_emission_rate: msg.sponsor_glow_emission_rate,
             last_reward_updated: old_state.last_reward_updated,
         },
         // TODO Think about what happens if exchange rate changes during migration

@@ -75,6 +75,8 @@ pub enum ExecuteMsg {
         max_tickets_per_depositor: Option<u64>,
         paused: Option<bool>,
         lotto_winner_boost_config: Option<BoostConfig>,
+        operator_glow_emission_rate: Option<Decimal256>,
+        sponsor_glow_emission_rate: Option<Decimal256>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {
@@ -133,6 +135,8 @@ pub struct MigrateMsg {
     pub community_contract: String,     // Glow community contract address
     pub lotto_winner_boost_config: Option<BoostConfig>, // The boost config to apply to glow emissions for lotto winners
     pub ve_contract: String,                            // Glow ve token contract address
+    pub operator_glow_emission_rate: Decimal256,        // The emission rate to set for operators
+    pub sponsor_glow_emission_rate: Decimal256,         // The emission rate to set for sponsors
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -327,4 +331,5 @@ pub struct LotteryBalanceResponse {
     pub sponsor_aust_to_redeem: Uint256,
     pub aust_to_redeem: Uint256,
     pub aust_to_redeem_value: Uint256,
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
 }

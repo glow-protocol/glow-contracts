@@ -16,6 +16,13 @@ pub struct BoostConfig {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct RewardEmissionsIndex {
+    pub last_reward_updated: u64,
+    pub global_reward_index: Decimal256,
+    pub glow_emission_rate: Decimal256,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
     pub stable_denom: String,                                // uusd
@@ -34,7 +41,8 @@ pub struct InstantiateMsg {
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
     pub instant_withdrawal_fee: Decimal256, // % to be deducted as a fee for instant withdrawals
     pub unbonding_period: u64, // unbonding period after regular withdrawals from pool
-    pub initial_emission_rate: Decimal256, // initial GLOW emission rate for depositor rewards
+    pub initial_operator_glow_emission_rate: Decimal256, // initial GLOW emission rate for operator rewards
+    pub initial_sponsor_glow_emission_rate: Decimal256, // initial GLOW emission rate for sponsor rewards
     pub initial_lottery_execution: u64, // time in seconds for the first Lotto execution
     pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS], // glow to be awarded as a bonus to lottery winners
@@ -67,6 +75,8 @@ pub enum ExecuteMsg {
         max_tickets_per_depositor: Option<u64>,
         paused: Option<bool>,
         lotto_winner_boost_config: Option<BoostConfig>,
+        operator_glow_emission_rate: Option<Decimal256>,
+        sponsor_glow_emission_rate: Option<Decimal256>,
     },
     /// Update lottery configuration - restricted to owner
     UpdateLotteryConfig {
@@ -81,6 +91,8 @@ pub enum ExecuteMsg {
         encoded_tickets: String,
         operator: Option<String>,
     },
+    /// Claim tickets
+    ClaimTickets { encoded_tickets: String },
     /// Deposit amount of stable into the pool in the name of the recipient
     Gift {
         encoded_tickets: String,
@@ -125,6 +137,8 @@ pub struct MigrateMsg {
     pub community_contract: String,     // Glow community contract address
     pub lotto_winner_boost_config: Option<BoostConfig>, // The boost config to apply to glow emissions for lotto winners
     pub ve_contract: String,                            // Glow ve token contract address
+    pub operator_glow_emission_rate: Decimal256,        // The emission rate to set for operators
+    pub sponsor_glow_emission_rate: Decimal256,         // The emission rate to set for sponsors
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -132,7 +146,7 @@ pub struct MigrateMsg {
 pub enum QueryMsg {
     /// Lotto contract configuration
     Config {},
-    /// Current state. If block_height is provided, return current depositor rewards
+    /// Current state
     State { block_height: Option<u64> },
     /// Lotto pool current state. Savings aust and lottery deposits.
     Pool {},
@@ -208,18 +222,18 @@ pub struct StateResponse {
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
     pub next_epoch: Expiration,
-    pub last_reward_updated: u64,
-    pub global_reward_index: Decimal256,
-    pub glow_emission_rate: Decimal256,
+    pub operator_reward_emission_index: RewardEmissionsIndex,
+    pub sponsor_reward_emission_index: RewardEmissionsIndex,
+    pub last_lottery_execution_aust_exchange_rate: Decimal256,
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
-    pub total_user_lottery_deposits: Uint256,
-    pub total_user_savings_aust: Uint256,
+    pub total_user_aust: Uint256,
+    pub total_user_shares: Uint256,
     pub total_sponsor_lottery_deposits: Uint256,
-    pub total_lottery_deposits_operated: Uint256,
+    pub total_operator_shares: Uint256,
 }
 
 // We define a custom struct for each query response
@@ -235,15 +249,14 @@ pub struct LotteryInfoResponse {
     pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub total_user_lottery_deposits: Uint256,
+    pub total_user_shares: Uint256,
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfoResponse {
     pub depositor: String,
-    pub lottery_deposit: Uint256,
-    pub savings_aust: Uint256,
+    pub shares: Uint256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }
@@ -252,8 +265,7 @@ pub struct DepositorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorStatsResponse {
     pub depositor: String,
-    pub lottery_deposit: Uint256,
-    pub savings_aust: Uint256,
+    pub shares: Uint256,
     pub num_tickets: usize,
 }
 
@@ -270,7 +282,7 @@ pub struct SponsorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct OperatorInfoResponse {
     pub operator: String,
-    pub lottery_deposit: Uint256,
+    pub shares: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
 }
@@ -315,5 +327,11 @@ pub struct PrizeInfosResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LotteryBalanceResponse {
-    pub lottery_balance: Uint256,
+    pub value_of_user_aust_to_be_redeemed_for_lottery: Uint256,
+    pub user_aust_to_redeem: Uint256,
+    pub value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256,
+    pub sponsor_aust_to_redeem: Uint256,
+    pub aust_to_redeem: Uint256,
+    pub aust_to_redeem_value: Uint256,
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
 }

@@ -26,11 +26,11 @@ pub enum ContractError {
     #[error("Invalid deposit amount")]
     ZeroDepositAmount {},
 
-    #[error("Insufficient deposit amount for {0} tickets")]
-    InsufficientDepositAmount(u64),
-
     #[error("Sequence must be 6 digits between 0-f but instead it was: {0}")]
     InvalidSequence(String),
+
+    #[error("Must specify a ticket price that is at least 10 uusd")]
+    InvalidTicketPrice(),
 
     #[error("Invalid encoded tickets. Could not decode.")]
     InvalidEncodedTickets {},
@@ -44,8 +44,12 @@ pub enum ContractError {
     #[error("Gift ticket amount must be greater than zero")]
     ZeroGiftAmount {},
 
-    #[error("Insufficient gift deposit amount for {0} tickets")]
-    InsufficientGiftDepositAmount(u64),
+    #[error("Insufficient post transaction depositor balance ({post_transaction_depositor_balance}) for post transaction num tickets ({post_transaction_num_depositor_tickets}). Max Post transaction max depositor tickets: {post_transaction_max_depositor_tickets}.")]
+    InsufficientPostTransactionDepositorBalance {
+        post_transaction_depositor_balance: Uint256,
+        post_transaction_num_depositor_tickets: u64,
+        post_transaction_max_depositor_tickets: u64,
+    },
 
     #[error("Sponsorship amount must be greater than zero")]
     ZeroSponsorshipAmount {},

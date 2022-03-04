@@ -36,6 +36,7 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
     Ok(balance.amount.amount.into())
 }
 
+#[allow(dead_code)]
 pub fn query_glow_emission_rate(
     querier: &QuerierWrapper,
     distributor: Addr,

@@ -434,7 +434,7 @@ pub fn deposit(
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
     // Get the amount of requested tickets
-    let mut amount_tickets = combinations.len() as u64;
+    let mut number_of_new_tickets = combinations.len() as u64;
 
     // Validate that the deposit amount is non zero
     if deposit_amount.is_zero() {
@@ -459,12 +459,16 @@ pub fn deposit(
     }
 
     // Validate that the deposit size is greater than or equal to the corresponding cost of the requested number of tickets
-    let required_amount = config.ticket_price * Uint256::from(amount_tickets);
+    let required_amount = config.ticket_price * Uint256::from(number_of_new_tickets);
     if deposit_amount < required_amount {
         return if recipient.is_some() {
-            Err(ContractError::InsufficientGiftDepositAmount(amount_tickets))
+            Err(ContractError::InsufficientGiftDepositAmount(
+                number_of_new_tickets,
+            ))
         } else {
-            Err(ContractError::InsufficientDepositAmount(amount_tickets))
+            Err(ContractError::InsufficientDepositAmount(
+                number_of_new_tickets,
+            ))
         };
     }
 
@@ -498,26 +502,30 @@ pub fn deposit(
     .u128();
 
     // Get the number of tickets the user would have post transaction (without accounting for round up)
-    let raw_post_transaction_num_depositor_tickets =
-        (depositor_info.tickets.len() + combinations.len()) as u128;
+    let mut post_transaction_num_depositor_tickets =
+        (depositor_info.tickets.len() + number_of_new_tickets as usize) as u64;
 
     // Check if we need to round up the number of combinations based on the depositor's mixed_tax_post_transaction_lottery_deposit
     let mut new_combinations = combinations;
-    if post_transaction_max_depositor_tickets > raw_post_transaction_num_depositor_tickets {
+    for _ in 0..100 {
+        if post_transaction_max_depositor_tickets <= post_transaction_num_depositor_tickets as u128
+        {
+            break;
+        }
+
         let current_time = env.block.time.nanos();
         let sequence = pseudo_random_seq(
             info.sender.clone().into_string(),
-            depositor_info.tickets.len() as u64,
+            post_transaction_num_depositor_tickets as u64,
             current_time,
         );
 
+        // Add the randomly generated sequence to new_combinations
         new_combinations.push(sequence);
-        amount_tickets += 1;
+        // Increment number_of_new_tickets and post_transaction_num_depositor_tickets
+        number_of_new_tickets += 1;
+        post_transaction_num_depositor_tickets += 1;
     }
-
-    // Get the number of tickets the user would have post transaction (accounting for roundup)
-    let post_transaction_num_depositor_tickets =
-        depositor_info.tickets.len() as u64 + amount_tickets;
 
     // Validate that the depositor won't go over max_tickets_per_depositor
     if post_transaction_num_depositor_tickets > config.max_tickets_per_depositor {
@@ -576,7 +584,7 @@ pub fn deposit(
     pool.total_user_aust = pool.total_user_aust.add(minted_aust);
 
     // Update the number of total_tickets
-    state.total_tickets = state.total_tickets.add(amount_tickets.into());
+    state.total_tickets = state.total_tickets.add(number_of_new_tickets.into());
 
     // update depositor and state information
     store_depositor_info(deps.storage, &depositor, depositor_info, env.block.height)?;
@@ -598,7 +606,7 @@ pub fn deposit(
             attr("depositor", info.sender.to_string()),
             attr("recipient", depositor.to_string()),
             attr("deposit_amount", deposit_amount.to_string()),
-            attr("tickets", amount_tickets.to_string()),
+            attr("tickets", number_of_new_tickets.to_string()),
             attr("aust_minted", minted_aust.to_string()),
         ]))
 }

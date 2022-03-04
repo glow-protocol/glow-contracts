@@ -29,12 +29,8 @@ pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
     .unwrap();
 
     let ExecuteLotteryRedeemedAustInfo {
-        value_of_user_aust_to_be_redeemed_for_lottery,
-        user_aust_to_redeem,
-        value_of_sponsor_aust_to_be_redeemed_for_lottery,
-        sponsor_aust_to_redeem,
-        aust_to_redeem,
         aust_to_redeem_value,
+        ..
     } = calculate_value_of_aust_to_be_redeemed_for_lottery(
         &state,
         &pool,

@@ -6,8 +6,8 @@ use crate::helpers::{
     base64_encoded_tickets_to_vec_string_tickets,
     calculate_value_of_aust_to_be_redeemed_for_lottery, calculate_winner_prize,
     claim_unbonded_withdrawals, compute_global_operator_reward, compute_operator_reward,
-    compute_sponsor_reward, handle_depositor_operator_updates, is_valid_sequence,
-    pseudo_random_seq, uint256_times_decimal256_ceil, ExecuteLotteryRedeemedAustInfo,
+    compute_sponsor_reward, decimal_from_ratio_or_one, handle_depositor_operator_updates,
+    is_valid_sequence, pseudo_random_seq, ExecuteLotteryRedeemedAustInfo,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -457,17 +457,15 @@ pub fn deposit(
         deps.as_ref(),
         coin(deposit_amount.into(), config.stable_denom.clone()),
     )?;
+
     let post_tax_deposit_amount = Uint256::from(net_coin_amount.amount);
 
     // Get the number of minted aust
     let minted_aust = post_tax_deposit_amount / aust_exchange_rate;
 
     // Get the amount of minted_shares
-    // by multiplying the number of minted_shares by the ratio of total_user_shares to total_user_aust
-    // TODO figure out why this is correct
-    // shares can be decimals
     let minted_shares =
-        minted_aust * Decimal256::from_ratio(pool.total_user_shares, pool.total_user_aust);
+        minted_aust * decimal_from_ratio_or_one(pool.total_user_shares, pool.total_user_aust);
 
     let post_transaction_depositor_shares = depositor_info.shares + minted_shares;
 
@@ -489,7 +487,7 @@ pub fn deposit(
 
     // Check if we need to round up the number of combinations based on the depositor's mixed_tax_post_transaction_lottery_deposit
     let mut new_combinations = combinations;
-    if post_transaction_max_depositor_tickets >= raw_post_transaction_num_depositor_tickets + 1 {
+    if post_transaction_max_depositor_tickets > raw_post_transaction_num_depositor_tickets {
         let current_time = env.block.time.nanos();
         let sequence = pseudo_random_seq(
             info.sender.clone().into_string(),
@@ -748,11 +746,11 @@ pub fn execute_sponsor_withdraw(
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let mut state = STATE.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
     // Get the contract's aust balance
-    let contract_a_balance = query_token_balance(
+    let _contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
         env.clone().contract.address,
@@ -866,7 +864,7 @@ pub fn execute_withdraw(
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
     // Get the contract's aust balance
-    let contract_a_balance = query_token_balance(
+    let _contract_a_balance = query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
         env.clone().contract.address,
@@ -901,8 +899,10 @@ pub fn execute_withdraw(
         * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
         * aust_exchange_rate;
 
+    let aust_amount = amount.map(|v| Uint256::from(v) / aust_exchange_rate);
+
     // Get the number of withdrawn shares
-    let withdrawn_shares = amount
+    let withdrawn_shares = aust_amount
         .map(|v| {
             std::cmp::max(
                 Uint256::from(v.multiply_ratio(pool.total_user_shares, pool.total_user_aust)),
@@ -915,11 +915,12 @@ pub fn execute_withdraw(
     let withdrawn_aust =
         withdrawn_shares.multiply_ratio(pool.total_user_aust, pool.total_user_shares);
 
-    // TODO Revisit
-    if withdrawn_aust > depositor_info.shares {
+    let withdrawn_aust_value = withdrawn_aust * aust_exchange_rate;
+
+    if withdrawn_aust_value > depositor_balance {
         return Err(ContractError::SpecifiedWithdrawAmountTooBig {
-            amount: Uint128::from(withdrawn_aust),
-            depositor_balance: depositor_info.shares,
+            amount: Uint128::from(withdrawn_aust_value),
+            depositor_balance,
         });
     }
 
@@ -963,11 +964,6 @@ pub fn execute_withdraw(
         })?;
     }
 
-    // Total aust to redeem calculations
-
-    // Get the value of the redeemed aust. total_aust_to_redeem * rate
-    let total_aust_to_redeem_value = withdrawn_aust * aust_exchange_rate;
-
     // Update operator information
     if depositor_info.operator_registered() {
         let mut operator = read_operator_info(deps.storage, &depositor_info.operator_addr);
@@ -1000,10 +996,7 @@ pub fn execute_withdraw(
     let mut return_amount = Uint256::from(
         deduct_tax(
             deps.as_ref(),
-            coin(
-                total_aust_to_redeem_value.into(),
-                config.clone().stable_denom,
-            ),
+            coin(withdrawn_aust_value.into(), config.clone().stable_denom),
         )?
         .amount,
     );
@@ -1933,7 +1926,7 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
         &state,
         &pool,
         &config,
-        Uint256::from(contract_a_balance),
+        contract_a_balance,
         aust_exchange_rate,
     );
 
@@ -2013,9 +2006,10 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
 
     // migrate pool to include total lottery deposits delegated/operated
     let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
+    // TODO Revisit
     let new_pool = Pool {
-        total_user_aust: old_pool.total_user_aust,
-        total_user_shares: old_pool.total_user_shares,
+        total_user_aust: Uint256::zero(),
+        total_user_shares: Uint256::zero(),
         total_sponsor_lottery_deposits: old_pool.total_sponsor_lottery_deposits,
         total_operator_shares: Uint256::zero(),
     };

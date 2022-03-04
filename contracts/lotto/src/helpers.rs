@@ -309,6 +309,7 @@ pub fn count_seq_matches(a: &str, b: &str) -> u8 {
     count
 }
 
+#[allow(dead_code)]
 pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
     // Check for rounding error
     let rounded_output = a * b;
@@ -366,7 +367,7 @@ pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
     let user_aust_to_redeem = value_of_user_aust_to_be_redeemed_for_lottery / aust_exchange_rate;
 
     // Sponsor balance equals aust_balance - total_user_aust
-    let total_sponsor_aust = Uint256::from(contract_a_balance) - pool.total_user_aust;
+    let total_sponsor_aust = contract_a_balance - pool.total_user_aust;
 
     // This should equal aust_sponsor_balance * (rate - state.last_lottery_exchange_rate) * config.split_factor;
     let value_of_sponsor_aust_to_be_redeemed_for_lottery =
@@ -397,11 +398,10 @@ pub fn calculate_depositor_balance(
     aust_exchange_rate: Decimal256,
 ) -> Uint256 {
     // Calculate the depositor's balance from their aust balance
-    let depositor_balance = pool.total_user_aust
-        * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
-        * aust_exchange_rate;
 
-    depositor_balance
+    pool.total_user_aust
+        * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
+        * aust_exchange_rate
 }
 
 pub fn base64_encoded_tickets_to_vec_string_tickets(
@@ -455,4 +455,12 @@ pub fn vec_binary_tickets_to_vec_string_tickets(vec_binary_tickets: Vec<[u8; 3]>
         .iter()
         .map(hex::encode)
         .collect::<Vec<String>>()
+}
+
+pub fn decimal_from_ratio_or_one(a: Uint256, b: Uint256) -> Decimal256 {
+    if a == Uint256::zero() && b == Uint256::zero() {
+        return Decimal256::one();
+    }
+
+    Decimal256::from_ratio(a, b)
 }

@@ -4912,7 +4912,11 @@ pub fn simulate_many_lotteries_with_one_depositor() {
             Decimal256::from_uint256(Uint256::from(sent_amount)) * exchange_rate
                 / Decimal256::from_uint256(pool_size_appreciation);
 
-        assert!(percent_appreciation_towards_lottery <= Decimal256::percent(SPLIT_FACTOR));
+        assert!(
+            percent_appreciation_towards_lottery
+                >= Decimal256::percent(SPLIT_FACTOR) - Decimal256::permille(100)
+                && percent_appreciation_towards_lottery <= Decimal256::percent(SPLIT_FACTOR)
+        );
 
         if i % 5 == 0 {
             println!(
@@ -5039,7 +5043,11 @@ pub fn simulate_many_lotteries_with_one_depositor() {
             Decimal256::from_uint256(Uint256::from(sent_amount)) * exchange_rate
                 / Decimal256::from_uint256(pool_size_appreciation);
 
-        assert!(percent_appreciation_towards_lottery <= Decimal256::percent(SPLIT_FACTOR));
+        assert!(
+            percent_appreciation_towards_lottery
+                >= Decimal256::percent(SPLIT_FACTOR) - Decimal256::permille(100)
+                && percent_appreciation_towards_lottery <= Decimal256::percent(SPLIT_FACTOR)
+        );
 
         if i % 5 == 0 {
             println!(

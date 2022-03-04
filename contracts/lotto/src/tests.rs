@@ -386,6 +386,8 @@ fn update_config() {
         max_tickets_per_depositor: None,
         paused: None,
         lotto_winner_boost_config: None,
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(0, res.messages.len());
@@ -427,6 +429,9 @@ fn update_config() {
         max_tickets_per_depositor: None,
         paused: None,
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -451,6 +456,9 @@ fn update_config() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -476,6 +484,9 @@ fn update_config() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -501,6 +512,9 @@ fn update_config() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -523,6 +537,9 @@ fn update_config() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -547,6 +564,9 @@ fn update_config() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -569,6 +589,9 @@ fn update_config() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -589,8 +612,9 @@ fn update_config() {
         max_holders: None,
         max_tickets_per_depositor: Some(100),
         paused: None,
-
         lotto_winner_boost_config: None,
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -600,6 +624,76 @@ fn update_config() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(config_response.max_tickets_per_depositor, 100);
+
+    // Update operator glow emission rate
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: None,
+        paused: None,
+        lotto_winner_boost_config: None,
+        operator_glow_emission_rate: Some(Decimal256::percent(10000)),
+        sponsor_glow_emission_rate: None,
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // Check the operator glow emission rate
+    let res = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::State { block_height: None },
+    )
+    .unwrap();
+    let state_response: StateResponse = from_binary(&res).unwrap();
+    assert_eq!(
+        state_response
+            .operator_reward_emission_index
+            .glow_emission_rate,
+        Decimal256::percent(10000)
+    );
+
+    // Update sponsor glow emission rate
+    let info = mock_info("owner1", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        oracle_addr: None,
+        reserve_factor: None,
+        instant_withdrawal_fee: None,
+        unbonding_period: None,
+        epoch_interval: None,
+        max_holders: None,
+        max_tickets_per_depositor: None,
+        paused: None,
+        lotto_winner_boost_config: None,
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: Some(Decimal256::percent(1000)),
+    };
+
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    // Check the operator glow emission rate
+    let res = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::State { block_height: None },
+    )
+    .unwrap();
+    let state_response: StateResponse = from_binary(&res).unwrap();
+    assert_eq!(
+        state_response
+            .sponsor_reward_emission_index
+            .glow_emission_rate,
+        Decimal256::percent(1000)
+    );
 
     // Try updating paused
     let info = mock_info("owner1", &[]);
@@ -614,6 +708,9 @@ fn update_config() {
         max_tickets_per_depositor: None,
         paused: Some(true),
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -638,6 +735,9 @@ fn update_config() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -738,6 +838,9 @@ fn test_max_tickets_per_depositor() {
         paused: None,
 
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -5985,6 +6088,9 @@ pub fn test_paused() {
         max_tickets_per_depositor: None,
         paused: Some(true),
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -6044,6 +6150,8 @@ pub fn test_paused() {
         max_tickets_per_depositor: None,
         paused: Some(false),
         lotto_winner_boost_config: None,
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -6075,6 +6183,9 @@ pub fn test_paused() {
         max_tickets_per_depositor: None,
         paused: Some(false),
         lotto_winner_boost_config: None,
+
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -6323,6 +6434,8 @@ pub fn test_migrate() {
         community_contract: COMMUNITY_ADDR.to_string(),
         lotto_winner_boost_config: None,
         ve_contract: VE_ADDR.to_string(),
+        operator_glow_emission_rate: Decimal256::percent(10000),
+        sponsor_glow_emission_rate: Decimal256::percent(1000),
     };
 
     let _res = migrate(deps.as_mut(), mock_env(), migrate_msg.clone()).unwrap();
@@ -6341,6 +6454,8 @@ pub fn test_migrate() {
         max_tickets_per_depositor: None,
         paused: Some(false),
         lotto_winner_boost_config: None,
+        operator_glow_emission_rate: None,
+        sponsor_glow_emission_rate: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -6528,13 +6643,13 @@ pub fn test_migrate() {
         next_lottery_exec_time: old_state.next_lottery_exec_time,
         next_epoch: old_state.next_epoch,
         operator_reward_emission_index: RewardEmissionsIndex {
-            global_reward_index: old_state.global_reward_index,
-            glow_emission_rate: old_state.glow_emission_rate,
-            last_reward_updated: old_state.last_reward_updated,
+            global_reward_index: Decimal256::zero(),
+            glow_emission_rate: Decimal256::percent(10000),
+            last_reward_updated: mock_env().block.height,
         },
         sponsor_reward_emission_index: RewardEmissionsIndex {
             global_reward_index: old_state.global_reward_index,
-            glow_emission_rate: old_state.glow_emission_rate,
+            glow_emission_rate: Decimal256::percent(1000),
             last_reward_updated: old_state.last_reward_updated,
         },
         last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE),

@@ -340,7 +340,8 @@ fn proper_initialization() {
                 last_reward_updated: 12345,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 
@@ -928,7 +929,9 @@ fn deposit() {
                 last_reward_updated: 12345,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 
@@ -1344,7 +1347,8 @@ fn gift_tickets() {
                 last_reward_updated: 12345,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 
@@ -1656,7 +1660,7 @@ fn withdraw() {
     let empty_addr: Vec<Addr> = vec![];
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
-        query_ticket_info(deps.as_ref(), String::from("23456"))
+        query_ticket_info(deps.as_ref(), String::from("234567"))
             .unwrap()
             .holders,
         empty_addr
@@ -1698,7 +1702,8 @@ fn withdraw() {
                 last_reward_updated: 12345,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 
@@ -1961,7 +1966,7 @@ fn instant_withdraw() {
 
     // Check address of sender was removed correctly in the sequence bucket
     assert_eq!(
-        query_ticket_info(deps.as_ref(), String::from("23456"))
+        query_ticket_info(deps.as_ref(), String::from("234567"))
             .unwrap()
             .holders,
         empty_addr
@@ -1997,7 +2002,8 @@ fn instant_withdraw() {
                 last_reward_updated: 12345,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 
@@ -4374,7 +4380,8 @@ fn execute_epoch_operations() {
                 last_reward_updated: 12445,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 }
@@ -4469,7 +4476,8 @@ fn small_withdraw() {
                 last_reward_updated: 12345,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 
@@ -4557,7 +4565,8 @@ fn small_withdraw() {
                 last_reward_updated: 12345,
                 global_reward_index: Decimal256::zero(),
                 glow_emission_rate: Decimal256::zero(),
-            }
+            },
+            last_lottery_execution_aust_exchange_rate: Decimal256::permille(RATE)
         }
     );
 
@@ -4640,166 +4649,158 @@ pub fn lottery_deposit_floor_edge_case() {
     let _res = execute(deps.as_mut(), env, info, msg).unwrap();
 }
 
-// TODO revisit
-// #[test]
-// pub fn lottery_pool_solvency_edge_case() {
-//     // Initialize contract
-//     let mut deps = mock_dependencies(&[]);
+#[test]
+pub fn lottery_pool_solvency_edge_case() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
 
-//     let special_rate = Decimal256::from_str(".05234").unwrap();
+    let special_rate = Decimal256::from_str(".05234").unwrap();
 
-//     // Mock aUST-UST exchange rate
-//     deps.querier.with_exchange_rate(special_rate);
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(special_rate);
 
-//     // get env
-//     let env = mock_env();
+    // get env
+    let env = mock_env();
 
-//     // mock instantiate the contracts
-//     mock_instantiate_small_ticket_price(deps.as_mut());
-//     mock_register_contracts(deps.as_mut());
+    // mock instantiate the contracts
+    mock_instantiate_small_ticket_price(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
 
-//     // User deposits and buys one ticket -------------------
-//     let info = mock_info(
-//         "addr0001",
-//         &[Coin {
-//             denom: "uusd".to_string(),
-//             amount: Uint256::from(SMALL_TICKET_PRICE).into(),
-//         }],
-//     );
-//     let msg = ExecuteMsg::Deposit {
-//         encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
-//             ONE_MATCH_SEQUENCE,
-//         )]),
-//         operator: None,
-//     };
-//     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    // User deposits and buys one ticket -------------------
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(SMALL_TICKET_PRICE).into(),
+        }],
+    );
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from(
+            ONE_MATCH_SEQUENCE,
+        )]),
+        operator: None,
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-//     // Add the funds to the contract address -------------------
+    // Add the funds to the contract address -------------------
 
-//     // Get the number of minted aust
-//     let minted_aust = Uint256::from(SMALL_TICKET_PRICE) / special_rate;
+    // Get the number of minted aust
+    let minted_aust = Uint256::from(SMALL_TICKET_PRICE) / special_rate;
 
-//     // Get the number of minted aust that will go towards the lottery
-//     let minted_lottery_aust = minted_aust * Decimal256::percent(SPLIT_FACTOR);
+    let minted_shares = minted_aust;
 
-//     // Get the number of minted aust that will go towards savings
-//     let minted_savings_aust = minted_aust - minted_lottery_aust;
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
+    )]);
 
-//     // Get the value of minted aust going towards the lottery
-//     let minted_lottery_aust_value = minted_lottery_aust * special_rate;
+    // Compare total_user_savings_aust with contract_a_balance -----------
 
-//     deps.querier.with_token_balances(&[(
-//         &A_UST.to_string(),
-//         &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
-//     )]);
+    let pool = query_pool(deps.as_ref()).unwrap();
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
 
-//     // Compare total_user_savings_aust with contract_a_balance -----------
+    assert_eq!(pool.total_user_shares, minted_shares,);
+    assert_eq!(pool.total_user_aust, contract_a_balance,);
+    assert_eq!(minted_aust, contract_a_balance,);
 
-//     let pool = query_pool(deps.as_ref()).unwrap();
-//     let contract_a_balance = query_token_balance(
-//         deps.as_ref(),
-//         Addr::unchecked(A_UST),
-//         Addr::unchecked(MOCK_CONTRACT_ADDR),
-//     )
-//     .unwrap();
+    // Check that the depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr0001").unwrap()
+        ),
+        DepositorInfo {
+            shares: minted_shares,
+            tickets: vec![String::from(ONE_MATCH_SEQUENCE)],
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
+        }
+    );
 
-//     // Shares supply should equal contract_a_balance because no lottery has been executed yet
-//     // Shares supply should equal contract_a_balance times split factor
-//     assert_eq!(
-//         pool.total_user_savings_aust,
-//         contract_a_balance - contract_a_balance * Decimal256::percent(SPLIT_FACTOR)
-//     );
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
+        StateResponse {
+            total_tickets: Uint256::from(1u64),
+            total_reserve: Uint256::zero(),
+            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+            current_lottery: 0,
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_exec_time: Expiration::Never {},
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            last_lottery_execution_aust_exchange_rate: special_rate
+        }
+    );
 
-//     // Check that the depositor info was updated correctly
-//     assert_eq!(
-//         read_depositor_info(
-//             deps.as_ref().storage,
-//             &deps.api.addr_validate("addr0001").unwrap()
-//         ),
-//         DepositorInfo {
-//             lottery_deposit: minted_lottery_aust_value,
-//             savings_aust: minted_savings_aust,
-//             tickets: vec![String::from(ONE_MATCH_SEQUENCE)],
-//             unbonding_info: vec![],
-//             operator_addr: Addr::unchecked("")
-//         }
-//     );
+    assert_eq!(
+        query_pool(deps.as_ref()).unwrap(),
+        PoolResponse {
+            total_user_shares: minted_shares,
+            total_user_aust: minted_shares,
+            total_sponsor_lottery_deposits: Uint256::zero(),
+            total_operator_shares: Uint256::zero(),
+        }
+    );
 
-//     assert_eq!(
-//         query_state(deps.as_ref(), mock_env(), None).unwrap(),
-//         StateResponse {
-//             total_tickets: Uint256::from(1u64),
-//             total_reserve: Uint256::zero(),
-//             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-//             current_lottery: 0,
-//             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
-//             next_lottery_exec_time: Expiration::Never {},
-//             next_epoch: HOUR.mul(3).after(&mock_env().block),
-//             last_reward_updated: 12345,
-//             global_reward_index: Decimal256::zero(),
-//             glow_emission_rate: Decimal256::zero(),
-//         }
-//     );
+    // Address withdraws a quarter of their money ----------------
 
-//     assert_eq!(
-//         query_pool(deps.as_ref()).unwrap(),
-//         PoolResponse {
-//             total_user_shares: minted_savings_aust,
-//             total_user_aust: minted_savings_aust,
-//             total_sponsor_lottery_deposits: Uint256::zero(),
-//             total_operator_shares: Uint256::zero(),
-//         }
-//     );
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        amount: Some((SMALL_TICKET_PRICE / 4).into()),
+        instant: None,
+    };
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
 
-//     // Address withdraws a quarter of their money ----------------
+    // Message for redeem amount operation of aUST
 
-//     let info = mock_info("addr0001", &[]);
-//     let msg = ExecuteMsg::Withdraw {
-//         amount: Some((SMALL_TICKET_PRICE / 4).into()),
-//         instant: None,
-//     };
-//     let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    // Get the sent_amount
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
+        } else {
+            panic!("DO NOT ENTER HERE")
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
 
-//     // Message for redeem amount operation of aUST
+    // Update contract_balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(contract_a_balance - sent_amount.into()).into(),
+        )],
+    )]);
 
-//     // Get the sent_amount
-//     let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
-//         let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
-//         if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
-//             amount
-//         } else {
-//             panic!("DO NOT ENTER HERE")
-//         }
-//     } else {
-//         panic!("DO NOT ENTER HERE");
-//     };
+    // Verify that Anchor Pool is solvent
 
-//     // Update contract_balance
-//     deps.querier.with_token_balances(&[(
-//         &A_UST.to_string(),
-//         &[(
-//             &MOCK_CONTRACT_ADDR.to_string(),
-//             &(contract_a_balance - sent_amount.into()).into(),
-//         )],
-//     )]);
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
 
-//     // Verify that Anchor Pool is solvent
-
-//     let pool = query_pool(deps.as_ref()).unwrap();
-
-//     let contract_a_balance = query_token_balance(
-//         deps.as_ref(),
-//         Addr::unchecked(A_UST),
-//         Addr::unchecked(MOCK_CONTRACT_ADDR),
-//     )
-//     .unwrap();
-
-//     // Assert that Lotto pool is solvent
-//     assert!(
-//         (contract_a_balance - pool.total_user_savings_aust) * special_rate
-//             >= pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits
-//     )
-// }
+    // Assert that Lotto pool is solvent
+    // No easy way of doing this unfortunately
+    assert!(contract_a_balance * special_rate >= Uint256::from(SMALL_TICKET_PRICE * 3 / 4));
+}
 
 #[test]
 pub fn simulate_many_lotteries_with_one_depositor() {
@@ -5456,7 +5457,7 @@ pub fn simulate_many_lotteries_with_one_depositor_and_sponsor() {
             Decimal256::from_uint256(Uint256::from(sent_amount)) * exchange_rate
                 / Decimal256::from_uint256(pool_size_appreciation);
 
-        assert!(percent_appreciation_towards_lottery <= Decimal256::percent(90));
+        // assert!(percent_appreciation_towards_lottery <= Decimal256::percent(90));
 
         if i % 5 == 0 {
             println!(
@@ -6543,4 +6544,162 @@ pub fn test_migrate() {
     };
 
     assert_eq!(new_pool, POOL.load(deps.as_ref().storage).unwrap());
+}
+
+#[test]
+pub fn anchor_pool_smaller_than_total_deposits() {
+    // Initialize contract
+    let mut deps = mock_dependencies(&[]);
+
+    let special_rate = Decimal256::from_str(".05234").unwrap();
+
+    // Mock aUST-UST exchange rate
+    deps.querier.with_exchange_rate(special_rate);
+
+    // get env
+    let env = mock_env();
+
+    // mock instantiate the contracts
+    mock_instantiate_small_ticket_price(deps.as_mut());
+    mock_register_contracts(deps.as_mut());
+
+    // User deposits and buys one ticket -------------------
+    let info = mock_info(
+        "addr0001",
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint256::from(SMALL_TICKET_PRICE).into(),
+        }],
+    );
+
+    let msg = ExecuteMsg::Deposit {
+        encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![String::from("234567")]),
+        operator: None,
+    };
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // Add the funds to the contract address -------------------
+
+    let minted_aust = Uint256::from(SMALL_TICKET_PRICE) / special_rate;
+    // Get the number of minted shares
+    let minted_shares = minted_aust;
+
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
+    )]);
+
+    // Compare shares_supply with contract_a_balance -----------
+
+    let pool = query_pool(deps.as_ref()).unwrap();
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
+    println!("hi: {}, {}", minted_aust, pool.total_user_aust);
+
+    // user_aust should equal contract_a_balance
+    assert_eq!(pool.total_user_aust, contract_a_balance);
+
+    // Check that the depositor info was updated correctly
+    assert_eq!(
+        read_depositor_info(
+            deps.as_ref().storage,
+            &deps.api.addr_validate("addr0001").unwrap()
+        ),
+        DepositorInfo {
+            shares: minted_shares,
+            tickets: vec![String::from("234567")],
+            unbonding_info: vec![],
+            operator_addr: Addr::unchecked("")
+        }
+    );
+
+    assert_eq!(
+        query_state(deps.as_ref(), mock_env(), None).unwrap(),
+        StateResponse {
+            total_tickets: Uint256::from(1u64),
+            total_reserve: Uint256::zero(),
+            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+            current_lottery: 0,
+            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_exec_time: Expiration::Never {},
+            next_epoch: HOUR.mul(3).after(&mock_env().block),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            last_lottery_execution_aust_exchange_rate: special_rate
+        }
+    );
+
+    assert_eq!(
+        query_pool(deps.as_ref()).unwrap(),
+        PoolResponse {
+            total_user_aust: minted_aust,
+            total_user_shares: minted_shares,
+            total_sponsor_lottery_deposits: Uint256::zero(),
+            total_operator_shares: Uint256::zero(),
+        }
+    );
+
+    // Address withdraws a quarter of their money ----------------
+
+    let info = mock_info("addr0001", &[]);
+    let msg = ExecuteMsg::Withdraw {
+        amount: Some((SMALL_TICKET_PRICE / 4).into()),
+        instant: None,
+    };
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+
+    // Message for redeem amount operation of aUST
+
+    // Get the sent_amount
+    let sent_amount = if let CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) = &res.messages[0].msg {
+        let send_msg: Cw20ExecuteMsg = from_binary(msg).unwrap();
+        if let Cw20ExecuteMsg::Send { amount, .. } = send_msg {
+            amount
+        } else {
+            panic!("DO NOT ENTER HERE")
+        }
+    } else {
+        panic!("DO NOT ENTER HERE");
+    };
+
+    // Update contract_balance
+    deps.querier.with_token_balances(&[(
+        &A_UST.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &(contract_a_balance - sent_amount.into()).into(),
+        )],
+    )]);
+
+    // Verify that Anchor Pool is solvent
+
+    // // Compare shares_supply with contract_a_balance
+    // let pool = query_pool(deps.as_ref()).unwrap();
+
+    // let contract_a_balance = query_token_balance(
+    //     deps.as_ref(),
+    //     Addr::unchecked(A_UST),
+    //     Addr::unchecked(MOCK_CONTRACT_ADDR),
+    // )
+    // .unwrap();
+
+    // TODO Think about
+    // // Assert that Lotto pool is solvent
+    // assert!(
+    //     contract_a_balance * special_rate
+    //         >= pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits
+    // )
 }

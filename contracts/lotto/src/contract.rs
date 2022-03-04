@@ -1747,6 +1747,7 @@ pub fn query_state(deps: Deps, env: Env, _block_height: Option<u64>) -> StdResul
         next_epoch: state.next_epoch,
         operator_reward_emission_index: state.operator_reward_emission_index,
         sponsor_reward_emission_index: state.sponsor_reward_emission_index,
+        last_lottery_execution_aust_exchange_rate: state.last_lottery_execution_aust_exchange_rate,
     })
 }
 

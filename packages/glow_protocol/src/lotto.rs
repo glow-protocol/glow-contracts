@@ -218,6 +218,7 @@ pub struct StateResponse {
     pub next_epoch: Expiration,
     pub operator_reward_emission_index: RewardEmissionsIndex,
     pub sponsor_reward_emission_index: RewardEmissionsIndex,
+    pub last_lottery_execution_aust_exchange_rate: Decimal256,
 }
 
 // We define a custom struct for each query response

@@ -5,12 +5,13 @@ use crate::error::ContractError;
 use crate::helpers::{
     base64_encoded_tickets_to_vec_string_tickets,
     calculate_value_of_aust_to_be_redeemed_for_lottery, calculate_winner_prize,
-    claim_unbonded_withdrawals, compute_global_operator_reward, compute_operator_reward,
-    compute_sponsor_reward, decimal_from_ratio_or_one, handle_depositor_operator_updates,
-    is_valid_sequence, pseudo_random_seq, ExecuteLotteryRedeemedAustInfo,
+    claim_unbonded_withdrawals, compute_global_operator_reward, compute_global_sponsor_reward,
+    compute_operator_reward, compute_sponsor_reward, decimal_from_ratio_or_one,
+    handle_depositor_operator_updates, is_valid_sequence, pseudo_random_seq,
+    ExecuteLotteryRedeemedAustInfo,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
-use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
+use crate::querier::{query_balance, query_exchange_rate};
 use crate::state::{
     old_read_depositors, old_read_lottery_info, old_remove_depositor_info, old_remove_lottery_info,
     parse_length, read_depositor_info, read_depositor_stats, read_depositor_stats_at_height,
@@ -33,8 +34,8 @@ use glow_protocol::lotto::{
     BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorStatsResponse,
     DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg, InstantiateMsg,
     LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, OperatorInfoResponse, PoolResponse,
-    PrizeInfoResponse, PrizeInfosResponse, QueryMsg, SponsorInfoResponse, StateResponse,
-    TicketInfoResponse,
+    PrizeInfoResponse, PrizeInfosResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse,
+    StateResponse, TicketInfoResponse,
 };
 use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
@@ -178,9 +179,17 @@ pub fn instantiate(
             )),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
-            last_operator_reward_updated: env.block.height,
-            global_operator_reward_index: Decimal256::zero(),
-            glow_operator_emission_rate: msg.initial_emission_rate,
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: env.block.height,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: msg.initial_operator_glow_emission_rate,
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: env.block.height,
+                global_reward_index: Decimal256::zero(),
+                // TODO different initial emission rate
+                glow_emission_rate: msg.initial_sponsor_glow_emission_rate,
+            },
             last_lottery_execution_aust_exchange_rate: aust_exchange_rate,
         },
     )?;
@@ -652,7 +661,7 @@ pub fn execute_sponsor(
         return Err(ContractError::ZeroSponsorshipAmount {});
     }
 
-    // compute_global_operator_reward(&mut state, &pool, env.block.height);
+    compute_global_sponsor_reward(&mut state, &pool, env.block.height);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -746,7 +755,7 @@ pub fn execute_sponsor_withdraw(
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let state = STATE.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
     // Get the contract's aust balance
@@ -777,25 +786,9 @@ pub fn execute_sponsor_withdraw(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // TODO
-    // // Validate that the value of the contract's lottery aust is always at least the
-    // // sum of the value of the user savings aust and lottery deposits.
-    // // This check should never fail but is in place as an extra safety measure.
-    // let lottery_pool_value =
-    //     (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
-
-    // if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-    // {
-    //     return Err(ContractError::InsufficientPoolFunds {
-    //         pool_value: lottery_pool_value,
-    //         total_lottery_deposits: pool.total_user_lottery_deposits
-    //             + pool.total_sponsor_lottery_deposits,
-    //     });
-    // }
-
-    // // Compute Glow depositor rewards
-    // compute_global_operator_reward(&mut state, &pool, env.block.height);
-    // compute_sponsor_reward(&state, &mut sponsor_info);
+    // Compute Glow depositor rewards
+    compute_global_sponsor_reward(&mut state, &pool, env.block.height);
+    compute_sponsor_reward(&state, &mut sponsor_info);
 
     let aust_to_redeem = sponsor_info.lottery_deposit / rate;
     let aust_to_redeem_value = aust_to_redeem * rate;
@@ -905,7 +898,7 @@ pub fn execute_withdraw(
     let withdrawn_shares = aust_amount
         .map(|v| {
             std::cmp::max(
-                Uint256::from(v.multiply_ratio(pool.total_user_shares, pool.total_user_aust)),
+                v.multiply_ratio(pool.total_user_shares, pool.total_user_aust),
                 Uint256::one(),
             )
         })
@@ -926,7 +919,7 @@ pub fn execute_withdraw(
 
     // Get the depositor's balance post withdraw
     let post_transaction_depositor_balance = (pool.total_user_aust - withdrawn_aust)
-        * Decimal256::from_ratio(
+        * decimal_from_ratio_or_one(
             depositor_info.shares - withdrawn_shares,
             pool.total_user_shares - withdrawn_shares,
         )
@@ -967,16 +960,18 @@ pub fn execute_withdraw(
     // Update operator information
     if depositor_info.operator_registered() {
         let mut operator = read_operator_info(deps.storage, &depositor_info.operator_addr);
-        // TODO revisit
-        // // update the glow reward index
-        // compute_global_operator_reward(&mut state, &pool, env.block.height);
-        // // update the glow depositor reward for the depositor
-        // compute_operator_reward(&state, &mut operator);
+
+        // update the glow reward index
+        compute_global_operator_reward(&mut state, &pool, env.block.height);
+        // update the glow depositor reward for the depositor
+        compute_operator_reward(&state, &mut operator);
 
         // Add new deposit amount
         operator.shares = operator.shares.sub(withdrawn_shares);
+
         // Store new operator info
         store_operator_info(deps.storage, &depositor_info.operator_addr, operator)?;
+
         pool.total_operator_shares = pool.total_operator_shares.sub(withdrawn_shares);
     }
 
@@ -1267,20 +1262,20 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
         return Err(ContractError::NotRegistered {});
     }
 
-    // Get the contract's aust balance
-    let contract_a_balance = Uint256::from(query_token_balance(
-        &deps.querier,
-        config.a_terra_contract.clone(),
-        env.clone().contract.address,
-    )?);
+    // // Get the contract's aust balance
+    // let contract_a_balance = Uint256::from(query_token_balance(
+    //     &deps.querier,
+    //     config.a_terra_contract.clone(),
+    //     env.clone().contract.address,
+    // )?);
 
-    // Get the aust exchange rate
-    let rate = query_exchange_rate(
-        deps.as_ref(),
-        config.anchor_contract.to_string(),
-        env.block.height,
-    )?
-    .exchange_rate;
+    // // Get the aust exchange rate
+    // let rate = query_exchange_rate(
+    //     deps.as_ref(),
+    //     config.anchor_contract.to_string(),
+    //     env.block.height,
+    // )?
+    // .exchange_rate;
 
     // Validate that executing epoch will follow rate limiting
     if !state.next_epoch.is_expired(&env.block) {
@@ -1296,32 +1291,33 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
 
     // Compute global Glow rewards
     compute_global_operator_reward(&mut state, &pool, env.block.height);
+    compute_global_sponsor_reward(&mut state, &pool, env.block.height);
 
-    let carry_over_value = state
-        .prize_buckets
-        .iter()
-        .fold(Uint256::zero(), |sum, val| sum + *val);
+    // let carry_over_value = state
+    //     .prize_buckets
+    //     .iter()
+    //     .fold(Uint256::zero(), |sum, val| sum + *val);
 
-    let ExecuteLotteryRedeemedAustInfo {
-        aust_to_redeem_value,
-        ..
-    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
-        &state,
-        &pool,
-        &config,
-        contract_a_balance,
-        rate,
-    );
+    // let ExecuteLotteryRedeemedAustInfo {
+    //     aust_to_redeem_value,
+    //     ..
+    // } = calculate_value_of_aust_to_be_redeemed_for_lottery(
+    //     &state,
+    //     &pool,
+    //     &config,
+    //     contract_a_balance,
+    //     rate,
+    // );
 
-    // Query updated Glow emission rate and update state
-    state.glow_operator_emission_rate = query_glow_emission_rate(
-        &deps.querier,
-        config.distributor_contract,
-        aust_to_redeem_value + carry_over_value,
-        config.target_award,
-        state.glow_operator_emission_rate,
-    )?
-    .emission_rate;
+    // // Query updated Glow emission rate and update state
+    // state.operator_reward_emission_index.glow_emission_rate = query_glow_emission_rate(
+    //     &deps.querier,
+    //     config.distributor_contract,
+    //     aust_to_redeem_value + carry_over_value,
+    //     config.target_award,
+    //     state.operator_reward_emission_index.glow_emission_rate,
+    // )?
+    // .emission_rate;
 
     // Compute total_reserves to fund gov contract
     let total_reserves = state.total_reserve;
@@ -1350,8 +1346,11 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
         attr("action", "execute_epoch_operations"),
         attr("total_reserves", total_reserves.to_string()),
         attr(
-            "glow_emission_rate",
-            state.glow_operator_emission_rate.to_string(),
+            "operator_emission_rate",
+            state
+                .operator_reward_emission_index
+                .glow_emission_rate
+                .to_string(),
         ),
     ]))
 }
@@ -1376,13 +1375,13 @@ pub fn execute_claim_rewards(
 
     // Compute Glow depositor rewards
     compute_global_operator_reward(&mut state, &pool, env.block.height);
+    compute_global_sponsor_reward(&mut state, &pool, env.block.height);
     compute_sponsor_reward(&state, &mut sponsor);
     compute_operator_reward(&state, &mut operator);
 
     let claim_amount = (operator.pending_rewards + sponsor.pending_rewards) * Uint256::one();
     sponsor.pending_rewards = Decimal256::zero();
     operator.pending_rewards = Decimal256::zero();
-
     STATE.save(deps.storage, &state)?;
     store_sponsor_info(deps.storage, &info.sender, sponsor)?;
     store_operator_info(deps.storage, &info.sender, operator)?;
@@ -1729,21 +1728,11 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     })
 }
 
-pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
+pub fn query_state(deps: Deps, env: Env, _block_height: Option<u64>) -> StdResult<StateResponse> {
     let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    let block_height = if let Some(block_height) = block_height {
-        block_height
-    } else {
-        env.block.height
-    };
-
-    if block_height < state.last_operator_reward_updated {
-        return Err(StdError::generic_err(
-            "Block_height must be greater than last_reward_updated",
-        ));
-    }
+    let block_height = env.block.height;
 
     // Compute reward rate with given block height
     compute_global_operator_reward(&mut state, &pool, block_height);
@@ -1756,9 +1745,8 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
         next_lottery_time: state.next_lottery_time,
         next_lottery_exec_time: state.next_lottery_exec_time,
         next_epoch: state.next_epoch,
-        last_reward_updated: state.last_operator_reward_updated,
-        global_reward_index: state.global_operator_reward_index,
-        glow_emission_rate: state.glow_operator_emission_rate,
+        operator_reward_emission_index: state.operator_reward_emission_index,
+        sponsor_reward_emission_index: state.sponsor_reward_emission_index,
     })
 }
 

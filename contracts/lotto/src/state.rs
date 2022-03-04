@@ -9,7 +9,9 @@ use cosmwasm_std::{Addr, Deps, Order, StdError, StdResult, Storage, Timestamp};
 use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Bound, Item, Map, SnapshotMap, U64Key};
-use glow_protocol::lotto::{BoostConfig, Claim, DepositorInfoResponse, DepositorStatsResponse};
+use glow_protocol::lotto::{
+    BoostConfig, Claim, DepositorInfoResponse, DepositorStatsResponse, RewardEmissionsIndex,
+};
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
@@ -119,9 +121,8 @@ pub struct State {
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
     pub next_epoch: Expiration,
-    pub last_operator_reward_updated: u64,
-    pub global_operator_reward_index: Decimal256,
-    pub glow_operator_emission_rate: Decimal256,
+    pub operator_reward_emission_index: RewardEmissionsIndex,
+    pub sponsor_reward_emission_index: RewardEmissionsIndex,
     pub last_lottery_execution_aust_exchange_rate: Decimal256,
 }
 

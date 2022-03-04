@@ -26,8 +26,8 @@ use crate::test_helpers::{
 use cosmwasm_storage::bucket;
 use cw_storage_plus::U64Key;
 use glow_protocol::lotto::{
-    BoostConfig, MigrateMsg, OperatorInfoResponse, PrizeInfoResponse, NUM_PRIZE_BUCKETS,
-    TICKET_LENGTH,
+    BoostConfig, MigrateMsg, OperatorInfoResponse, PrizeInfoResponse, RewardEmissionsIndex,
+    NUM_PRIZE_BUCKETS, TICKET_LENGTH,
 };
 use lazy_static::lazy_static;
 
@@ -130,7 +130,8 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
-        initial_emission_rate: Decimal256::zero(),
+        initial_sponsor_glow_emission_rate: Decimal256::zero(),
+        initial_operator_glow_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
         max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
         glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
@@ -157,7 +158,8 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
         unbonding_period: WEEK_TIME,
-        initial_emission_rate: Decimal256::zero(),
+        initial_sponsor_glow_emission_rate: Decimal256::zero(),
+        initial_operator_glow_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
         max_tickets_per_depositor: MAX_TICKETS_PER_DEPOSITOR,
         glow_prize_buckets: *GLOW_PRIZE_BUCKETS,
@@ -287,8 +289,22 @@ fn proper_initialization() {
 
     // Check that the glow_emission_rate and last_block_updated are set correctly
     let state = STATE.load(deps.as_ref().storage).unwrap();
-    assert_eq!(state.glow_operator_emission_rate, Decimal256::zero());
-    assert_eq!(state.last_operator_reward_updated, mock_env().block.height);
+    assert_eq!(
+        state.operator_reward_emission_index.glow_emission_rate,
+        Decimal256::zero()
+    );
+    assert_eq!(
+        state.sponsor_reward_emission_index.glow_emission_rate,
+        Decimal256::zero()
+    );
+    assert_eq!(
+        state.operator_reward_emission_index.last_reward_updated,
+        mock_env().block.height
+    );
+    assert_eq!(
+        state.sponsor_reward_emission_index.last_reward_updated,
+        mock_env().block.height
+    );
 
     // Register contracts
     let msg = ExecuteMsg::RegisterContracts {
@@ -315,9 +331,16 @@ fn proper_initialization() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 
@@ -896,9 +919,16 @@ fn deposit() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: (HOUR.mul(3)).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 
@@ -1305,9 +1335,16 @@ fn gift_tickets() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 
@@ -1652,9 +1689,16 @@ fn withdraw() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 
@@ -1697,12 +1741,14 @@ fn withdraw() {
         ]
     );
 
-    deps.querier.with_tax(
-        Decimal::percent(1),
-        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
-    );
+    // Not counting tax
+    // TODO Separate test with taxes
+    // deps.querier.with_tax(
+    //     Decimal::percent(1),
+    //     &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
+    // );
 
-    // Withdraw with a given amount
+    // Deposit one ticket 10 times
     for index in 0..10 {
         let msg = ExecuteMsg::Deposit {
             encoded_tickets: vec_string_tickets_to_encoded_tickets(vec![format!(
@@ -1735,7 +1781,8 @@ fn withdraw() {
 
     // Withdraws half of its tickets
     let msg = ExecuteMsg::Withdraw {
-        amount: Some(Uint256::from(5 * TICKET_PRICE).into()),
+        // Withdraw amount - 1 to avoid rounding issues
+        amount: Some(Uint256::from(5 * TICKET_PRICE - 1).into()),
         instant: None,
     };
 
@@ -1752,8 +1799,15 @@ fn withdraw() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &minted_aust.into())],
     )]);
 
-    // Correct withdraw, user has 5 tickets to be withdrawn
+    // Correct withdraw, user withdraws 5 tickets
     let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let dep = read_depositor_info(
+        deps.as_ref().storage,
+        &deps.api.addr_validate("addr2222").unwrap(),
+    );
+
+    println!("depositor: {:?}", dep);
 
     // Check depositor info was updated correctly
     assert_eq!(
@@ -1763,7 +1817,7 @@ fn withdraw() {
         )
         .tickets,
         vec![
-            // String::from("000005"),
+            format!("{:0length$}", 5, length = TICKET_LENGTH),
             format!("{:0length$}", 6, length = TICKET_LENGTH),
             format!("{:0length$}", 7, length = TICKET_LENGTH),
             format!("{:0length$}", 8, length = TICKET_LENGTH),
@@ -1775,7 +1829,7 @@ fn withdraw() {
         query_state(deps.as_ref(), mock_env(), None)
             .unwrap()
             .total_tickets,
-        Uint256::from(4u64)
+        Uint256::from(5u64)
     );
 
     // Check ticket map is updated correctly
@@ -1816,7 +1870,7 @@ fn withdraw() {
         )
         .tickets,
         vec![
-            // String::from("000006"),
+            format!("{:0length$}", 6, length = TICKET_LENGTH),
             format!("{:0length$}", 7, length = TICKET_LENGTH),
             format!("{:0length$}", 8, length = TICKET_LENGTH),
             format!("{:0length$}", 9, length = TICKET_LENGTH)
@@ -1828,7 +1882,7 @@ fn withdraw() {
             .unwrap()
             .total_tickets,
         // TODO Don't hardcode
-        Uint256::from(3u64)
+        Uint256::from(4u64)
     );
     // Check ticket map is updated correctly
     assert_eq!(
@@ -1934,9 +1988,16 @@ fn instant_withdraw() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 
@@ -2597,7 +2658,7 @@ fn execute_lottery() {
             &pool,
             &config,
             contract_a_balance,
-            Decimal256::permille(RATE),
+            new_rate,
         );
 
     // Verify amount to redeem for the lottery
@@ -2661,6 +2722,14 @@ fn execute_lottery() {
         )],
     )]);
 
+    // Get this contracts aust balance
+    let contract_a_balance = query_token_balance(
+        deps.as_ref(),
+        Addr::unchecked(A_UST),
+        Addr::unchecked(MOCK_CONTRACT_ADDR),
+    )
+    .unwrap();
+
     // Execute 3rd lottery
     let lottery_msg = ExecuteMsg::ExecuteLottery {};
     let info = mock_info("addr0001", &[]);
@@ -2676,7 +2745,7 @@ fn execute_lottery() {
             &pool,
             &config,
             contract_a_balance,
-            Decimal256::permille(RATE),
+            new_rate,
         );
 
     // Check the attributes
@@ -3473,7 +3542,7 @@ fn execute_prize_one_winner_multiple_ranks() {
     let address_raw = deps.api.addr_validate("addr0000").unwrap();
 
     // Get the number of minted aust
-    let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
+    let minted_aust = Uint256::from(TICKET_PRICE) / Decimal256::permille(RATE);
 
     // Get the amount of minted_shares
     let minted_shares = minted_aust * Uint256::from(5u128);
@@ -3924,7 +3993,14 @@ fn test_premature_emissions() {
 
     // Assert that the global_reward_index is still 0
     let state = query_state(deps.as_ref(), env.clone(), Some(env.block.height)).unwrap();
-    assert_eq!(Decimal256::zero(), state.global_reward_index);
+    assert_eq!(
+        state.operator_reward_emission_index.glow_emission_rate,
+        Decimal256::zero()
+    );
+    assert_eq!(
+        state.sponsor_reward_emission_index.glow_emission_rate,
+        Decimal256::zero()
+    );
 
     // Register contracts
     mock_register_contracts(deps.as_mut());
@@ -3935,14 +4011,29 @@ fn test_premature_emissions() {
     let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     let state = query_state(deps.as_ref(), env.clone(), None).unwrap();
-    assert_eq!(state.last_reward_updated, env.block.height);
+    assert_eq!(
+        state.operator_reward_emission_index.last_reward_updated,
+        env.block.height
+    );
+    assert_eq!(
+        state.sponsor_reward_emission_index.last_reward_updated,
+        env.block.height
+    );
 
     let state = query_state(deps.as_ref(), env.clone(), Some(env.block.height)).unwrap();
-    assert_eq!(Decimal256::zero(), state.global_reward_index);
+    assert_eq!(
+        state.operator_reward_emission_index.glow_emission_rate,
+        Decimal256::zero()
+    );
+    assert_eq!(
+        state.sponsor_reward_emission_index.glow_emission_rate,
+        Decimal256::zero()
+    );
 
     // Increase glow emission rate
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_operator_emission_rate = Decimal256::one();
+    state.operator_reward_emission_index.glow_emission_rate = Decimal256::one();
+    state.sponsor_reward_emission_index.glow_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has deposits but zero blocks have passed, so no rewards accrued
@@ -4008,7 +4099,8 @@ fn claim_rewards_one_sponsor() {
     }).unwrap();
      */
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_operator_emission_rate = Decimal256::one();
+    state.operator_reward_emission_index.glow_emission_rate = Decimal256::one();
+    state.sponsor_reward_emission_index.glow_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has no deposits, so no claimable rewards and empty msg returned
@@ -4103,7 +4195,8 @@ fn claim_rewards_one_referrer() {
     let info = mock_info("operator", &[]);
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_operator_emission_rate = Decimal256::one();
+    state.operator_reward_emission_index.glow_emission_rate = Decimal256::one();
+    state.sponsor_reward_emission_index.glow_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has no deposits, so no claimable rewards and empty msg returned
@@ -4178,12 +4271,6 @@ fn claim_rewards_one_referrer() {
     // Get the number of minted aust
     let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);
 
-    // Get the number of minted aust that will go towards the lottery
-    let minted_lottery_aust = minted_aust * Decimal256::percent(SPLIT_FACTOR);
-
-    // Get the value of minted aust going towards the lottery
-    let minted_lottery_aust_value = minted_lottery_aust * Decimal256::permille(RATE);
-
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -4192,8 +4279,8 @@ fn claim_rewards_one_referrer() {
             msg: to_binary(&FaucetExecuteMsg::Spend {
                 recipient: "operator".to_string(),
                 amount: (Decimal256::from_str("100").unwrap()
-                    / Decimal256::from_uint256(minted_lottery_aust_value)
-                    * Decimal256::from_uint256(minted_lottery_aust_value)
+                    / Decimal256::from_uint256(minted_aust)
+                    * Decimal256::from_uint256(minted_aust)
                     * Uint256::one())
                 .into(),
             })
@@ -4216,8 +4303,7 @@ fn claim_rewards_one_referrer() {
     assert_eq!(res.pending_rewards, Decimal256::zero());
     assert_eq!(
         res.reward_index,
-        (Decimal256::from_str("100").unwrap()
-            / Decimal256::from_uint256(minted_lottery_aust_value))
+        (Decimal256::from_str("100").unwrap() / Decimal256::from_uint256(minted_aust))
     );
 }
 
@@ -4276,12 +4362,19 @@ fn execute_epoch_operations() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            last_reward_updated: 12445,
-            global_reward_index: Decimal256::zero(),
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
-            glow_emission_rate: Decimal256::one(),
-            next_epoch: HOUR.mul(3).after(&env.block)
+            next_epoch: HOUR.mul(3).after(&env.block),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12445,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12445,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 }
@@ -4341,10 +4434,7 @@ fn small_withdraw() {
     .unwrap();
 
     // Total user savings aust should equal contract_a_balance minus contract_a_balance times split_factor
-    assert_eq!(
-        pool.total_user_shares,
-        contract_a_balance - contract_a_balance * Decimal256::percent(SPLIT_FACTOR)
-    );
+    assert_eq!(pool.total_user_shares, contract_a_balance);
 
     // Check that the depositor info was updated correctly
     assert_eq!(
@@ -4370,9 +4460,16 @@ fn small_withdraw() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 
@@ -4451,9 +4548,16 @@ fn small_withdraw() {
             next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
-            last_reward_updated: 12345,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: Decimal256::zero(),
+            operator_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            },
+            sponsor_reward_emission_index: RewardEmissionsIndex {
+                last_reward_updated: 12345,
+                global_reward_index: Decimal256::zero(),
+                glow_emission_rate: Decimal256::zero(),
+            }
         }
     );
 
@@ -6004,7 +6108,7 @@ pub fn test_update_depositor_stats() {
     // Store depositor stats
     let addr = Addr::unchecked("addr0000");
     let depositor = DepositorStatsInfo {
-        shares: Uint256::zero(),
+        shares: Uint256::one(),
         num_tickets: 10,
         operator_addr: Addr::unchecked(""),
     };

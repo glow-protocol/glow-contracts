@@ -16,6 +16,13 @@ pub struct BoostConfig {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct RewardEmissionsIndex {
+    pub last_reward_updated: u64,
+    pub global_reward_index: Decimal256,
+    pub glow_emission_rate: Decimal256,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
     pub stable_denom: String,                                // uusd
@@ -34,7 +41,8 @@ pub struct InstantiateMsg {
     pub split_factor: Decimal256, // what % of interest goes to saving and which one lotto pool
     pub instant_withdrawal_fee: Decimal256, // % to be deducted as a fee for instant withdrawals
     pub unbonding_period: u64, // unbonding period after regular withdrawals from pool
-    pub initial_emission_rate: Decimal256, // initial GLOW emission rate for depositor rewards
+    pub initial_operator_glow_emission_rate: Decimal256, // initial GLOW emission rate for operator rewards
+    pub initial_sponsor_glow_emission_rate: Decimal256, // initial GLOW emission rate for sponsor rewards
     pub initial_lottery_execution: u64, // time in seconds for the first Lotto execution
     pub max_tickets_per_depositor: u64, // the maximum number of tickets that a depositor can hold
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS], // glow to be awarded as a bonus to lottery winners
@@ -132,7 +140,7 @@ pub struct MigrateMsg {
 pub enum QueryMsg {
     /// Lotto contract configuration
     Config {},
-    /// Current state. If block_height is provided, return current depositor rewards
+    /// Current state
     State { block_height: Option<u64> },
     /// Lotto pool current state. Savings aust and lottery deposits.
     Pool {},
@@ -208,9 +216,8 @@ pub struct StateResponse {
     pub next_lottery_time: Expiration,
     pub next_lottery_exec_time: Expiration,
     pub next_epoch: Expiration,
-    pub last_reward_updated: u64,
-    pub global_reward_index: Decimal256,
-    pub glow_emission_rate: Decimal256,
+    pub operator_reward_emission_index: RewardEmissionsIndex,
+    pub sponsor_reward_emission_index: RewardEmissionsIndex,
 }
 
 // We define a custom struct for each query response

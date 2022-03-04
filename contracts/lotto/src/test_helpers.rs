@@ -19,7 +19,7 @@ pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
     let config = CONFIG.load(deps.storage).unwrap();
     let state = STATE.load(deps.storage).unwrap();
 
-    let aust_exchange_rate = Decimal256::percent(RATE);
+    let aust_exchange_rate = Decimal256::permille(RATE);
 
     let contract_a_balance = query_token_balance(
         deps,
@@ -35,7 +35,7 @@ pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
         &state,
         &pool,
         &config,
-        Uint256::from(contract_a_balance),
+        contract_a_balance,
         aust_exchange_rate,
     );
 

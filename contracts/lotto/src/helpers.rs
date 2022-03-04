@@ -3,7 +3,7 @@ use std::ops::Add;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, DepsMut, QuerierWrapper, StdError, StdResult, Uint128};
-use glow_protocol::lotto::{BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
+use glow_protocol::lotto::{BoostConfig, RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
 use crate::querier::{
@@ -15,36 +15,67 @@ use crate::state::{
     LotteryInfo, OperatorInfo, Pool, PrizeInfo, SponsorInfo, State,
 };
 
-/// Compute distributed reward and update global reward index
+/// Compute distributed reward and update global reward index for operators
 pub fn compute_global_operator_reward(state: &mut State, pool: &Pool, block_height: u64) {
-    if state.last_operator_reward_updated >= block_height {
+    compute_global_reward(
+        &mut state.operator_reward_emission_index,
+        pool.total_operator_shares,
+        block_height,
+    );
+}
+
+/// Compute distributed reward and update global reward index for sponsors
+pub fn compute_global_sponsor_reward(state: &mut State, pool: &Pool, block_height: u64) {
+    compute_global_reward(
+        &mut state.sponsor_reward_emission_index,
+        pool.total_sponsor_lottery_deposits,
+        block_height,
+    );
+    println!(
+        "global index {}, sponsor index ",
+        state.sponsor_reward_emission_index.global_reward_index
+    );
+}
+
+/// Compute distributed reward and update global reward index
+pub fn compute_global_reward(
+    reward_emission_index: &mut RewardEmissionsIndex,
+    spread: Uint256,
+    block_height: u64,
+) {
+    if reward_emission_index.last_reward_updated >= block_height {
         return;
     }
 
-    // Get the reward accrued since the last call to compute_global_operator_reward
-    let passed_blocks = Decimal256::from_uint256(block_height - state.last_operator_reward_updated);
-    let reward_accrued = passed_blocks * state.glow_operator_emission_rate;
+    // Get the reward accrued since the last call to compute_global_sponsor_reward
+    let passed_blocks =
+        Decimal256::from_uint256(block_height - reward_emission_index.last_reward_updated);
+    let reward_accrued = passed_blocks * reward_emission_index.glow_emission_rate;
 
-    if !reward_accrued.is_zero() && !pool.total_operator_shares.is_zero() {
-        state.global_operator_reward_index +=
-            reward_accrued / Decimal256::from_uint256(pool.total_operator_shares);
+    if !reward_accrued.is_zero() && !spread.is_zero() {
+        reward_emission_index.global_reward_index +=
+            reward_accrued / Decimal256::from_uint256(spread);
     }
 
-    state.last_operator_reward_updated = block_height;
+    reward_emission_index.last_reward_updated = block_height;
 }
 
 /// Compute reward amount an operator/referrer received
 pub fn compute_operator_reward(state: &State, operator: &mut OperatorInfo) {
     operator.pending_rewards += Decimal256::from_uint256(operator.shares)
-        * (state.global_operator_reward_index - operator.reward_index);
-    operator.reward_index = state.global_operator_reward_index;
+        * (state.operator_reward_emission_index.global_reward_index - operator.reward_index);
+    operator.reward_index = state.operator_reward_emission_index.global_reward_index;
 }
 
 /// Compute reward amount a sponsor received
 pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
     sponsor.pending_rewards += Decimal256::from_uint256(sponsor.lottery_deposit)
-        * (state.global_operator_reward_index - sponsor.reward_index);
-    sponsor.reward_index = state.global_operator_reward_index;
+        * (state.sponsor_reward_emission_index.global_reward_index - sponsor.reward_index);
+    sponsor.reward_index = state.sponsor_reward_emission_index.global_reward_index;
+    println!(
+        "sponsor pending: {}, lottery_deposit: {}",
+        sponsor.pending_rewards, sponsor.lottery_deposit
+    );
 }
 
 /// Handles all changes to operator's following a deposit
@@ -246,7 +277,7 @@ pub fn calculate_boost_multiplier(
         && snapshotted_user_shares > Uint256::zero()
     {
         let inverted_user_lottery_deposit_proportion =
-            Decimal256::from_ratio(snapshotted_total_user_shares, snapshotted_user_shares);
+            decimal_from_ratio_or_one(snapshotted_total_user_shares, snapshotted_user_shares);
 
         let user_voting_balance_proportion = Decimal256::from_ratio(
             Uint256::from(snapshotted_user_voting_balance),
@@ -357,6 +388,11 @@ pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
     // Get the aust_user_balance
     let total_user_aust = pool.total_user_aust;
 
+    println!(
+        "aer: {}. last: {}",
+        aust_exchange_rate, state.last_lottery_execution_aust_exchange_rate
+    );
+
     // Get the amount to take from the users
     // Split factor percent of the appreciation since the last lottery
     let value_of_user_aust_to_be_redeemed_for_lottery = total_user_aust
@@ -400,7 +436,7 @@ pub fn calculate_depositor_balance(
     // Calculate the depositor's balance from their aust balance
 
     pool.total_user_aust
-        * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
+        * decimal_from_ratio_or_one(depositor_info.shares, pool.total_user_shares)
         * aust_exchange_rate
 }
 

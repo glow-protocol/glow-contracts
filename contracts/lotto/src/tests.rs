@@ -285,8 +285,8 @@ fn proper_initialization() {
 
     // Check that the glow_emission_rate and last_block_updated are set correctly
     let state = STATE.load(deps.as_ref().storage).unwrap();
-    assert_eq!(state.glow_emission_rate, Decimal256::zero());
-    assert_eq!(state.last_reward_updated, mock_env().block.height);
+    assert_eq!(state.glow_operator_emission_rate, Decimal256::zero());
+    assert_eq!(state.last_operator_reward_updated, mock_env().block.height);
 
     // Register contracts
     let msg = ExecuteMsg::RegisterContracts {
@@ -4054,7 +4054,7 @@ fn test_premature_emissions() {
 
     // Increase glow emission rate
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
+    state.glow_operator_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has deposits but zero blocks have passed, so no rewards accrued
@@ -4120,7 +4120,7 @@ fn claim_rewards_one_sponsor() {
     }).unwrap();
      */
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
+    state.glow_operator_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has no deposits, so no claimable rewards and empty msg returned
@@ -4215,7 +4215,7 @@ fn claim_rewards_one_referrer() {
     let info = mock_info("operator", &[]);
 
     let mut state = STATE.load(deps.as_mut().storage).unwrap();
-    state.glow_emission_rate = Decimal256::one();
+    state.glow_operator_emission_rate = Decimal256::one();
     STATE.save(deps.as_mut().storage, &state).unwrap();
 
     // User has no deposits, so no claimable rewards and empty msg returned

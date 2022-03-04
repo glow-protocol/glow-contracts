@@ -16,36 +16,35 @@ use crate::state::{
 };
 
 /// Compute distributed reward and update global reward index
-pub fn compute_reward(state: &mut State, pool: &Pool, block_height: u64) {
-    if state.last_reward_updated >= block_height {
+pub fn compute_global_operator_reward(state: &mut State, pool: &Pool, block_height: u64) {
+    if state.last_operator_reward_updated >= block_height {
         return;
     }
 
-    let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
-    let reward_accrued = passed_blocks * state.glow_emission_rate;
+    // Get the reward accrued since the last call to compute_global_operator_reward
+    let passed_blocks = Decimal256::from_uint256(block_height - state.last_operator_reward_updated);
+    let reward_accrued = passed_blocks * state.glow_operator_emission_rate;
 
-    let total_deposits_rewards =
-        pool.total_lottery_deposits_operated + pool.total_sponsor_lottery_deposits;
-    if !reward_accrued.is_zero() && !total_deposits_rewards.is_zero() {
-        state.global_reward_index +=
-            reward_accrued / Decimal256::from_uint256(total_deposits_rewards);
+    if !reward_accrued.is_zero() && !pool.total_operator_shares.is_zero() {
+        state.global_operator_reward_index +=
+            reward_accrued / Decimal256::from_uint256(pool.total_operator_shares);
     }
 
-    state.last_reward_updated = block_height;
+    state.last_operator_reward_updated = block_height;
 }
 
 /// Compute reward amount an operator/referrer received
 pub fn compute_operator_reward(state: &State, operator: &mut OperatorInfo) {
-    operator.pending_rewards += Decimal256::from_uint256(operator.lottery_deposit)
-        * (state.global_reward_index - operator.reward_index);
-    operator.reward_index = state.global_reward_index;
+    operator.pending_rewards += Decimal256::from_uint256(operator.shares)
+        * (state.global_operator_reward_index - operator.reward_index);
+    operator.reward_index = state.global_operator_reward_index;
 }
 
 /// Compute reward amount a sponsor received
 pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
     sponsor.pending_rewards += Decimal256::from_uint256(sponsor.lottery_deposit)
-        * (state.global_reward_index - sponsor.reward_index);
-    sponsor.reward_index = state.global_reward_index;
+        * (state.global_operator_reward_index - sponsor.reward_index);
+    sponsor.reward_index = state.global_operator_reward_index;
 }
 
 /// Handles all changes to operator's following a deposit
@@ -57,7 +56,7 @@ pub fn handle_depositor_operator_updates(
     pool: &mut Pool,
     depositor: &Addr,
     depositor_info: &mut DepositorInfo,
-    minted_lottery_aust_value: Uint256,
+    minted_shares: Uint256,
     new_operator_addr: Option<String>,
 ) -> StdResult<()> {
     // If an operator is already registered, add to its deposits. If not, handle relevant updates
@@ -67,49 +66,41 @@ pub fn handle_depositor_operator_updates(
         // Update reward index for the operator
         compute_operator_reward(state, &mut operator);
         // Then add the new deposit on the operator
-        operator.lottery_deposit = operator.lottery_deposit.add(minted_lottery_aust_value);
+        operator.shares = operator.shares.add(minted_shares);
         // store operator info
         store_operator_info(deps.storage, &depositor_info.operator_addr, operator)?;
         // update pool
-        pool.total_lottery_deposits_operated = pool
-            .total_lottery_deposits_operated
-            .add(minted_lottery_aust_value);
-    } else {
+        pool.total_operator_shares = pool.total_operator_shares.add(minted_shares);
+    } else if let Some(new_operator_addr) = new_operator_addr {
         // If there is no operator registered and a new operator address is provided
-        if let Some(new_operator_addr) = new_operator_addr {
-            let new_operator_addr = deps.api.addr_validate(&new_operator_addr)?;
+        let new_operator_addr = deps.api.addr_validate(&new_operator_addr)?;
 
-            // Validate that a user cannot set itself as its own operator
-            if &new_operator_addr == depositor {
-                return Err(StdError::generic_err(
-                    "You cannot assign yourself as your own operator",
-                ));
-            }
-
-            // Set the new depositor_info operator_addr
-            depositor_info.operator_addr = new_operator_addr;
-
-            // Read the new operator in question
-            let mut new_operator = read_operator_info(deps.storage, &depositor_info.operator_addr);
-
-            // Update the reward index for the new operator
-            compute_operator_reward(state, &mut new_operator);
-
-            // Update new operator info deposits
-            let depositor_total_lottery_deposit =
-                depositor_info.lottery_deposit + minted_lottery_aust_value;
-
-            new_operator.lottery_deposit = new_operator
-                .lottery_deposit
-                .add(depositor_total_lottery_deposit);
-
-            // store new operator info
-            store_operator_info(deps.storage, &depositor_info.operator_addr, new_operator)?;
-            // update pool
-            pool.total_lottery_deposits_operated = pool
-                .total_lottery_deposits_operated
-                .add(depositor_total_lottery_deposit);
+        // Validate that a user cannot set itself as its own operator
+        if &new_operator_addr == depositor {
+            return Err(StdError::generic_err(
+                "You cannot assign yourself as your own operator",
+            ));
         }
+
+        // Set the new depositor_info operator_addr
+        depositor_info.operator_addr = new_operator_addr;
+
+        // Read the new operator in question
+        let mut new_operator = read_operator_info(deps.storage, &depositor_info.operator_addr);
+
+        // Update the reward index for the new operator
+        compute_operator_reward(state, &mut new_operator);
+
+        // Update new operator info deposits
+        let post_transaction_depositor_shares = depositor_info.shares + minted_shares;
+
+        new_operator.shares = new_operator.shares.add(post_transaction_depositor_shares);
+
+        // Store new operator info
+        store_operator_info(deps.storage, &depositor_info.operator_addr, new_operator)?;
+
+        // Update pool
+        pool.total_operator_shares = pool.total_operator_shares.add(minted_shares);
     }
 
     Ok(())
@@ -161,7 +152,7 @@ pub fn calculate_winner_prize(
         number_winners,
         glow_prize_buckets,
         block_height,
-        total_user_lottery_deposits: snapshotted_total_user_lottery_deposits,
+        total_user_shares: snapshotted_total_user_shares,
         ..
     } = lottery_info;
 
@@ -177,7 +168,7 @@ pub fn calculate_winner_prize(
 
     // User lottery deposit
 
-    let snapshotted_user_lottery_deposit = snapshotted_depositor_stats.lottery_deposit;
+    let snapshotted_user_shares = snapshotted_depositor_stats.shares;
 
     // User voting balance
 
@@ -217,8 +208,8 @@ pub fn calculate_winner_prize(
         // Get the glow boost multiplier
         let glow_boost_multiplier = calculate_boost_multiplier(
             config.lotto_winner_boost_config.clone(),
-            snapshotted_user_lottery_deposit,
-            *snapshotted_total_user_lottery_deposits,
+            snapshotted_user_shares,
+            *snapshotted_total_user_shares,
             snapshotted_user_voting_balance,
             snapshotted_total_voting_balance,
         );
@@ -232,8 +223,8 @@ pub fn calculate_winner_prize(
 
 pub fn calculate_boost_multiplier(
     boost_config: BoostConfig,
-    snapshotted_user_lottery_deposit: Uint256,
-    snapshotted_total_user_lottery_deposits: Uint256,
+    snapshotted_user_shares: Uint256,
+    snapshotted_total_user_shares: Uint256,
     snapshotted_user_voting_balance: Uint128,
     snapshotted_total_voting_balance: Uint128,
 ) -> Decimal256 {
@@ -252,12 +243,10 @@ pub fn calculate_boost_multiplier(
 
     // Calculate the additional multiplier for users with voting power
     let glow_voting_boost = if snapshotted_total_voting_balance > Uint128::zero()
-        && snapshotted_user_lottery_deposit > Uint256::zero()
+        && snapshotted_user_shares > Uint256::zero()
     {
-        let inverted_user_lottery_deposit_proportion = Decimal256::from_ratio(
-            snapshotted_total_user_lottery_deposits,
-            snapshotted_user_lottery_deposit,
-        );
+        let inverted_user_lottery_deposit_proportion =
+            Decimal256::from_ratio(snapshotted_total_user_shares, snapshotted_user_shares);
 
         let user_voting_balance_proportion = Decimal256::from_ratio(
             Uint256::from(snapshotted_user_voting_balance),
@@ -348,51 +337,71 @@ pub fn get_minimum_matches_for_winning_ticket(
     ))
 }
 
-pub fn calculate_lottery_balance(
+pub struct ExecuteLotteryRedeemedAustInfo {
+    pub value_of_user_aust_to_be_redeemed_for_lottery: Uint256,
+    pub user_aust_to_redeem: Uint256,
+    pub value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256,
+    pub sponsor_aust_to_redeem: Uint256,
+    pub aust_to_redeem: Uint256,
+    pub aust_to_redeem_value: Uint256,
+}
+
+pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
     state: &State,
     pool: &Pool,
+    config: &Config,
     contract_a_balance: Uint256,
-    rate: Decimal256,
-) -> StdResult<Uint256> {
-    // Validate that the value of the contract's lottery aust is always at least the
-    // sum of the value of the user savings aust and lottery deposits.
-    // This check should never fail but is in place as an extra safety measure.
-    let lottery_pool_value = (contract_a_balance - pool.total_user_savings_aust) * rate;
-    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-    {
-        return Err(StdError::generic_err(
-            format!("Value of lottery pool must be greater than the value of lottery deposits. Pool value: {}. Lottery deposits: {}", lottery_pool_value,pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-        ));
+    aust_exchange_rate: Decimal256,
+) -> ExecuteLotteryRedeemedAustInfo {
+    // Get the aust_user_balance
+    let total_user_aust = pool.total_user_aust;
+
+    // Get the amount to take from the users
+    // Split factor percent of the appreciation since the last lottery
+    let value_of_user_aust_to_be_redeemed_for_lottery = total_user_aust
+        * (aust_exchange_rate - state.last_lottery_execution_aust_exchange_rate)
+        * config.split_factor;
+
+    // Get the user_aust_to_redeem
+    let user_aust_to_redeem = value_of_user_aust_to_be_redeemed_for_lottery / aust_exchange_rate;
+
+    // Sponsor balance equals aust_balance - total_user_aust
+    let total_sponsor_aust = Uint256::from(contract_a_balance) - pool.total_user_aust;
+
+    // This should equal aust_sponsor_balance * (rate - state.last_lottery_exchange_rate) * config.split_factor;
+    let value_of_sponsor_aust_to_be_redeemed_for_lottery =
+        total_sponsor_aust * aust_exchange_rate - pool.total_sponsor_lottery_deposits;
+
+    // Get the sponsor_aust_to_redeem
+    let sponsor_aust_to_redeem =
+        value_of_sponsor_aust_to_be_redeemed_for_lottery / aust_exchange_rate;
+
+    // Get the aust_to_redeem and aust_to_redeem_value
+    let aust_to_redeem = user_aust_to_redeem + sponsor_aust_to_redeem;
+    let aust_to_redeem_value = aust_to_redeem * aust_exchange_rate;
+
+    ExecuteLotteryRedeemedAustInfo {
+        value_of_user_aust_to_be_redeemed_for_lottery,
+        user_aust_to_redeem,
+        value_of_sponsor_aust_to_be_redeemed_for_lottery,
+        sponsor_aust_to_redeem,
+        aust_to_redeem,
+        aust_to_redeem_value,
     }
-
-    let carry_over_value = state
-        .prize_buckets
-        .iter()
-        .fold(Uint256::zero(), |sum, val| sum + *val);
-
-    // Lottery balance equals aust_balance - total_user_savings_aust
-    let aust_lottery_balance = contract_a_balance - pool.total_user_savings_aust;
-
-    // Get the ust value of the aust going towards the lottery
-    let aust_lottery_balance_value = aust_lottery_balance * rate;
-
-    let amount_to_redeem = aust_lottery_balance_value
-        - pool.total_user_lottery_deposits
-        - pool.total_sponsor_lottery_deposits;
-
-    Ok(carry_over_value + amount_to_redeem)
 }
 
 #[allow(dead_code)]
-pub fn calculate_depositor_balance(depositor: DepositorInfo, rate: Decimal256) -> Uint256 {
-    // Get the amount of aust equivalent to the depositor's lottery deposit
-    let depositor_lottery_aust = depositor.lottery_deposit / rate;
-
-    // Calculate the depositor's aust balance
-    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
-
+pub fn calculate_depositor_balance(
+    pool: &Pool,
+    depositor_info: &DepositorInfo,
+    aust_exchange_rate: Decimal256,
+) -> Uint256 {
     // Calculate the depositor's balance from their aust balance
-    depositor_aust_balance * rate
+    let depositor_balance = pool.total_user_aust
+        * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
+        * aust_exchange_rate;
+
+    depositor_balance
 }
 
 pub fn base64_encoded_tickets_to_vec_string_tickets(

@@ -216,10 +216,10 @@ pub struct StateResponse {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
-    pub total_user_lottery_deposits: Uint256,
-    pub total_user_savings_aust: Uint256,
+    pub total_user_aust: Uint256,
+    pub total_user_shares: Uint256,
     pub total_sponsor_lottery_deposits: Uint256,
-    pub total_lottery_deposits_operated: Uint256,
+    pub total_operator_shares: Uint256,
 }
 
 // We define a custom struct for each query response
@@ -242,8 +242,7 @@ pub struct LotteryInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfoResponse {
     pub depositor: String,
-    pub lottery_deposit: Uint256,
-    pub savings_aust: Uint256,
+    pub shares: Uint256,
     pub tickets: Vec<String>,
     pub unbonding_info: Vec<Claim>,
 }
@@ -252,8 +251,7 @@ pub struct DepositorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorStatsResponse {
     pub depositor: String,
-    pub lottery_deposit: Uint256,
-    pub savings_aust: Uint256,
+    pub shares: Uint256,
     pub num_tickets: usize,
 }
 
@@ -270,7 +268,7 @@ pub struct SponsorInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct OperatorInfoResponse {
     pub operator: String,
-    pub lottery_deposit: Uint256,
+    pub shares: Uint256,
     pub reward_index: Decimal256,
     pub pending_rewards: Decimal256,
 }
@@ -315,5 +313,10 @@ pub struct PrizeInfosResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LotteryBalanceResponse {
-    pub lottery_balance: Uint256,
+    pub value_of_user_aust_to_be_redeemed_for_lottery: Uint256,
+    pub user_aust_to_redeem: Uint256,
+    pub value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256,
+    pub sponsor_aust_to_redeem: Uint256,
+    pub aust_to_redeem: Uint256,
+    pub aust_to_redeem_value: Uint256,
 }

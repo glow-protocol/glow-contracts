@@ -1,7 +1,9 @@
-use crate::contract::{query_config, query_pool};
+use crate::helpers::{
+    calculate_value_of_aust_to_be_redeemed_for_lottery, ExecuteLotteryRedeemedAustInfo,
+};
 use crate::mock_querier::MOCK_CONTRACT_ADDR;
 use crate::state::{
-    OldDepositorInfo, OldLotteryInfo, OLD_PREFIX_DEPOSIT, OLD_PREFIX_LOTTERY, STATE,
+    OldDepositorInfo, OldLotteryInfo, CONFIG, OLD_PREFIX_DEPOSIT, OLD_PREFIX_LOTTERY, POOL, STATE,
 };
 use crate::tests::{A_UST, RATE};
 use cosmwasm_storage::bucket;
@@ -13,9 +15,11 @@ use glow_protocol::querier::{deduct_tax, query_token_balance};
 use std::convert::TryInto;
 
 pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
-    let pool = query_pool(deps).unwrap();
-    let config = query_config(deps).unwrap();
+    let pool = POOL.load(deps.storage).unwrap();
+    let config = CONFIG.load(deps.storage).unwrap();
     let state = STATE.load(deps.storage).unwrap();
+
+    let aust_exchange_rate = Decimal256::percent(RATE);
 
     let contract_a_balance = query_token_balance(
         deps,
@@ -24,22 +28,20 @@ pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
     )
     .unwrap();
 
-    // Lottery balance equals aust_balance - total_user_savings_aust
-    let aust_lottery_balance = contract_a_balance - pool.total_user_savings_aust;
-
-    // Get the value of the lottery balance
-    let pooled_lottery_deposits = aust_lottery_balance * Decimal256::permille(RATE);
-
-    // Calculate the amount of ust to be redeemed for the lottery
-    let amount_to_redeem = pooled_lottery_deposits
-        - pool.total_user_lottery_deposits
-        - pool.total_sponsor_lottery_deposits;
-
-    // Calculate the corresponding amount of aust to redeem
-    let aust_to_redeem = amount_to_redeem / Decimal256::permille(RATE);
-
-    // Get the value of the redeemed aust after accounting for rounding errors
-    let aust_to_redeem_value = aust_to_redeem * Decimal256::permille(RATE);
+    let ExecuteLotteryRedeemedAustInfo {
+        value_of_user_aust_to_be_redeemed_for_lottery,
+        user_aust_to_redeem,
+        value_of_sponsor_aust_to_be_redeemed_for_lottery,
+        sponsor_aust_to_redeem,
+        aust_to_redeem,
+        aust_to_redeem_value,
+    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
+        &state,
+        &pool,
+        &config,
+        Uint256::from(contract_a_balance),
+        aust_exchange_rate,
+    );
 
     // Get the post tax amount
     let net_amount = Uint256::from(

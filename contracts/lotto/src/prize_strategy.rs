@@ -17,7 +17,9 @@ use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::{
-    calculate_max_bound, compute_reward, count_seq_matches, get_minimum_matches_for_winning_ticket,
+    calculate_max_bound, calculate_value_of_aust_to_be_redeemed_for_lottery,
+    compute_global_operator_reward, count_seq_matches, get_minimum_matches_for_winning_ticket,
+    ExecuteLotteryRedeemedAustInfo,
 };
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use glow_protocol::querier::deduct_tax;
@@ -33,7 +35,7 @@ pub fn execute_lottery(
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
+    let mut pool = POOL.load(deps.storage)?;
 
     // Get the contract's aust balance
     let contract_a_balance = query_token_balance(
@@ -43,7 +45,7 @@ pub fn execute_lottery(
     )?;
 
     // Get the aust exchange rate
-    let rate = query_exchange_rate(
+    let aust_exchange_rate = query_exchange_rate(
         deps.as_ref(),
         config.anchor_contract.to_string(),
         env.block.height,
@@ -67,23 +69,8 @@ pub fn execute_lottery(
         return Err(ContractError::InvalidLotteryExecutionTickets {});
     }
 
-    // Validate that the value of the contract's lottery aust is always at least the
-    // sum of the value of the user savings aust and lottery deposits.
-    // This check should never fail but is in place as an extra safety measure.
-    let lottery_pool_value =
-        (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
-
-    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-    {
-        return Err(ContractError::InsufficientPoolFunds {
-            pool_value: lottery_pool_value,
-            total_lottery_deposits: pool.total_user_lottery_deposits
-                + pool.total_sponsor_lottery_deposits,
-        });
-    }
-
     // Compute global Glow rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_global_operator_reward(&mut state, &pool, env.block.height);
 
     // Set the next_lottery_exec_time to the current block time plus `config.block_time`
     // This is so that `execute_prize` can't be run until the randomness oracle is ready
@@ -110,32 +97,23 @@ pub fn execute_lottery(
         glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
         block_height: env.block.height,
         timestamp: env.block.time,
-        total_user_lottery_deposits: pool.total_user_lottery_deposits,
+        total_user_shares: pool.total_user_shares,
     };
+
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
-    // Lottery balance equals aust_balance - total_user_savings_aust
-    let aust_lottery_balance = Uint256::from(contract_a_balance) - pool.total_user_savings_aust;
-
-    // Get the ust value of the aust going towards the lottery
-    let aust_lottery_balance_value = aust_lottery_balance * rate;
-
-    let mut msgs: Vec<CosmosMsg> = vec![];
-
-    // total_user_lottery_deposits plus total_sponsor_lottery_deposits gives the total ust value deposited into the lottery pool according to the calculations from the deposit function.
-    // aust_lottery_balance_value gives the total ust value of the aust portion of the contract's balance
-
-    // The value to redeem is the difference between the value of the appreciated lottery aust
-    // and the total ust amount that has been deposited towards the lottery.
-    let amount_to_redeem = aust_lottery_balance_value
-        - pool.total_user_lottery_deposits
-        - pool.total_sponsor_lottery_deposits;
-
-    // Divide by the rate to get the number of aust to redeem
-    let aust_to_redeem = amount_to_redeem / rate;
-
-    // Get the value of the aust that will be redeemed
-    let aust_to_redeem_value = aust_to_redeem * rate;
+    let ExecuteLotteryRedeemedAustInfo {
+        user_aust_to_redeem,
+        aust_to_redeem,
+        aust_to_redeem_value,
+        ..
+    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
+        &state,
+        &pool,
+        &config,
+        Uint256::from(contract_a_balance),
+        aust_exchange_rate,
+    );
 
     // Get the amount of ust that will be received after accounting for taxes
     let net_amount = Uint256::from(
@@ -156,6 +134,8 @@ pub fn execute_lottery(
         state.prize_buckets[index] += net_amount * *fraction_of_prize
     }
 
+    let mut msgs: Vec<CosmosMsg> = vec![];
+
     // Message to redeem "aust_to_redeem" of aust from the Anchor contract
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.a_terra_contract.to_string(),
@@ -166,10 +146,19 @@ pub fn execute_lottery(
             msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
         })?,
     });
+
     msgs.push(redeem_msg);
+
+    // Update last_lottery_exchange_rate
+    state.last_lottery_execution_aust_exchange_rate = aust_exchange_rate;
+
+    // Update the user shares
+    pool.total_user_aust = pool.total_user_aust - user_aust_to_redeem;
 
     // Store the state
     STATE.save(deps.storage, &state)?;
+    // Store the pool
+    POOL.save(deps.storage, &pool)?;
 
     let res = Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "execute_lottery"),
@@ -198,7 +187,7 @@ pub fn execute_prize(
     let current_lottery = state.current_lottery;
 
     // Compute global Glow rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_global_operator_reward(&mut state, &pool, env.block.height);
 
     // Validate that no funds are sent when executing the prize distribution
     if !info.funds.is_empty() {

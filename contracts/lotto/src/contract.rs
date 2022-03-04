@@ -3,10 +3,11 @@ use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
 use crate::helpers::{
-    base64_encoded_tickets_to_vec_string_tickets, calculate_lottery_balance,
-    calculate_winner_prize, claim_unbonded_withdrawals, compute_operator_reward, compute_reward,
+    base64_encoded_tickets_to_vec_string_tickets,
+    calculate_value_of_aust_to_be_redeemed_for_lottery, calculate_winner_prize,
+    claim_unbonded_withdrawals, compute_global_operator_reward, compute_operator_reward,
     compute_sponsor_reward, handle_depositor_operator_updates, is_valid_sequence,
-    pseudo_random_seq, uint256_times_decimal256_ceil,
+    pseudo_random_seq, uint256_times_decimal256_ceil, ExecuteLotteryRedeemedAustInfo,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, query_glow_emission_rate};
@@ -102,7 +103,7 @@ pub fn instantiate(
     }
 
     let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
-        base_multiplier: Decimal256::from_ratio(40, 100),
+        base_multiplier: Decimal256::from_ratio(Uint256::from(40u128), Uint256::from(100u128)),
         max_multiplier: Decimal256::one(),
         total_voting_power_weight: Decimal256::percent(150),
     };
@@ -155,6 +156,16 @@ pub fn instantiate(
         return Err(ContractError::InvalidFirstLotteryExec {});
     }
 
+    // Query exchange_rate from anchor money market
+    let aust_exchange_rate: Decimal256 = query_exchange_rate(
+        deps.as_ref(),
+        deps.api
+            .addr_validate(msg.anchor_contract.as_str())?
+            .to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
     STATE.save(
         deps.storage,
         &State {
@@ -167,19 +178,20 @@ pub fn instantiate(
             )),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
-            last_reward_updated: env.block.height,
-            global_reward_index: Decimal256::zero(),
-            glow_emission_rate: msg.initial_emission_rate,
+            last_operator_reward_updated: env.block.height,
+            global_operator_reward_index: Decimal256::zero(),
+            glow_operator_emission_rate: msg.initial_emission_rate,
+            last_lottery_execution_aust_exchange_rate: aust_exchange_rate,
         },
     )?;
 
     POOL.save(
         deps.storage,
         &Pool {
-            total_user_lottery_deposits: Uint256::zero(),
-            total_user_savings_aust: Uint256::zero(),
+            total_user_aust: Uint256::zero(),
+            total_user_shares: Uint256::zero(),
             total_sponsor_lottery_deposits: Uint256::zero(),
-            total_lottery_deposits_operated: Uint256::zero(),
+            total_operator_shares: Uint256::zero(),
         },
     )?;
 
@@ -377,7 +389,7 @@ pub fn deposit(
     let mut pool = POOL.load(deps.storage)?;
 
     // Get the aust exchange rate
-    let rate = query_exchange_rate(
+    let aust_exchange_rate = query_exchange_rate(
         deps.as_ref(),
         config.anchor_contract.to_string(),
         env.block.height,
@@ -448,32 +460,36 @@ pub fn deposit(
     let post_tax_deposit_amount = Uint256::from(net_coin_amount.amount);
 
     // Get the number of minted aust
-    let minted_aust = post_tax_deposit_amount / rate;
+    let minted_aust = post_tax_deposit_amount / aust_exchange_rate;
 
-    // Get the number of minted aust that will go towards the lottery
-    let minted_lottery_aust = minted_aust * config.split_factor;
+    // Get the amount of minted_shares
+    // by multiplying the number of minted_shares by the ratio of total_user_shares to total_user_aust
+    // TODO figure out why this is correct
+    // shares can be decimals
+    let minted_shares =
+        minted_aust * Decimal256::from_ratio(pool.total_user_shares, pool.total_user_aust);
 
-    // Get the number of minted aust that will go towards savings
-    let minted_savings_aust = minted_aust - minted_lottery_aust;
+    let post_transaction_depositor_shares = depositor_info.shares + minted_shares;
 
-    // Get the value of minted aust going towards the lottery
-    let minted_lottery_aust_value = minted_lottery_aust * rate;
+    let post_transaction_depositor_balance = (pool.total_user_aust + minted_aust)
+        * Decimal256::from_ratio(
+            post_transaction_depositor_shares,
+            pool.total_user_shares + minted_shares,
+        )
+        * aust_exchange_rate;
+
+    let post_transaction_max_depositor_tickets = Uint128::from(
+        post_transaction_depositor_balance / Decimal256::from_uint256(config.ticket_price),
+    )
+    .u128();
 
     // Get the number of tickets the user would have post transaction (without accounting for round up)
     let raw_post_transaction_num_depositor_tickets =
-        Uint256::from((depositor_info.tickets.len() + combinations.len()) as u128);
-
-    // Add the depositor's previous lottery_deposit with the split_factor portion of their pretax deposit_amount
-    let mixed_tax_post_transaction_lottery_deposit =
-        depositor_info.lottery_deposit + deposit_amount * config.split_factor;
+        (depositor_info.tickets.len() + combinations.len()) as u128;
 
     // Check if we need to round up the number of combinations based on the depositor's mixed_tax_post_transaction_lottery_deposit
     let mut new_combinations = combinations;
-    if mixed_tax_post_transaction_lottery_deposit
-        >= (raw_post_transaction_num_depositor_tickets + Uint256::one())
-            * config.ticket_price
-            * config.split_factor
-    {
+    if post_transaction_max_depositor_tickets >= raw_post_transaction_num_depositor_tickets + 1 {
         let current_time = env.block.time.nanos();
         let sequence = pseudo_random_seq(
             info.sender.clone().into_string(),
@@ -521,8 +537,9 @@ pub fn deposit(
         // add the combination to the depositor_info
         depositor_info.tickets.push(combination);
     }
-    // Update the global reward index
-    compute_reward(&mut state, &pool, env.block.height);
+
+    // // Update the global reward index
+    // compute_global_operator_reward(&mut state, &pool, env.block.height);
 
     // Update operator information
     handle_depositor_operator_updates(
@@ -531,25 +548,18 @@ pub fn deposit(
         &mut pool,
         &depositor,
         &mut depositor_info,
-        minted_lottery_aust_value,
+        minted_shares,
         new_operator_addr,
     )?;
 
-    // Increase the depositor's lottery_deposit by the value of the minted lottery aust
-    depositor_info.lottery_deposit = depositor_info
-        .lottery_deposit
-        .add(minted_lottery_aust_value);
+    // Increase the depositor's shares by the number of minted shares
+    depositor_info.shares = depositor_info.shares.add(minted_shares);
 
-    // Increase the depositor's savings_aust by the number of minted savings aust
-    depositor_info.savings_aust = depositor_info.savings_aust.add(minted_savings_aust);
+    // Increase total_user_shares by the number of minted shares
+    pool.total_user_shares = pool.total_user_shares.add(minted_shares);
 
-    // Increase total_user_lottery_deposits by the value of the minted lottery aust
-    pool.total_user_lottery_deposits = pool
-        .total_user_lottery_deposits
-        .add(minted_lottery_aust_value);
-
-    // Increase total_user_savings_aust by the number of minted savings aust
-    pool.total_user_savings_aust = pool.total_user_savings_aust.add(minted_savings_aust);
+    // Increase total_user_aust
+    pool.total_user_aust = pool.total_user_aust.add(minted_aust);
 
     // Update the number of total_tickets
     state.total_tickets = state.total_tickets.add(amount_tickets.into());
@@ -644,7 +654,7 @@ pub fn execute_sponsor(
         return Err(ContractError::ZeroSponsorshipAmount {});
     }
 
-    compute_reward(&mut state, &pool, env.block.height);
+    // compute_global_operator_reward(&mut state, &pool, env.block.height);
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
@@ -769,24 +779,25 @@ pub fn execute_sponsor_withdraw(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Validate that the value of the contract's lottery aust is always at least the
-    // sum of the value of the user savings aust and lottery deposits.
-    // This check should never fail but is in place as an extra safety measure.
-    let lottery_pool_value =
-        (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
+    // TODO
+    // // Validate that the value of the contract's lottery aust is always at least the
+    // // sum of the value of the user savings aust and lottery deposits.
+    // // This check should never fail but is in place as an extra safety measure.
+    // let lottery_pool_value =
+    //     (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
 
-    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-    {
-        return Err(ContractError::InsufficientPoolFunds {
-            pool_value: lottery_pool_value,
-            total_lottery_deposits: pool.total_user_lottery_deposits
-                + pool.total_sponsor_lottery_deposits,
-        });
-    }
+    // if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
+    // {
+    //     return Err(ContractError::InsufficientPoolFunds {
+    //         pool_value: lottery_pool_value,
+    //         total_lottery_deposits: pool.total_user_lottery_deposits
+    //             + pool.total_sponsor_lottery_deposits,
+    //     });
+    // }
 
-    // Compute Glow depositor rewards
-    compute_reward(&mut state, &pool, env.block.height);
-    compute_sponsor_reward(&state, &mut sponsor_info);
+    // // Compute Glow depositor rewards
+    // compute_global_operator_reward(&mut state, &pool, env.block.height);
+    // compute_sponsor_reward(&state, &mut sponsor_info);
 
     let aust_to_redeem = sponsor_info.lottery_deposit / rate;
     let aust_to_redeem_value = aust_to_redeem * rate;
@@ -852,7 +863,7 @@ pub fn execute_withdraw(
     let mut state = STATE.load(deps.storage)?;
     let mut pool = POOL.load(deps.storage)?;
 
-    let mut depositor: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
+    let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &info.sender);
 
     // Get the contract's aust balance
     let contract_a_balance = query_token_balance(
@@ -862,7 +873,7 @@ pub fn execute_withdraw(
     )?;
 
     // Get the aust exchange rate
-    let rate = query_exchange_rate(
+    let aust_exchange_rate = query_exchange_rate(
         deps.as_ref(),
         config.anchor_contract.to_string(),
         env.block.height,
@@ -870,7 +881,7 @@ pub fn execute_withdraw(
     .exchange_rate;
 
     // Validate that the user has savings aust to withdraw
-    if depositor.savings_aust.is_zero() || pool.total_user_savings_aust.is_zero() {
+    if depositor_info.shares.is_zero() {
         return Err(ContractError::NoDepositorSavingsAustToWithdraw {});
     }
 
@@ -885,52 +896,53 @@ pub fn execute_withdraw(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Validate that the value of the contract's lottery aust is always at least the
-    // sum of the value of the user savings aust and lottery deposits.
-    // This check should never fail but is in place as an extra safety measure.
-    let lottery_pool_value =
-        (Uint256::from(contract_a_balance) - pool.total_user_savings_aust) * rate;
+    // Calculate the depositor's balance from their aust balance
+    let depositor_balance = pool.total_user_aust
+        * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
+        * aust_exchange_rate;
 
-    if lottery_pool_value < (pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits)
-    {
-        return Err(ContractError::InsufficientPoolFunds {
-            pool_value: lottery_pool_value,
-            total_lottery_deposits: pool.total_user_lottery_deposits
-                + pool.total_sponsor_lottery_deposits,
+    // Get the number of withdrawn shares
+    let withdrawn_shares = amount
+        .map(|v| {
+            std::cmp::max(
+                Uint256::from(v.multiply_ratio(pool.total_user_shares, pool.total_user_aust)),
+                Uint256::one(),
+            )
+        })
+        .unwrap_or_else(|| depositor_info.shares);
+
+    // Get the withdrawn amount
+    let withdrawn_aust =
+        withdrawn_shares.multiply_ratio(pool.total_user_aust, pool.total_user_shares);
+
+    // TODO Revisit
+    if withdrawn_aust > depositor_info.shares {
+        return Err(ContractError::SpecifiedWithdrawAmountTooBig {
+            amount: Uint128::from(withdrawn_aust),
+            depositor_balance: depositor_info.shares,
         });
     }
 
-    // Get the amount of aust equivalent to the depositor's lottery deposit
-    let depositor_lottery_aust = depositor.lottery_deposit / rate;
+    // Get the depositor's balance post withdraw
+    let post_transaction_depositor_balance = (pool.total_user_aust - withdrawn_aust)
+        * Decimal256::from_ratio(
+            depositor_info.shares - withdrawn_shares,
+            pool.total_user_shares - withdrawn_shares,
+        )
+        * aust_exchange_rate;
 
-    // Calculate the depositor's aust balance
-    let depositor_aust_balance = depositor.savings_aust + depositor_lottery_aust;
-
-    // Calculate the depositor's balance from their aust balance
-    let depositor_balance = depositor_aust_balance * rate;
-
-    // Calculate fraction of the depositor's balance that is being withdrawn
-    let mut withdraw_ratio = Decimal256::one();
-    if let Some(amount) = amount {
-        if Uint256::from(amount) > depositor_balance {
-            return Err(ContractError::SpecifiedWithdrawAmountTooBig {
-                amount,
-                depositor_balance,
-            });
-        } else {
-            withdraw_ratio = Decimal256::from_ratio(Uint256::from(amount), depositor_balance);
-        }
-    }
-
-    // We use amount to get the withdraw_ratio
-    // but from this point forwards everything is based on withdraw_ratio, not amount
+    let post_transaction_max_depositor_tickets = Uint128::from(
+        post_transaction_depositor_balance / Decimal256::from_uint256(config.ticket_price),
+    )
+    .u128();
 
     // Calculate how many tickets to remove
-    let num_depositor_tickets = depositor.tickets.len() as u128;
+    let num_depositor_tickets = depositor_info.tickets.len() as u128;
 
-    // Get ceiling of withdrawn tickets
-    let withdrawn_tickets: u128 =
-        uint256_times_decimal256_ceil(Uint256::from(num_depositor_tickets), withdraw_ratio).into();
+    // Get the number of tickets to withdraw
+    let withdrawn_tickets: u128 = num_depositor_tickets
+        .checked_sub(post_transaction_max_depositor_tickets)
+        .unwrap_or_default();
 
     if withdrawn_tickets > num_depositor_tickets {
         return Err(ContractError::WithdrawingTooManyTickets {
@@ -939,7 +951,7 @@ pub fn execute_withdraw(
         });
     }
 
-    for seq in depositor.tickets.drain(..withdrawn_tickets as usize) {
+    for seq in depositor_info.tickets.drain(..withdrawn_tickets as usize) {
         TICKETS.update(deps.storage, seq.as_bytes(), |tickets| -> StdResult<_> {
             let mut new_tickets = tickets.unwrap();
             let index = new_tickets
@@ -951,58 +963,35 @@ pub fn execute_withdraw(
         })?;
     }
 
-    // Withdrawn savings aust calculations
-
-    // Calculate the amount of savings aust to withdraw
-    let withdrawn_savings_aust =
-        uint256_times_decimal256_ceil(depositor.savings_aust, withdraw_ratio);
-
-    // Withdrawn lottery deposit calculations
-
-    let withdrawn_lottery_aust =
-        uint256_times_decimal256_ceil(depositor_lottery_aust, withdraw_ratio);
-    let ceil_withdrawn_lottery_aust_value =
-        uint256_times_decimal256_ceil(withdrawn_lottery_aust, rate);
-
     // Total aust to redeem calculations
 
-    // Get the total aust to redeem
-    let total_aust_to_redeem = withdrawn_lottery_aust + withdrawn_savings_aust;
-
     // Get the value of the redeemed aust. total_aust_to_redeem * rate
-    let total_aust_to_redeem_value = total_aust_to_redeem * rate;
+    let total_aust_to_redeem_value = withdrawn_aust * aust_exchange_rate;
 
     // Update operator information
-    if depositor.operator_registered() {
-        let mut operator = read_operator_info(deps.storage, &depositor.operator_addr);
-        // update the glow reward index
-        compute_reward(&mut state, &pool, env.block.height);
-        // update the glow depositor reward for the depositor
-        compute_operator_reward(&state, &mut operator);
-        // add new deposit amount
-        operator.lottery_deposit = operator
-            .lottery_deposit
-            .sub(ceil_withdrawn_lottery_aust_value);
-        // store new operator info
-        store_operator_info(deps.storage, &depositor.operator_addr, operator)?;
-        pool.total_lottery_deposits_operated = pool
-            .total_lottery_deposits_operated
-            .sub(ceil_withdrawn_lottery_aust_value);
+    if depositor_info.operator_registered() {
+        let mut operator = read_operator_info(deps.storage, &depositor_info.operator_addr);
+        // TODO revisit
+        // // update the glow reward index
+        // compute_global_operator_reward(&mut state, &pool, env.block.height);
+        // // update the glow depositor reward for the depositor
+        // compute_operator_reward(&state, &mut operator);
+
+        // Add new deposit amount
+        operator.shares = operator.shares.sub(withdrawn_shares);
+        // Store new operator info
+        store_operator_info(deps.storage, &depositor_info.operator_addr, operator)?;
+        pool.total_operator_shares = pool.total_operator_shares.sub(withdrawn_shares);
     }
 
     // Update depositor info
 
-    depositor.savings_aust = depositor.savings_aust.sub(withdrawn_savings_aust);
-    depositor.lottery_deposit = depositor
-        .lottery_deposit
-        .sub(ceil_withdrawn_lottery_aust_value);
+    depositor_info.shares = depositor_info.shares.sub(withdrawn_shares);
 
     // Update pool
 
-    pool.total_user_savings_aust = pool.total_user_savings_aust.sub(withdrawn_savings_aust);
-    pool.total_user_lottery_deposits = pool
-        .total_user_lottery_deposits
-        .sub(ceil_withdrawn_lottery_aust_value);
+    pool.total_user_shares = pool.total_user_shares.sub(withdrawn_shares);
+    pool.total_user_aust = pool.total_user_aust.sub(withdrawn_aust);
 
     // Remove withdrawn_tickets from total_tickets
     state.total_tickets = state.total_tickets.sub(Uint256::from(withdrawn_tickets));
@@ -1027,7 +1016,7 @@ pub fn execute_withdraw(
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
             contract: config.anchor_contract.to_string(),
-            amount: total_aust_to_redeem.into(),
+            amount: withdrawn_aust.into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {}).unwrap(),
         })?,
     });
@@ -1056,17 +1045,17 @@ pub fn execute_withdraw(
         }));
     } else {
         // Check max unbonding_info concurrent claims is not bypassed
-        if depositor.unbonding_info.len() as u8 >= MAX_CLAIMS {
+        if depositor_info.unbonding_info.len() as u8 >= MAX_CLAIMS {
             return Err(ContractError::MaxUnbondingClaims {});
         }
         // Place amount in unbonding state as a claim
-        depositor.unbonding_info.push(Claim {
+        depositor_info.unbonding_info.push(Claim {
             amount: return_amount,
             release_at: config.unbonding_period.after(&env.block),
         });
     }
 
-    store_depositor_info(deps.storage, &info.sender, depositor, env.block.height)?;
+    store_depositor_info(deps.storage, &info.sender, depositor_info, env.block.height)?;
     STATE.save(deps.storage, &state)?;
     POOL.save(deps.storage, &pool)?;
 
@@ -1074,7 +1063,7 @@ pub fn execute_withdraw(
         attr("action", "withdraw_ticket"),
         attr("depositor", info.sender.to_string()),
         attr("tickets_amount", withdrawn_tickets.to_string()),
-        attr("redeem_amount_anchor", total_aust_to_redeem.to_string()),
+        attr("redeem_amount_anchor", withdrawn_aust.to_string()),
         attr("redeem_stable_amount", return_amount.to_string()),
         attr("instant_withdrawal_fee", withdrawal_fee.to_string()),
     ]))
@@ -1313,17 +1302,31 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     }
 
     // Compute global Glow rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_global_operator_reward(&mut state, &pool, env.block.height);
 
-    let lottery_balance = calculate_lottery_balance(&state, &pool, contract_a_balance, rate)?;
-    //
+    let carry_over_value = state
+        .prize_buckets
+        .iter()
+        .fold(Uint256::zero(), |sum, val| sum + *val);
+
+    let ExecuteLotteryRedeemedAustInfo {
+        aust_to_redeem_value,
+        ..
+    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
+        &state,
+        &pool,
+        &config,
+        contract_a_balance,
+        rate,
+    );
+
     // Query updated Glow emission rate and update state
-    state.glow_emission_rate = query_glow_emission_rate(
+    state.glow_operator_emission_rate = query_glow_emission_rate(
         &deps.querier,
         config.distributor_contract,
-        lottery_balance,
+        aust_to_redeem_value + carry_over_value,
         config.target_award,
-        state.glow_emission_rate,
+        state.glow_operator_emission_rate,
     )?
     .emission_rate;
 
@@ -1353,7 +1356,10 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "execute_epoch_operations"),
         attr("total_reserves", total_reserves.to_string()),
-        attr("glow_emission_rate", state.glow_emission_rate.to_string()),
+        attr(
+            "glow_emission_rate",
+            state.glow_operator_emission_rate.to_string(),
+        ),
     ]))
 }
 
@@ -1376,7 +1382,7 @@ pub fn execute_claim_rewards(
     }
 
     // Compute Glow depositor rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_global_operator_reward(&mut state, &pool, env.block.height);
     compute_sponsor_reward(&state, &mut sponsor);
     compute_operator_reward(&state, &mut operator);
 
@@ -1740,14 +1746,14 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
         env.block.height
     };
 
-    if block_height < state.last_reward_updated {
+    if block_height < state.last_operator_reward_updated {
         return Err(StdError::generic_err(
             "Block_height must be greater than last_reward_updated",
         ));
     }
 
     // Compute reward rate with given block height
-    compute_reward(&mut state, &pool, block_height);
+    compute_global_operator_reward(&mut state, &pool, block_height);
 
     Ok(StateResponse {
         total_tickets: state.total_tickets,
@@ -1757,9 +1763,9 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
         next_lottery_time: state.next_lottery_time,
         next_lottery_exec_time: state.next_lottery_exec_time,
         next_epoch: state.next_epoch,
-        last_reward_updated: state.last_reward_updated,
-        global_reward_index: state.global_reward_index,
-        glow_emission_rate: state.glow_emission_rate,
+        last_reward_updated: state.last_operator_reward_updated,
+        global_reward_index: state.global_operator_reward_index,
+        glow_emission_rate: state.glow_operator_emission_rate,
     })
 }
 
@@ -1767,10 +1773,10 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
     let pool = POOL.load(deps.storage)?;
 
     Ok(PoolResponse {
-        total_user_lottery_deposits: pool.total_user_lottery_deposits,
-        total_user_savings_aust: pool.total_user_savings_aust,
+        total_user_shares: pool.total_user_shares,
+        total_user_aust: pool.total_user_aust,
         total_sponsor_lottery_deposits: pool.total_sponsor_lottery_deposits,
-        total_lottery_deposits_operated: pool.total_lottery_deposits_operated,
+        total_operator_shares: pool.total_operator_shares,
     })
 }
 
@@ -1779,38 +1785,25 @@ pub fn query_lottery_info(
     env: Env,
     lottery_id: Option<u64>,
 ) -> StdResult<LotteryInfoResponse> {
-    if let Some(id) = lottery_id {
-        let lottery = read_lottery_info(deps.storage, id);
-        Ok(LotteryInfoResponse {
-            lottery_id: id,
-            rand_round: lottery.rand_round,
-            sequence: lottery.sequence,
-            awarded: lottery.awarded,
-            timestamp: lottery.timestamp,
-            block_height: lottery.block_height,
-            glow_prize_buckets: lottery.glow_prize_buckets,
-            prize_buckets: lottery.prize_buckets,
-            number_winners: lottery.number_winners,
-            page: lottery.page,
-            total_user_lottery_deposits: lottery.total_user_lottery_deposits,
-        })
+    let (lottery_id, lottery) = if let Some(lottery_id) = lottery_id {
+        (lottery_id, read_lottery_info(deps.storage, lottery_id))
     } else {
-        let current_lottery = query_state(deps, env, None)?.current_lottery;
-        let lottery = read_lottery_info(deps.storage, current_lottery);
-        Ok(LotteryInfoResponse {
-            lottery_id: current_lottery,
-            rand_round: lottery.rand_round,
-            sequence: lottery.sequence,
-            awarded: lottery.awarded,
-            timestamp: lottery.timestamp,
-            prize_buckets: lottery.prize_buckets,
-            number_winners: lottery.number_winners,
-            page: lottery.page,
-            block_height: lottery.block_height,
-            glow_prize_buckets: lottery.glow_prize_buckets,
-            total_user_lottery_deposits: lottery.total_user_lottery_deposits,
-        })
-    }
+        let lottery_id = query_state(deps, env, None)?.current_lottery;
+        (lottery_id, read_lottery_info(deps.storage, lottery_id))
+    };
+    Ok(LotteryInfoResponse {
+        lottery_id,
+        rand_round: lottery.rand_round,
+        sequence: lottery.sequence,
+        awarded: lottery.awarded,
+        timestamp: lottery.timestamp,
+        block_height: lottery.block_height,
+        glow_prize_buckets: lottery.glow_prize_buckets,
+        prize_buckets: lottery.prize_buckets,
+        number_winners: lottery.number_winners,
+        page: lottery.page,
+        total_user_lottery_deposits: lottery.total_user_shares,
+    })
 }
 
 pub fn query_depositor_info(
@@ -1823,8 +1816,7 @@ pub fn query_depositor_info(
 
     Ok(DepositorInfoResponse {
         depositor: addr,
-        lottery_deposit: depositor.lottery_deposit,
-        savings_aust: depositor.savings_aust,
+        shares: depositor.shares,
         tickets: depositor.tickets,
         unbonding_info: depositor.unbonding_info,
     })
@@ -1840,8 +1832,7 @@ pub fn query_depositor_stats(
 
     Ok(DepositorStatsResponse {
         depositor: addr,
-        lottery_deposit: depositor_stats_info.lottery_deposit,
-        savings_aust: depositor_stats_info.savings_aust,
+        shares: depositor_stats_info.shares,
         num_tickets: depositor_stats_info.num_tickets,
     })
 }
@@ -1854,7 +1845,7 @@ pub fn query_sponsor(deps: Deps, env: Env, addr: String) -> StdResult<SponsorInf
     let pool = POOL.load(deps.storage)?;
 
     // compute rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_global_operator_reward(&mut state, &pool, env.block.height);
     compute_sponsor_reward(&state, &mut sponsor);
 
     Ok(SponsorInfoResponse {
@@ -1873,12 +1864,12 @@ pub fn query_operator(deps: Deps, env: Env, addr: String) -> StdResult<OperatorI
     let pool = POOL.load(deps.storage)?;
 
     // compute rewards
-    compute_reward(&mut state, &pool, env.block.height);
+    compute_global_operator_reward(&mut state, &pool, env.block.height);
     compute_operator_reward(&state, &mut operator);
 
     Ok(OperatorInfoResponse {
         operator: addr,
-        lottery_deposit: operator.lottery_deposit,
+        shares: operator.shares,
         reward_index: operator.reward_index,
         pending_rewards: operator.pending_rewards,
     })
@@ -1927,12 +1918,33 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
     )?);
 
     // Get the aust exchange rate
-    let rate = query_exchange_rate(deps, config.anchor_contract.to_string(), env.block.height)?
-        .exchange_rate;
+    let aust_exchange_rate =
+        query_exchange_rate(deps, config.anchor_contract.to_string(), env.block.height)?
+            .exchange_rate;
 
-    let lottery_balance = calculate_lottery_balance(&state, &pool, contract_a_balance, rate)?;
+    let ExecuteLotteryRedeemedAustInfo {
+        value_of_user_aust_to_be_redeemed_for_lottery,
+        user_aust_to_redeem,
+        value_of_sponsor_aust_to_be_redeemed_for_lottery,
+        sponsor_aust_to_redeem,
+        aust_to_redeem,
+        aust_to_redeem_value,
+    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
+        &state,
+        &pool,
+        &config,
+        Uint256::from(contract_a_balance),
+        aust_exchange_rate,
+    );
 
-    Ok(LotteryBalanceResponse { lottery_balance })
+    Ok(LotteryBalanceResponse {
+        value_of_user_aust_to_be_redeemed_for_lottery,
+        user_aust_to_redeem,
+        value_of_sponsor_aust_to_be_redeemed_for_lottery,
+        sponsor_aust_to_redeem,
+        aust_to_redeem,
+        aust_to_redeem_value,
+    })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -2002,10 +2014,10 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
     // migrate pool to include total lottery deposits delegated/operated
     let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
     let new_pool = Pool {
-        total_user_lottery_deposits: old_pool.total_user_lottery_deposits,
-        total_user_savings_aust: old_pool.total_user_savings_aust,
+        total_user_aust: old_pool.total_user_aust,
+        total_user_shares: old_pool.total_user_shares,
         total_sponsor_lottery_deposits: old_pool.total_sponsor_lottery_deposits,
-        total_lottery_deposits_operated: Uint256::zero(),
+        total_operator_shares: Uint256::zero(),
     };
 
     POOL.save(deps.storage, &new_pool)?;
@@ -2027,7 +2039,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
             page: old_lottery_info.page,
             glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             block_height: old_lottery_info.timestamp,
-            total_user_lottery_deposits: pool.total_user_lottery_deposits,
+            total_user_shares: pool.total_user_shares,
         };
 
         store_lottery_info(deps.storage, i, &new_lottery_info)?;
@@ -2088,9 +2100,10 @@ pub fn migrate_old_depositors(
         // Delete old depositor
         old_remove_depositor_info(deps.storage, &addr);
 
+        // TODO revisit shares calculation. basically have to perform a deposit every time
+        // to build up the shares
         let new_depositor_info = DepositorInfo {
-            lottery_deposit: old_depositor_info.lottery_deposit,
-            savings_aust: old_depositor_info.savings_aust,
+            shares: Uint256::zero(),
             tickets: old_depositor_info.tickets,
             unbonding_info: old_depositor_info.unbonding_info,
             operator_addr: Addr::unchecked(""),

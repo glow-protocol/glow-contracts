@@ -553,8 +553,8 @@ pub fn deposit(
         depositor_info.tickets.push(combination);
     }
 
-    // // Update the global reward index
-    // compute_global_operator_reward(&mut state, &pool, env.block.height);
+    // Update the global reward index
+    compute_global_operator_reward(&mut state, &pool, env.block.height);
 
     // Update operator information
     handle_depositor_operator_updates(

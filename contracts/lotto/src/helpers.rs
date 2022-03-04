@@ -43,7 +43,7 @@ pub fn compute_global_reward(
         return;
     }
 
-    // Get the reward accrued since the last call to compute_global_sponsor_reward
+    // Get the reward accrued since the last call to compute_global_reward for this reward index
     let passed_blocks =
         Decimal256::from_uint256(block_height - reward_emission_index.last_reward_updated);
     let reward_accrued = passed_blocks * reward_emission_index.glow_emission_rate;

@@ -1329,8 +1329,8 @@ pub fn execute_claim_rewards(
     // Compute Glow depositor rewards
     compute_global_operator_reward(&mut state, &pool, env.block.height);
     compute_global_sponsor_reward(&mut state, &pool, env.block.height);
-    compute_sponsor_reward(&state, &mut sponsor);
     compute_operator_reward(&state, &mut operator);
+    compute_sponsor_reward(&state, &mut sponsor);
 
     let claim_amount = (operator.pending_rewards + sponsor.pending_rewards) * Uint256::one();
     sponsor.pending_rewards = Decimal256::zero();
@@ -1715,6 +1715,7 @@ pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult
 
     // Compute reward rate with given block height
     compute_global_operator_reward(&mut state, &pool, block_height);
+    compute_global_sponsor_reward(&mut state, &pool, block_height);
 
     Ok(StateResponse {
         total_tickets: state.total_tickets,
@@ -1806,7 +1807,7 @@ pub fn query_sponsor(deps: Deps, env: Env, addr: String) -> StdResult<SponsorInf
     let pool = POOL.load(deps.storage)?;
 
     // compute rewards
-    compute_global_operator_reward(&mut state, &pool, env.block.height);
+    compute_global_sponsor_reward(&mut state, &pool, env.block.height);
     compute_sponsor_reward(&state, &mut sponsor);
 
     Ok(SponsorInfoResponse {

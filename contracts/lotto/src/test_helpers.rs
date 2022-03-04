@@ -117,8 +117,6 @@ pub fn vec_string_tickets_to_encoded_tickets(vec_string_tickets: Vec<String>) ->
         // Then collect the flat map into a vec of u8
         .collect::<Vec<u8>>();
 
-    // println!("{:?}", binary_data);
-
     // Encode the vec of u8 with base64
     base64::encode(binary_data)
 }

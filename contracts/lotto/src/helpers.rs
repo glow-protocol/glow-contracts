@@ -31,10 +31,6 @@ pub fn compute_global_sponsor_reward(state: &mut State, pool: &Pool, block_heigh
         pool.total_sponsor_lottery_deposits,
         block_height,
     );
-    println!(
-        "global index {}, sponsor index ",
-        state.sponsor_reward_emission_index.global_reward_index
-    );
 }
 
 /// Compute distributed reward and update global reward index
@@ -72,10 +68,6 @@ pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
     sponsor.pending_rewards += Decimal256::from_uint256(sponsor.lottery_deposit)
         * (state.sponsor_reward_emission_index.global_reward_index - sponsor.reward_index);
     sponsor.reward_index = state.sponsor_reward_emission_index.global_reward_index;
-    println!(
-        "sponsor pending: {}, lottery_deposit: {}",
-        sponsor.pending_rewards, sponsor.lottery_deposit
-    );
 }
 
 /// Handles all changes to operator's following a deposit
@@ -387,11 +379,6 @@ pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
 ) -> ExecuteLotteryRedeemedAustInfo {
     // Get the aust_user_balance
     let total_user_aust = pool.total_user_aust;
-
-    println!(
-        "aer: {}. last: {}",
-        aust_exchange_rate, state.last_lottery_execution_aust_exchange_rate
-    );
 
     // Get the amount to take from the users
     // Split factor percent of the appreciation since the last lottery

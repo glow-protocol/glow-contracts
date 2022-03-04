@@ -141,24 +141,12 @@ pub struct OldState {
     pub glow_emission_rate: Decimal256,
 }
 
-// Note: total_user_lottery_deposits and total_sponsor_lottery_deposits
-// could be merged into total_lottery_deposits without changing the functionality of the code
-// but keeping them separate allows for a better understanding of the deposit to sponsor distribution
-// as well as makes the code more flexible for future changes.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    // // Sum of all user lottery deposits
-    // // This is used for
-    // // - checking for pool solvency
-    // // - calculating the global reward index
-    // // - calculating the amount to redeem when executing a lottery
-    // pub total_user_lottery_deposits: Uint256,
-    // // Sum of all user savings aust
-    // // This is used for:
-    // // - checking for pool solvency
-    // // - tracking the amount of aust reserved for savings
-    // pub total_user_savings_aust: Uint256,
+    // This is the cumulative amount of aust deposited by all users
+    // minus user aust redeemed when executing the lottery.
     pub total_user_aust: Uint256,
+    // This is the sum of shares across all depositors.
     pub total_user_shares: Uint256,
     // Sum of all sponsor lottery deposits
     // which equals the sum of sponsor deposits
@@ -183,17 +171,9 @@ pub struct OldPool {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorStatsInfo {
-    // // Cumulative value of the depositor's lottery deposits
-    // // The sums of all depositor deposit amounts equals total_user_lottery_deposits
-    // // This is used for:
-    // // - calculating how many tickets the user should have access to
-    // // - computing the depositor's deposit reward
-    // // - calculating the depositor's balance (how much they can withdraw)
-    // pub lottery_deposit: Uint256,
-    // // Amount of aust in the users savings account
-    // // This is used for:
-    // // - calculating the depositor's balance (how much they can withdraw)
-    // pub savings_aust: Uint256,
+    // This is the amount of shares the depositor owns out of total_user_aust
+    // shares * total_user_aust / total_user_shares gives the amount of aust
+    // that a depositor owns and has available to withdraw.
     pub shares: Uint256,
     // The number of tickets owned by the depositor
     pub num_tickets: usize,
@@ -234,17 +214,9 @@ pub struct OldDepositorInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositorInfo {
-    // // Cumulative value of the depositor's lottery deposits
-    // // The sums of all depositor deposit amounts equals total_user_lottery_deposits
-    // // This is used for:
-    // // - calculating how many tickets the user should have access to
-    // // - computing the depositor's deposit reward
-    // // - calculating the depositor's balance (how much they can withdraw)
-    // pub lottery_deposit: Uint256,
-    // // Amount of aust in the users savings account
-    // // This is used for:
-    // // - calculating the depositor's balance (how much they can withdraw)
-    // pub savings_aust: Uint256,
+    // This is the amount of shares the depositor owns out of total_user_aust
+    // shares * total_user_aust / total_user_shares gives the amount of aust
+    // that a depositor owns and has available to withdraw.
     pub shares: Uint256,
     // The number of tickets the user owns.
     pub tickets: Vec<String>,
@@ -275,10 +247,10 @@ pub struct SponsorInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct OperatorInfo {
-    // Cumulative value of the operator's deposits.
-    // The sums of all operator deposit amounts equals total_lottery_deposits
+    // Cumulative value of the operators' shares.
+    // The sums of all operator share amounts equals total_operator_shares
     // This is used for:
-    // - calculating the operator-depositors balance
+    // - calculating the operator balance when calculating operator reward
     pub shares: Uint256,
     // Stores the amount rewards that are available for the operator to claim.
     pub pending_rewards: Decimal256,

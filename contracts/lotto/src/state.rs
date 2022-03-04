@@ -374,7 +374,7 @@ pub fn old_remove_depositor_info(storage: &mut dyn Storage, depositor: &Addr) {
 pub fn store_depositor_stats(
     storage: &mut dyn Storage,
     depositor: &Addr,
-    mut depositor_stats: DepositorStatsInfo,
+    depositor_stats: DepositorStatsInfo,
     height: u64,
 ) -> StdResult<()> {
     let update_stats = |maybe_stats: Option<DepositorStatsInfo>| -> StdResult<DepositorStatsInfo> {
@@ -383,7 +383,11 @@ pub fn store_depositor_stats(
             num_tickets: 0,
             operator_addr: Addr::unchecked(""),
         });
-        depositor_stats.num_tickets = stats.num_tickets;
+        if stats.num_tickets != depositor_stats.num_tickets {
+            return Err(StdError::generic_err(
+                "Can't change num tickets and save depositor stats",
+            ));
+        }
         Ok(depositor_stats)
     };
 

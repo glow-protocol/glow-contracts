@@ -187,7 +187,6 @@ pub fn instantiate(
             sponsor_reward_emission_index: RewardEmissionsIndex {
                 last_reward_updated: env.block.height,
                 global_reward_index: Decimal256::zero(),
-                // TODO different initial emission rate
                 glow_emission_rate: msg.initial_sponsor_glow_emission_rate,
             },
             last_lottery_execution_aust_exchange_rate: aust_exchange_rate,
@@ -1983,15 +1982,15 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> 
             glow_emission_rate: msg.sponsor_glow_emission_rate,
             last_reward_updated: old_state.last_reward_updated,
         },
-        // TODO Think about what happens if exchange rate changes during migration
         last_lottery_execution_aust_exchange_rate: aust_exchange_rate,
     };
 
     STATE.save(deps.storage, &state)?;
 
-    // migrate pool to include total lottery deposits delegated/operated
+    // Migrate pool
+    // Initially total_user_aust and total_user_shares are set to 0
+    // But they are updated in the migrate_old_depositors section of the loop
     let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
-    // TODO Revisit
     let new_pool = Pool {
         total_user_aust: Uint256::zero(),
         total_user_shares: Uint256::zero(),

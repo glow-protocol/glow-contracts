@@ -13,10 +13,10 @@ use crate::mock_querier::{
 };
 use crate::state::{
     old_read_depositor_info, old_read_lottery_info, old_remove_depositor_info, read_depositor_info,
-    read_depositor_stats, read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes,
-    read_prize, read_sponsor_info, store_depositor_info, store_depositor_stats, Config,
-    DepositorInfo, DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, OldPool, OldState,
-    Pool, PrizeInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
+    read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes, read_prize,
+    read_sponsor_info, store_depositor_info, store_depositor_stats, Config, DepositorInfo,
+    DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, OldPool, OldState, Pool,
+    PrizeInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
@@ -1849,13 +1849,6 @@ fn withdraw() {
         ]
     );
 
-    // Not counting tax
-    // TODO Separate test with taxes
-    // deps.querier.with_tax(
-    //     Decimal::percent(1),
-    //     &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
-    // );
-
     // Deposit one ticket 10 times
     for index in 0..10 {
         let msg = ExecuteMsg::Deposit {
@@ -1989,7 +1982,6 @@ fn withdraw() {
         query_state(deps.as_ref(), mock_env(), None)
             .unwrap()
             .total_tickets,
-        // TODO Don't hardcode
         Uint256::from(4u64)
     );
     // Check ticket map is updated correctly
@@ -6233,15 +6225,14 @@ pub fn test_update_depositor_stats() {
         operator_addr: Addr::unchecked(""),
     };
 
-    // TODO should return an error instead of ignoring
-    store_depositor_stats(deps.as_mut().storage, &addr, depositor, 10).unwrap();
+    // Expect an error
+    let res = store_depositor_stats(deps.as_mut().storage, &addr, depositor, 10);
 
-    // Verify that num_tickets is zero
-
-    let depositor_stats = read_depositor_stats(deps.as_ref().storage, &addr);
-
-    assert_eq!(depositor_stats.shares, Uint256::one());
-    assert_eq!(depositor_stats.num_tickets, 0);
+    match res {
+        Err(e)
+            if e == StdError::generic_err("Can't change num tickets and save depositor stats") => {}
+        _ => panic!("DO NOT ENTER"),
+    }
 }
 
 #[test]
@@ -6808,21 +6799,5 @@ pub fn anchor_pool_smaller_than_total_deposits() {
     )]);
 
     // Verify that Anchor Pool is solvent
-
-    // // Compare shares_supply with contract_a_balance
-    // let pool = query_pool(deps.as_ref()).unwrap();
-
-    // let contract_a_balance = query_token_balance(
-    //     deps.as_ref(),
-    //     Addr::unchecked(A_UST),
-    //     Addr::unchecked(MOCK_CONTRACT_ADDR),
-    // )
-    // .unwrap();
-
-    // TODO Think about
-    // // Assert that Lotto pool is solvent
-    // assert!(
-    //     contract_a_balance * special_rate
-    //         >= pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits
-    // )
+    assert!(contract_a_balance * special_rate >= Uint256::from(SMALL_TICKET_PRICE * 3 / 4));
 }

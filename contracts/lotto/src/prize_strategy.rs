@@ -17,9 +17,8 @@ use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::{
-    calculate_max_bound, calculate_value_of_aust_to_be_redeemed_for_lottery,
-    compute_global_operator_reward, count_seq_matches, get_minimum_matches_for_winning_ticket,
-    ExecuteLotteryRedeemedAustInfo,
+    calculate_max_bound, calculate_value_of_aust_to_be_redeemed_for_lottery, count_seq_matches,
+    get_minimum_matches_for_winning_ticket, ExecuteLotteryRedeemedAustInfo,
 };
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use glow_protocol::querier::deduct_tax;
@@ -68,9 +67,6 @@ pub fn execute_lottery(
     if state.total_tickets.is_zero() {
         return Err(ContractError::InvalidLotteryExecutionTickets {});
     }
-
-    // Compute global Glow rewards
-    compute_global_operator_reward(&mut state, &pool, env.block.height);
 
     // Set the next_lottery_exec_time to the current block time plus `config.block_time`
     // This is so that `execute_prize` can't be run until the randomness oracle is ready
@@ -181,13 +177,9 @@ pub fn execute_prize(
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
 
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
     let current_lottery = state.current_lottery;
-
-    // Compute global Glow rewards
-    compute_global_operator_reward(&mut state, &pool, env.block.height);
 
     // Validate that no funds are sent when executing the prize distribution
     if !info.funds.is_empty() {

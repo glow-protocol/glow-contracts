@@ -484,10 +484,12 @@ pub fn deposit(
 
     let post_transaction_max_depositor_tickets = Uint128::from(
         post_transaction_depositor_balance
-            / Decimal256::from_uint256(config.ticket_price 
+            / Decimal256::from_uint256(
+                config.ticket_price
             // Subtract 10^-5 in order to offset rounding problems
             // relies on ticket price being at least 10^-5 UST
-                - Uint256::from(10u128)) 
+                - Uint256::from(10u128),
+            ),
     )
     .u128() as u64;
 

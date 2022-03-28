@@ -1744,7 +1744,7 @@ pub fn query_lottery_info(
         prize_buckets: lottery.prize_buckets,
         number_winners: lottery.number_winners,
         page: lottery.page,
-        total_user_lottery_deposits: lottery.total_user_shares,
+        total_user_shares: lottery.total_user_shares,
     })
 }
 

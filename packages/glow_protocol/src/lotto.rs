@@ -249,7 +249,7 @@ pub struct LotteryInfoResponse {
     pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub total_user_lottery_deposits: Uint256,
+    pub total_user_shares: Uint256,
 }
 
 // We define a custom struct for each query response

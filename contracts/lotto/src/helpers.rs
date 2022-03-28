@@ -71,6 +71,7 @@ pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
     sponsor.reward_index = state.sponsor_reward_emission_index.global_reward_index;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_depositor_ticket_updates(
     deps: DepsMut,
     env: &Env,

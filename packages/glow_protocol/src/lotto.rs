@@ -91,6 +91,8 @@ pub enum ExecuteMsg {
         encoded_tickets: String,
         operator: Option<String>,
     },
+    /// Claim tickets
+    ClaimTickets { encoded_tickets: String },
     /// Deposit amount of stable into the pool in the name of the recipient
     Gift {
         encoded_tickets: String,

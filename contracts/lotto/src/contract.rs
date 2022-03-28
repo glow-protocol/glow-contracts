@@ -3,11 +3,10 @@ use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
 use crate::helpers::{
-    base64_encoded_tickets_to_vec_string_tickets,
     calculate_value_of_aust_to_be_redeemed_for_lottery, calculate_winner_prize,
     claim_unbonded_withdrawals, compute_global_operator_reward, compute_global_sponsor_reward,
     compute_operator_reward, compute_sponsor_reward, decimal_from_ratio_or_one,
-    handle_depositor_operator_updates, is_valid_sequence, pseudo_random_seq,
+    handle_depositor_operator_updates, handle_depositor_ticket_updates,
     ExecuteLotteryRedeemedAustInfo,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
@@ -30,6 +29,7 @@ use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
+use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 use glow_protocol::lotto::{
     BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorStatsResponse,
     DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg, InstantiateMsg,
@@ -37,7 +37,6 @@ use glow_protocol::lotto::{
     PrizeInfoResponse, PrizeInfosResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse,
     StateResponse, TicketInfoResponse,
 };
-use glow_protocol::lotto::{NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, EpochStateResponse, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
@@ -292,6 +291,9 @@ pub fn execute(
             encoded_tickets,
             operator,
         } => execute_deposit(deps, env, info, encoded_tickets, operator),
+        ExecuteMsg::ClaimTickets { encoded_tickets } => {
+            execute_claim_tickets(deps, env, info, encoded_tickets)
+        }
         ExecuteMsg::Gift {
             encoded_tickets,
             recipient,
@@ -412,6 +414,12 @@ pub fn deposit(
     )?
     .exchange_rate;
 
+    // Validate that the lottery has not already started
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
     // Get the amount of funds sent in the base stable denom
     let deposit_amount = info
         .funds
@@ -419,9 +427,6 @@ pub fn deposit(
         .find(|c| c.denom == config.stable_denom)
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
-
-    // Get combinations from encoded tickets
-    let combinations = base64_encoded_tickets_to_vec_string_tickets(encoded_tickets)?;
 
     // Get the depositor info
     // depositor being either the message sender
@@ -433,9 +438,6 @@ pub fn deposit(
     };
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
 
-    // Get the amount of requested tickets
-    let mut number_of_new_tickets = combinations.len() as u64;
-
     // Validate that the deposit amount is non zero
     if deposit_amount.is_zero() {
         return if recipient.is_some() {
@@ -445,20 +447,7 @@ pub fn deposit(
         };
     }
 
-    // Validate that all sequence combinations are valid
-    for combination in combinations.clone() {
-        if !is_valid_sequence(&combination, TICKET_LENGTH) {
-            return Err(ContractError::InvalidSequence(combination));
-        }
-    }
-
-    // Validate that the lottery has not already started
-    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
-    if current_lottery.rand_round != 0 {
-        return Err(ContractError::LotteryAlreadyStarted {});
-    }
-
-    // deduct tx taxes when calculating the net deposited amount in anchor
+    // Deduct tx taxes when calculating the net deposited amount in anchor
     let net_coin_amount = deduct_tax(
         deps.as_ref(),
         coin(deposit_amount.into(), config.stable_denom.clone()),
@@ -473,92 +462,18 @@ pub fn deposit(
     let minted_shares =
         minted_aust * decimal_from_ratio_or_one(pool.total_user_shares, pool.total_user_aust);
 
-    let post_transaction_depositor_shares = depositor_info.shares + minted_shares;
-
-    let post_transaction_depositor_balance = (pool.total_user_aust + minted_aust)
-        * Decimal256::from_ratio(
-            post_transaction_depositor_shares,
-            pool.total_user_shares + minted_shares,
-        )
-        * aust_exchange_rate;
-
-    let post_transaction_max_depositor_tickets = Uint128::from(
-        post_transaction_depositor_balance
-            / Decimal256::from_uint256(
-                config.ticket_price
-            // Subtract 10^-5 in order to offset rounding problems
-            // relies on ticket price being at least 10^-5 UST
-                - Uint256::from(10u128),
-            ),
-    )
-    .u128() as u64;
-
-    // Get the number of tickets the user would have post transaction (without accounting for round up)
-    let mut post_transaction_num_depositor_tickets =
-        (depositor_info.tickets.len() + number_of_new_tickets as usize) as u64;
-
-    // Check if we need to round up the number of combinations based on the depositor's mixed_tax_post_transaction_lottery_deposit
-    let mut new_combinations = combinations;
-    for _ in 0..100 {
-        if post_transaction_max_depositor_tickets <= post_transaction_num_depositor_tickets {
-            break;
-        }
-
-        let current_time = env.block.time.nanos();
-        let sequence = pseudo_random_seq(
-            info.sender.clone().into_string(),
-            post_transaction_num_depositor_tickets,
-            current_time,
-        );
-
-        // Add the randomly generated sequence to new_combinations
-        new_combinations.push(sequence);
-        // Increment number_of_new_tickets and post_transaction_num_depositor_tickets
-        number_of_new_tickets += 1;
-        post_transaction_num_depositor_tickets += 1;
-    }
-
-    // Validate that the post_transaction_max_depositor_tickets is less than or equal to the post_transaction_num_depositor_tickets
-    if post_transaction_num_depositor_tickets > post_transaction_max_depositor_tickets {
-        return Err(ContractError::InsufficientPostTransactionDepositorBalance {
-            post_transaction_depositor_balance,
-            post_transaction_num_depositor_tickets,
-            post_transaction_max_depositor_tickets,
-        });
-    }
-
-    // Validate that the depositor won't go over max_tickets_per_depositor
-    if post_transaction_num_depositor_tickets > config.max_tickets_per_depositor {
-        return Err(ContractError::MaxTicketsPerDepositorExceeded {
-            max_tickets_per_depositor: config.max_tickets_per_depositor,
-            post_transaction_num_depositor_tickets,
-        });
-    }
-
-    for combination in new_combinations {
-        // check that the number of holders for any given ticket isn't too high
-        if let Some(holders) = TICKETS
-            .may_load(deps.storage, combination.as_bytes())
-            .unwrap()
-        {
-            if holders.len() >= config.max_holders as usize {
-                return Err(ContractError::InvalidHolderSequence(combination));
-            }
-        }
-
-        // update the TICKETS storage
-        let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
-            let mut b = a.unwrap_or_default();
-            b.push(depositor.clone());
-            Ok(b)
-        };
-        TICKETS
-            .update(deps.storage, combination.as_bytes(), add_ticket)
-            .unwrap();
-
-        // add the combination to the depositor_info
-        depositor_info.tickets.push(combination);
-    }
+    let number_of_new_tickets = handle_depositor_ticket_updates(
+        deps.branch(),
+        &env,
+        &config,
+        &pool,
+        &depositor,
+        &mut depositor_info,
+        encoded_tickets,
+        aust_exchange_rate,
+        minted_shares,
+        minted_aust,
+    )?;
 
     // Update the global reward index
     compute_global_operator_reward(&mut state, &pool, env.block.height);
@@ -627,6 +542,60 @@ pub fn execute_deposit(
         operator_addr,
         encoded_tickets,
     )
+}
+
+// Deposit UST and get savings aust and tickets in return
+pub fn execute_claim_tickets(
+    mut deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    encoded_tickets: String,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+
+    let depositor = info.sender.clone();
+    let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
+
+    // Get the aust exchange rate
+    let aust_exchange_rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
+    // Validate that the lottery has not already started
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
+    // Propogate depositor ticket updates
+    let number_of_new_tickets = handle_depositor_ticket_updates(
+        deps.branch(),
+        &env,
+        &config,
+        &pool,
+        &depositor,
+        &mut depositor_info,
+        encoded_tickets,
+        aust_exchange_rate,
+        Uint256::zero(),
+        Uint256::zero(),
+    )?;
+
+    // Update depositor and state information
+    store_depositor_info(deps.storage, &depositor, depositor_info, env.block.height)?;
+
+    // Save depositor and state information
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "deposit"),
+        attr("depositor", info.sender.to_string()),
+        attr("recipient", depositor.to_string()),
+        attr("tickets", number_of_new_tickets.to_string()),
+    ]))
 }
 
 // Gift several tickets at once to a given address

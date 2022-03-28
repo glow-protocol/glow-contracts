@@ -2,17 +2,18 @@ use std::convert::TryInto;
 use std::ops::Add;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, DepsMut, QuerierWrapper, StdError, StdResult, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, QuerierWrapper, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{BoostConfig, RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 use sha3::{Digest, Keccak256};
 
+use crate::error::ContractError;
 use crate::querier::{
     query_address_voting_balance_at_timestamp, query_total_voting_balance_at_timestamp,
 };
 
 use crate::state::{
     read_operator_info, store_operator_info, Config, DepositorInfo, DepositorStatsInfo,
-    LotteryInfo, OperatorInfo, Pool, PrizeInfo, SponsorInfo, State,
+    LotteryInfo, OperatorInfo, Pool, PrizeInfo, SponsorInfo, State, TICKETS,
 };
 
 /// Compute distributed reward and update global reward index for operators
@@ -68,6 +69,121 @@ pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
     sponsor.pending_rewards += Decimal256::from_uint256(sponsor.lottery_deposit)
         * (state.sponsor_reward_emission_index.global_reward_index - sponsor.reward_index);
     sponsor.reward_index = state.sponsor_reward_emission_index.global_reward_index;
+}
+
+pub fn handle_depositor_ticket_updates(
+    deps: DepsMut,
+    env: &Env,
+    config: &Config,
+    pool: &Pool,
+    depositor: &Addr,
+    depositor_info: &mut DepositorInfo,
+    encoded_tickets: String,
+    aust_exchange_rate: Decimal256,
+    minted_shares: Uint256,
+    minted_aust: Uint256,
+) -> Result<u64, ContractError> {
+    // Get combinations from encoded tickets
+    let combinations = base64_encoded_tickets_to_vec_string_tickets(encoded_tickets)?;
+
+    // Validate that all sequence combinations are valid
+    for combination in combinations.clone() {
+        if !is_valid_sequence(&combination, TICKET_LENGTH) {
+            return Err(ContractError::InvalidSequence(combination));
+        }
+    }
+
+    let post_transaction_depositor_shares = depositor_info.shares + minted_shares;
+
+    let post_transaction_depositor_balance = (pool.total_user_aust + minted_aust)
+        * Decimal256::from_ratio(
+            post_transaction_depositor_shares,
+            pool.total_user_shares + minted_shares,
+        )
+        * aust_exchange_rate;
+
+    let post_transaction_max_depositor_tickets = Uint128::from(
+        post_transaction_depositor_balance
+            / Decimal256::from_uint256(
+                config.ticket_price
+            // Subtract 10^-5 in order to offset rounding problems
+            // relies on ticket price being at least 10^-5 UST
+                - Uint256::from(10u128),
+            ),
+    )
+    .u128() as u64;
+
+    // Get the amount of requested tickets
+    let mut number_of_new_tickets = combinations.len() as u64;
+
+    // Get the number of tickets the user would have post transaction (without accounting for round up)
+    let mut post_transaction_num_depositor_tickets =
+        (depositor_info.tickets.len() + number_of_new_tickets as usize) as u64;
+
+    // Check if we need to round up the number of combinations based on the depositor's mixed_tax_post_transaction_lottery_deposit
+    let mut new_combinations = combinations;
+    for _ in 0..100 {
+        if post_transaction_max_depositor_tickets <= post_transaction_num_depositor_tickets {
+            break;
+        }
+
+        let current_time = env.block.time.nanos();
+        let sequence = pseudo_random_seq(
+            depositor.clone().into_string(),
+            post_transaction_num_depositor_tickets,
+            current_time,
+        );
+
+        // Add the randomly generated sequence to new_combinations
+        new_combinations.push(sequence);
+        // Increment number_of_new_tickets and post_transaction_num_depositor_tickets
+        number_of_new_tickets += 1;
+        post_transaction_num_depositor_tickets += 1;
+    }
+
+    // Validate that the post_transaction_max_depositor_tickets is less than or equal to the post_transaction_num_depositor_tickets
+    if post_transaction_num_depositor_tickets > post_transaction_max_depositor_tickets {
+        return Err(ContractError::InsufficientPostTransactionDepositorBalance {
+            post_transaction_depositor_balance,
+            post_transaction_num_depositor_tickets,
+            post_transaction_max_depositor_tickets,
+        });
+    }
+
+    // Validate that the depositor won't go over max_tickets_per_depositor
+    if post_transaction_num_depositor_tickets > config.max_tickets_per_depositor {
+        return Err(ContractError::MaxTicketsPerDepositorExceeded {
+            max_tickets_per_depositor: config.max_tickets_per_depositor,
+            post_transaction_num_depositor_tickets,
+        });
+    }
+
+    for combination in new_combinations {
+        // check that the number of holders for any given ticket isn't too high
+        if let Some(holders) = TICKETS
+            .may_load(deps.storage, combination.as_bytes())
+            .unwrap()
+        {
+            if holders.len() >= config.max_holders as usize {
+                return Err(ContractError::InvalidHolderSequence(combination));
+            }
+        }
+
+        // update the TICKETS storage
+        let add_ticket = |a: Option<Vec<Addr>>| -> StdResult<Vec<Addr>> {
+            let mut b = a.unwrap_or_default();
+            b.push(depositor.clone());
+            Ok(b)
+        };
+        TICKETS
+            .update(deps.storage, combination.as_bytes(), add_ticket)
+            .unwrap();
+
+        // add the combination to the depositor_info
+        depositor_info.tickets.push(combination);
+    }
+
+    Ok(number_of_new_tickets)
 }
 
 /// Handles all changes to operator's following a deposit

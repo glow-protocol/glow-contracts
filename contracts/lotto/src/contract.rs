@@ -650,6 +650,11 @@ pub fn execute_sponsor(
     let mut msgs: Vec<CosmosMsg> = vec![];
 
     if let None | Some(false) = award {
+        // Can't specify prize distribution in this case
+        if prize_distribution.is_some() {
+            return Err(ContractError::InvalidPrizeDistribution {});
+        }
+
         // Deduct taxes that will be payed when transferring to anchor
         let net_sponsor_amount = Uint256::from(
             deduct_tax(

@@ -92,6 +92,12 @@ pub fn instantiate(
         return Err(ContractError::InvalidWithdrawalFee {});
     }
 
+    // Validate ticket price
+    if msg.ticket_price < Uint256::from(10u128) {
+        // Ticket price must be at least 10 uusd
+        return Err(ContractError::InvalidTicketPrice {});
+    }
+
     // Validate that epoch_interval is at least 30 minutes
     if msg.epoch_interval < THIRTY_MINUTE_TIME {
         return Err(ContractError::InvalidEpochInterval {});

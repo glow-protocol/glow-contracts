@@ -29,6 +29,9 @@ pub enum ContractError {
     #[error("Sequence must be 6 digits between 0-f but instead it was: {0}")]
     InvalidSequence(String),
 
+    #[error("Must specify a ticket price that is at least 10 uusd")]
+    InvalidTicketPrice(),
+
     #[error("Invalid encoded tickets. Could not decode.")]
     InvalidEncodedTickets {},
 

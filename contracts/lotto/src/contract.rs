@@ -597,7 +597,7 @@ pub fn execute_claim_tickets(
 
     // Save depositor and state information
     Ok(Response::new().add_attributes(vec![
-        attr("action", "deposit"),
+        attr("action", "claim_tickets"),
         attr("depositor", info.sender.to_string()),
         attr("recipient", depositor.to_string()),
         attr("tickets", number_of_new_tickets.to_string()),
@@ -868,18 +868,13 @@ pub fn execute_withdraw(
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
-    // Calculate the depositor's balance from their aust balance
-    let depositor_balance = pool.total_user_aust
-        * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
-        * aust_exchange_rate;
-
-    let aust_amount = amount.map(|v| Uint256::from(v) / aust_exchange_rate);
-
     // Get the number of withdrawn shares
-    let withdrawn_shares = aust_amount
-        .map(|v| {
+    let withdrawn_shares = amount
+        .map(|amount| {
             std::cmp::max(
-                v.multiply_ratio(pool.total_user_shares, pool.total_user_aust),
+                (Uint256::from(amount) / aust_exchange_rate)
+                    .multiply_ratio(pool.total_user_shares, pool.total_user_aust),
+                // Always withdraw at least one share
                 Uint256::one(),
             )
         })
@@ -890,6 +885,11 @@ pub fn execute_withdraw(
         withdrawn_shares.multiply_ratio(pool.total_user_aust, pool.total_user_shares);
 
     let withdrawn_aust_value = withdrawn_aust * aust_exchange_rate;
+
+    // Calculate the depositor's balance from their aust balance
+    let depositor_balance = pool.total_user_aust
+        * Decimal256::from_ratio(depositor_info.shares, pool.total_user_shares)
+        * aust_exchange_rate;
 
     if withdrawn_aust_value > depositor_balance {
         return Err(ContractError::SpecifiedWithdrawAmountTooBig {

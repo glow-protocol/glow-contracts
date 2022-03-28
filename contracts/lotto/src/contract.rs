@@ -1253,7 +1253,7 @@ pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractEr
     compute_global_operator_reward(&mut state, &pool, env.block.height);
     compute_global_sponsor_reward(&mut state, &pool, env.block.height);
 
-    // Compute total_reserves to fund gov contract
+    // Compute total_reserves to fund community contract
     let total_reserves = state.total_reserve;
     let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
         vec![CosmosMsg::Bank(BankMsg::Send {

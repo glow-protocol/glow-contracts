@@ -110,7 +110,7 @@ fn instantiate_glow_lotto() {
         marketing: None,
     };
     let aust_addr = app
-        .instantiate_contract(cw20_id, owner.clone(), &msg, &[], "CASH", None)
+        .instantiate_contract(cw20_id, owner.clone(), &msg, &[], "cash", None)
         .unwrap();
 
     set_aust_addr(aust_addr.to_string());

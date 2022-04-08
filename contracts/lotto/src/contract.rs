@@ -761,6 +761,10 @@ pub fn execute_sponsor_withdraw(
     )?
     .exchange_rate;
 
+    if rate < state.last_lottery_execution_aust_exchange_rate {
+        return Err(ContractError::AnchorExchangeRateCollapse {});
+    }
+
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
     // Validate that the sponsor has a lottery deposit
@@ -1402,7 +1406,7 @@ pub fn execute_update_config(
 
     if let Some(max_holders) = max_holders {
         // Validate that max_holders is within the bounds
-        if max_holders < MAX_HOLDERS_FLOOR || MAX_HOLDERS_CAP < max_holders {
+        if !(MAX_HOLDERS_FLOOR..=MAX_HOLDERS_CAP).contains(&max_holders) {
             return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
         }
 

@@ -20,6 +20,9 @@ pub enum ContractError {
     #[error("Cannot register contracts twice")]
     AlreadyRegistered {},
 
+    #[error("Cannot withdraw sponsor funds until anchor exchange rate recovers")]
+    AnchorExchangeRateCollapse {},
+
     #[error("Contract have not been registered yet")]
     NotRegistered {},
 

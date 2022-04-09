@@ -40,7 +40,8 @@ pub fn instantiate(
     CONFIG.save(deps.storage, &config)?;
 
     // Save an initial default state
-    let state = State::default();
+    let mut state = State::default();
+    state.timestamp = env.block.time.seconds();
     STATE.save(deps.storage, &state, env.block.time.seconds())?;
 
     Ok(Response::default())

@@ -7,7 +7,7 @@ use crate::helpers::{
     claim_unbonded_withdrawals, compute_global_operator_reward, compute_global_sponsor_reward,
     compute_operator_reward, compute_sponsor_reward, decimal_from_ratio_or_one,
     handle_depositor_operator_updates, handle_depositor_ticket_updates,
-    ExecuteLotteryRedeemedAustInfo,
+    old_compute_depositor_reward, old_compute_reward, ExecuteLotteryRedeemedAustInfo,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate};
@@ -1905,6 +1905,11 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> 
     // - STATE (reuses storage key)
     // - POOL (reuses storage key)
 
+    // Read old storage
+    let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
+    let mut old_state = OLDSTATE.load(deps.storage)?;
+    let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
+
     let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
         base_multiplier: Decimal256::from_ratio(40u64, 100u64),
         max_multiplier: Decimal256::one(),
@@ -1925,8 +1930,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> 
             default_lotto_winner_boost_config
         };
 
-    // migrate config
-    let old_config = OLDCONFIG.load(deps.as_ref().storage)?;
     let new_config = Config {
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
@@ -1967,7 +1970,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> 
     )?
     .exchange_rate;
 
-    let old_state = OLDSTATE.load(deps.storage)?;
+    old_compute_reward(&mut old_state, &old_pool, env.block.height);
 
     let state = State {
         total_tickets: old_state.total_tickets,
@@ -1995,7 +1998,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> 
     // Migrate pool
     // Initially total_user_aust and total_user_shares are set to 0
     // But they are updated in the migrate_old_depositors section of the loop
-    let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
     let new_pool = Pool {
         total_user_aust: Uint256::zero(),
         total_user_shares: Uint256::zero(),
@@ -2051,6 +2053,7 @@ pub fn migrate_old_depositors(
     limit: Option<u32>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
 
     let aust_exchange_rate: Decimal256 = query_exchange_rate(
         deps.as_ref(),
@@ -2067,7 +2070,26 @@ pub fn migrate_old_depositors(
 
     let mut pool = POOL.load(deps.storage)?;
 
-    for (addr, old_depositor_info) in old_depositors {
+    let mut msgs: Vec<CosmosMsg> = vec![];
+
+    for (addr, mut old_depositor_info) in old_depositors {
+        // Update depositor reward and append message to send pending rewards
+        old_compute_depositor_reward(
+            state.sponsor_reward_emission_index.global_reward_index,
+            &mut old_depositor_info,
+        );
+        let claim_amount = old_depositor_info.pending_rewards * Uint256::one();
+        if !claim_amount.is_zero() {
+            msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: config.distributor_contract.to_string(),
+                funds: vec![],
+                msg: to_binary(&FaucetExecuteMsg::Spend {
+                    recipient: addr.to_string(),
+                    amount: claim_amount.into(),
+                })?,
+            }));
+        }
+
         // Delete old depositor
         old_remove_depositor_info(deps.storage, &addr);
 
@@ -2097,8 +2119,6 @@ pub fn migrate_old_depositors(
     let old_depositors = old_read_depositors(deps.as_ref(), None, Some(1))?;
     if old_depositors.is_empty() {
         // Migrate lottery info
-
-        let state = STATE.load(deps.storage)?;
 
         // Don't need to include state.current_lottery
         // because nothing has been saved with id state.current_lottery yet
@@ -2130,7 +2150,7 @@ pub fn migrate_old_depositors(
 
     POOL.save(deps.storage, &pool)?;
 
-    Ok(Response::new().add_attributes(vec![
+    Ok(Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "migrate_old_depositors"),
         attr("num_migrated_entries", num_migrated_entries.to_string()),
     ]))

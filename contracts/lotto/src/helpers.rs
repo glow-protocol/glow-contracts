@@ -13,7 +13,8 @@ use crate::querier::{
 
 use crate::state::{
     read_operator_info, store_operator_info, Config, DepositorInfo, DepositorStatsInfo,
-    LotteryInfo, OperatorInfo, Pool, PrizeInfo, SponsorInfo, State, TICKETS,
+    LotteryInfo, OldDepositorInfo, OldPool, OldState, OperatorInfo, Pool, PrizeInfo, SponsorInfo,
+    State, TICKETS,
 };
 
 /// Compute distributed reward and update global reward index for operators
@@ -69,6 +70,33 @@ pub fn compute_sponsor_reward(state: &State, sponsor: &mut SponsorInfo) {
     sponsor.pending_rewards += Decimal256::from_uint256(sponsor.lottery_deposit)
         * (state.sponsor_reward_emission_index.global_reward_index - sponsor.reward_index);
     sponsor.reward_index = state.sponsor_reward_emission_index.global_reward_index;
+}
+
+/// Compute distributed reward and update global reward index
+pub fn old_compute_reward(state: &mut OldState, pool: &OldPool, block_height: u64) {
+    if state.last_reward_updated >= block_height {
+        return;
+    }
+
+    let passed_blocks = Decimal256::from_uint256(block_height - state.last_reward_updated);
+    let reward_accrued = passed_blocks * state.glow_emission_rate;
+
+    let total_deposited = pool.total_user_lottery_deposits + pool.total_sponsor_lottery_deposits;
+    if !reward_accrued.is_zero() && !total_deposited.is_zero() {
+        state.global_reward_index += reward_accrued / Decimal256::from_uint256(total_deposited);
+    }
+
+    state.last_reward_updated = block_height;
+}
+
+/// Compute reward amount a depositor received
+pub fn old_compute_depositor_reward(
+    global_reward_index: Decimal256,
+    depositor: &mut OldDepositorInfo,
+) {
+    depositor.pending_rewards += Decimal256::from_uint256(depositor.lottery_deposit)
+        * (global_reward_index - depositor.reward_index);
+    depositor.reward_index = global_reward_index;
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -101,6 +101,9 @@ pub fn execute_withdraw_expired_tokens(
         return Err(ContractError::Unauthorized {});
     }
 
+    // Verify that the recipient is a valid address
+    let recipient = deps.api.addr_validate(&recipient)?;
+
     // the admin can only withdraw if all airdrop stage expiries have passed
     let latest_stage: u8 = read_latest_stage(deps.storage)?;
 
@@ -131,13 +134,13 @@ pub fn execute_withdraw_expired_tokens(
             contract_addr: glow_cw20_address.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: recipient.clone(),
+                recipient: recipient.to_string(),
                 amount: token_balance.into(),
             })?,
         })])
         .add_attributes(vec![
             ("action", "withdraw_expired_tokens"),
-            ("to", &recipient),
+            ("to", &recipient.to_string()),
             ("amount", &token_balance.to_string()),
         ]))
 }

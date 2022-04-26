@@ -64,7 +64,7 @@ pub fn execute(
         }
         ExecuteMsg::Checkpoint {} => execute_global_checkpoint(deps, env, info),
         ExecuteMsg::RegisterContracts { cw20_address } => {
-            execute_register_contracts(deps, cw20_address)
+            execute_register_contracts(deps, info, cw20_address)
         }
     }
 }
@@ -387,9 +387,15 @@ pub fn execute_withdraw(
 
 pub fn execute_register_contracts(
     deps: DepsMut,
+    info: MessageInfo,
     cw20_address: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
+
+    if config.owner != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+
     if config.cw20_address != None {
         return Err(ContractError::Unauthorized {});
     }

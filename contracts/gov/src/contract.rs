@@ -86,7 +86,7 @@ pub fn execute(
             glow_token,
             ve_token,
             terraswap_factory,
-        } => register_contracts(deps, glow_token, ve_token, terraswap_factory),
+        } => register_contracts(deps, info, glow_token, ve_token, terraswap_factory),
         ExecuteMsg::Sweep { denom } => sweep(deps, env, denom),
         ExecuteMsg::UpdateConfig {
             owner,
@@ -155,11 +155,16 @@ pub fn receive_cw20(
 
 pub fn register_contracts(
     deps: DepsMut,
+    info: MessageInfo,
     glow_token: String,
     ve_token: String,
     terraswap_factory: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = config_read(deps.storage).load()?;
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
+        return Err(ContractError::Unauthorized {});
+    }
+
     if config.glow_token != CanonicalAddr::from(vec![]) {
         return Err(ContractError::Unauthorized {});
     }

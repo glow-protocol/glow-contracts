@@ -66,7 +66,7 @@ pub fn execute(
             glow_token,
             ve_token,
             terraswap_factory,
-        } => register_contracts(deps, glow_token, ve_token, terraswap_factory),
+        } => register_contracts(deps, info, glow_token, ve_token, terraswap_factory),
         ExecuteMsg::Sweep { denom } => sweep(deps, env, denom),
         ExecuteMsg::DistributeGlow {} => distribute_glow(deps, env),
         ExecuteMsg::Claim { limit } => claim(deps, env, info, limit),
@@ -188,11 +188,17 @@ pub fn claim(
 /// Register the addresses of the glow_token, ve_token, and terraswap_factory contracts
 pub fn register_contracts(
     deps: DepsMut,
+    info: MessageInfo,
     glow_token: String,
     ve_token: String,
     terraswap_factory: String,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
+
+    if config.owner != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+
     if config.glow_token != Addr::unchecked("") {
         return Err(ContractError::Unauthorized {});
     }

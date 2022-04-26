@@ -219,7 +219,7 @@ pub struct StateResponse {
     pub total_reserve: Uint256,
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub current_lottery: u64,
-    pub next_lottery_time: Expiration,
+    pub next_lottery_time: Timestamp,
     pub next_lottery_exec_time: Expiration,
     pub next_epoch: Expiration,
     pub operator_reward_emission_index: RewardEmissionsIndex,

@@ -180,9 +180,7 @@ pub fn instantiate(
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(
-                msg.initial_lottery_execution,
-            )),
+            next_lottery_time: Timestamp::from_seconds(msg.initial_lottery_execution),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -1974,12 +1972,19 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
     old_compute_reward(&mut old_state, &old_pool, env.block.height);
 
+    let next_lottery_time =
+        if let Expiration::AtTime(next_lottery_time) = old_state.next_lottery_time {
+            next_lottery_time
+        } else {
+            return Err(StdError::generic_err("invalid lottery next time"));
+        };
+
     let state = State {
         total_tickets: old_state.total_tickets,
         total_reserve: old_state.total_reserve,
         prize_buckets: old_state.prize_buckets,
         current_lottery: old_state.current_lottery,
-        next_lottery_time: old_state.next_lottery_time,
+        next_lottery_time,
         next_lottery_exec_time: old_state.next_lottery_exec_time,
         next_epoch: old_state.next_epoch,
         operator_reward_emission_index: RewardEmissionsIndex {

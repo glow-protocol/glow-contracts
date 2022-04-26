@@ -195,7 +195,8 @@ impl UserLockedBalance {
 
     /// Must be called with a timestamp after or equaling start lock time
     fn elapsed_lock_time_at_timestamp(&self, timestamp: u64) -> u64 {
-        // This is only ever called when LockedBalance is valid.
+        // This is only ever called when LockedBalance is valid,
+        // and with a timestamp in the future
         timestamp - self.start_lock_time
     }
 

@@ -57,7 +57,7 @@ pub fn execute_lottery(
     }
 
     // Validate that the next_lottery_time has passed
-    if !state.next_lottery_time.is_expired(&env.block) {
+    if state.next_lottery_time > env.block.time {
         return Err(ContractError::LotteryNotReady {
             next_lottery_time: state.next_lottery_time,
         });
@@ -341,12 +341,10 @@ pub fn execute_prize(
 
         // Get the amount of time between now and the time at which the lottery
         // became runnable
-        let time_since_next_lottery_time =
-            if let Expiration::AtTime(next_lottery_time) = state.next_lottery_time {
-                env.block.time.minus_seconds(next_lottery_time.seconds())
-            } else {
-                return Err(ContractError::InvalidLotteryNextTime {});
-            };
+        let time_since_next_lottery_time = env
+            .block
+            .time
+            .minus_seconds(state.next_lottery_time.seconds());
 
         // Get the lottery interval in seconds
         let lottery_interval_seconds = if let Duration::Time(time) = config.lottery_interval {
@@ -368,7 +366,7 @@ pub fn execute_prize(
         // but if somebody forgot to run the lottery for a week, it will be 2 for example
         state.next_lottery_time = state
             .next_lottery_time
-            .add(config.lottery_interval * (1 + lottery_intervals_since_last_lottery))?;
+            .plus_seconds(lottery_interval_seconds * (1 + lottery_intervals_since_last_lottery));
 
         // Set next_lottery_exec_time to never
         state.next_lottery_exec_time = Expiration::Never {};

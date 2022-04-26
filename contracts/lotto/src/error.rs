@@ -1,6 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{StdError, Uint128};
-use cw0::Expiration;
+use cosmwasm_std::{StdError, Timestamp, Uint128};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -61,7 +60,7 @@ pub enum ContractError {
     LotteryAlreadyStarted {},
 
     #[error("Lottery is not ready to undergo execution yet, please wait until next_lottery_time: {next_lottery_time:?}")]
-    LotteryNotReady { next_lottery_time: Expiration },
+    LotteryNotReady { next_lottery_time: Timestamp },
 
     #[error("The depositor doesn't have any savings aust so there is nothing to withdraw")]
     NoDepositorSavingsAustToWithdraw {},

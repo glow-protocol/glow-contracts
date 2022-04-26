@@ -69,8 +69,8 @@ const SPLIT_FACTOR: u64 = 75; // as a %
 const INSTANT_WITHDRAWAL_FEE: u64 = 10; // as a %
 pub const RESERVE_FACTOR: u64 = 5; // as a %
 const MAX_HOLDERS: u8 = 10;
-const WEEK_TIME: u64 = 604800; // in seconds
-const HOUR_TIME: u64 = 3600; // in seconds
+const WEEK_SECONDS: u64 = 604800; // in seconds
+const HOUR_SECONDS: u64 = 3600; // in seconds
 const ROUND_DELTA: u64 = 10;
 const FIRST_LOTTO_TIME: u64 = 1595961494; // timestamp between deployment and 1 week after
 const MAX_TICKETS_PER_DEPOSITOR: u64 = 12000;
@@ -118,9 +118,9 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         anchor_contract: ANCHOR.to_string(),
         aterra_contract: A_UST.to_string(),
         oracle_contract: ORACLE_ADDR.to_string(),
-        lottery_interval: WEEK_TIME,
-        epoch_interval: 3 * HOUR_TIME,
-        block_time: HOUR_TIME,
+        lottery_interval: WEEK_SECONDS,
+        epoch_interval: 3 * HOUR_SECONDS,
+        block_time: HOUR_SECONDS,
         round_delta: ROUND_DELTA,
         ticket_price: Uint256::from(TICKET_PRICE),
         max_holders: MAX_HOLDERS,
@@ -129,7 +129,7 @@ pub(crate) fn instantiate_msg() -> InstantiateMsg {
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
-        unbonding_period: WEEK_TIME,
+        unbonding_period: WEEK_SECONDS,
         initial_sponsor_glow_emission_rate: Decimal256::zero(),
         initial_operator_glow_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
@@ -146,9 +146,9 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         anchor_contract: ANCHOR.to_string(),
         aterra_contract: A_UST.to_string(),
         oracle_contract: ORACLE_ADDR.to_string(),
-        lottery_interval: WEEK_TIME,
-        epoch_interval: 3 * HOUR_TIME,
-        block_time: HOUR_TIME,
+        lottery_interval: WEEK_SECONDS,
+        epoch_interval: 3 * HOUR_SECONDS,
+        block_time: HOUR_SECONDS,
         round_delta: ROUND_DELTA,
         ticket_price: Uint256::from(SMALL_TICKET_PRICE),
         max_holders: MAX_HOLDERS,
@@ -157,7 +157,7 @@ pub(crate) fn instantiate_msg_small_ticket_price() -> InstantiateMsg {
         reserve_factor: Decimal256::percent(RESERVE_FACTOR),
         split_factor: Decimal256::percent(SPLIT_FACTOR),
         instant_withdrawal_fee: Decimal256::percent(INSTANT_WITHDRAWAL_FEE),
-        unbonding_period: WEEK_TIME,
+        unbonding_period: WEEK_SECONDS,
         initial_sponsor_glow_emission_rate: Decimal256::zero(),
         initial_operator_glow_emission_rate: Decimal256::zero(),
         initial_lottery_execution: FIRST_LOTTO_TIME,
@@ -328,7 +328,7 @@ fn proper_initialization() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -450,7 +450,7 @@ fn update_config() {
         reserve_factor: None,
         instant_withdrawal_fee: None,
         unbonding_period: None,
-        epoch_interval: Some(HOUR_TIME * 5),
+        epoch_interval: Some(HOUR_SECONDS * 5),
         max_holders: None,
         max_tickets_per_depositor: None,
         paused: None,
@@ -478,7 +478,7 @@ fn update_config() {
         reserve_factor: None,
         instant_withdrawal_fee: None,
         unbonding_period: None,
-        epoch_interval: Some(HOUR_TIME / 3),
+        epoch_interval: Some(HOUR_SECONDS / 3),
         max_holders: None,
         max_tickets_per_depositor: None,
         paused: None,
@@ -1020,7 +1020,7 @@ fn deposit() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: (HOUR.mul(3)).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -1444,7 +1444,7 @@ fn gift_tickets() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -1799,7 +1799,7 @@ fn withdraw() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -2091,7 +2091,7 @@ fn instant_withdraw() {
             total_reserve: withdrawal_fee,
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -2605,8 +2605,7 @@ fn execute_lottery() {
 
     match res {
         Err(ContractError::LotteryNotReady { next_lottery_time })
-            if next_lottery_time
-                == Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)) => {}
+            if next_lottery_time == Timestamp::from_seconds(FIRST_LOTTO_TIME) => {}
         _ => panic!("DO NOT ENTER HERE"),
     }
 
@@ -2709,9 +2708,7 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME))
-            .add(WEEK)
-            .unwrap()
+        Timestamp::from_seconds(FIRST_LOTTO_TIME).plus_seconds(WEEK_SECONDS)
     );
 
     // Directly check next_lottery_exec_time has been set up to Never
@@ -2806,11 +2803,9 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME))
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
+        Timestamp::from_seconds(FIRST_LOTTO_TIME)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
     );
 
     let state = query_state(deps.as_ref(), mock_env(), None).unwrap();
@@ -2896,23 +2891,16 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME))
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
+        Timestamp::from_seconds(FIRST_LOTTO_TIME)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
     );
 
     // Advance to the next lottery time
-    if let Expiration::AtTime(next_lottery_time_seconds) = next_lottery_time {
-        env.block.time = next_lottery_time_seconds;
-    };
+    env.block.time = next_lottery_time;
 
     // Execute 4th lottery
     // Confirm that you can run the lottery right at the next execution time
@@ -2936,19 +2924,13 @@ fn execute_lottery() {
 
     assert_eq!(
         next_lottery_time,
-        Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME))
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
-            .add(WEEK)
-            .unwrap()
+        Timestamp::from_seconds(FIRST_LOTTO_TIME)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
+            .plus_seconds(WEEK_SECONDS)
     );
 }
 
@@ -4469,7 +4451,7 @@ fn execute_epoch_operations() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&env.block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -4565,7 +4547,7 @@ fn small_withdraw() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -4654,7 +4636,7 @@ fn small_withdraw() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -4830,7 +4812,7 @@ pub fn lottery_pool_solvency_edge_case() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {
@@ -6328,12 +6310,13 @@ pub fn test_migrate() {
 
     // Increase current lottery
     let state = STATE.load(deps.as_mut().storage).unwrap();
+
     let old_state = OldState {
         total_tickets: state.total_tickets,
         total_reserve: state.total_reserve,
         prize_buckets: state.prize_buckets,
         current_lottery: 2,
-        next_lottery_time: state.next_lottery_time,
+        next_lottery_time: Expiration::AtTime(state.next_lottery_time),
         next_lottery_exec_time: state.next_lottery_exec_time,
         next_epoch: state.next_epoch,
         global_reward_index: state.operator_reward_emission_index.global_reward_index,
@@ -6636,12 +6619,19 @@ pub fn test_migrate() {
 
     // New State
 
+    let next_lottery_time =
+        if let Expiration::AtTime(next_lottery_time) = old_state.next_lottery_time {
+            next_lottery_time
+        } else {
+            panic!("ERROR");
+        };
+
     let new_state = State {
         total_tickets: old_state.total_tickets,
         total_reserve: old_state.total_reserve,
         prize_buckets: old_state.prize_buckets,
         current_lottery: old_state.current_lottery,
-        next_lottery_time: old_state.next_lottery_time,
+        next_lottery_time,
         next_lottery_exec_time: old_state.next_lottery_exec_time,
         next_epoch: old_state.next_epoch,
         operator_reward_emission_index: RewardEmissionsIndex {
@@ -6750,7 +6740,7 @@ pub fn anchor_pool_smaller_than_total_deposits() {
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
-            next_lottery_time: Expiration::AtTime(Timestamp::from_seconds(FIRST_LOTTO_TIME)),
+            next_lottery_time: Timestamp::from_seconds(FIRST_LOTTO_TIME),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: HOUR.mul(3).after(&mock_env().block),
             operator_reward_emission_index: RewardEmissionsIndex {

@@ -761,6 +761,10 @@ pub fn execute_sponsor_withdraw(
     )?
     .exchange_rate;
 
+    if rate < state.last_lottery_execution_aust_exchange_rate {
+        return Err(ContractError::AnchorExchangeRateCollapse {});
+    }
+
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
     // Validate that the sponsor has a lottery deposit

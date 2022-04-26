@@ -1192,9 +1192,6 @@ pub fn execute_claim_lottery(
         }));
     }
 
-    // Update storage
-    STATE.save(deps.storage, &state)?;
-
     // Send response
 
     Ok(Response::new().add_messages(msgs).add_attributes(vec![

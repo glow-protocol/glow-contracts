@@ -17,4 +17,7 @@ pub enum ContractError {
 
     #[error("Nothing to distribute")]
     NothingToDistribute {},
+
+    #[error("Contracts not registered yet")]
+    ContractsNotRegistered {},
 }

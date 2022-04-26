@@ -84,6 +84,10 @@ pub fn distribute_glow(deps: DepsMut, env: Env) -> Result<Response, ContractErro
     let ve_token_addr = &config.ve_token;
     let week_timestamp = env.block.time.seconds() / SECONDS_PER_WEEK * SECONDS_PER_WEEK;
 
+    if ve_token_addr == &Addr::unchecked("") {
+        return Err(ContractError::ContractsNotRegistered {});
+    }
+
     // Get the total voting balance
     let total_voting_balance = query_total_voting_balance_at_timestamp(
         &deps.querier,
@@ -220,6 +224,10 @@ pub fn sweep(deps: DepsMut, env: Env, denom: String) -> Result<Response, Contrac
     let config = CONFIG.load(deps.storage)?;
     let glow_token = config.glow_token;
     let terraswap_factory_addr = config.terraswap_factory;
+
+    if glow_token == Addr::unchecked("") {
+        return Err(ContractError::ContractsNotRegistered {});
+    }
 
     // Get the pair info
     let pair_info: PairInfo = query_pair_info(

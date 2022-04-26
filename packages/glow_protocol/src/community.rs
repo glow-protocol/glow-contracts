@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_bignumber::Decimal256;
 use cosmwasm_std::Uint128;
 
+use crate::lotto::NUM_PRIZE_BUCKETS;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,        // owner contract, to be transferred to glow gov contract
@@ -34,7 +36,7 @@ pub enum ExecuteMsg {
     SponsorLotto {
         amount: Uint128,
         award: Option<bool>,
-        prize_distribution: Option<[Decimal256; 7]>,
+        prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
     },
     WithdrawSponsor {},
     Swap {

@@ -32,7 +32,7 @@ pub const DEFAULT_CLAIM_LIMIT: u32 = 20;
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     _msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
@@ -44,7 +44,6 @@ pub fn instantiate(
     };
 
     let state = State {
-        contract_addr: env.contract.address,
         total_distributed_unclaimed_fees: Uint128::zero(),
     };
 
@@ -102,12 +101,9 @@ pub fn distribute_glow(deps: DepsMut, env: Env) -> Result<Response, ContractErro
 
     // Get the amount to distribute which includes the GLOW that has just been sent to the contractx
     // but subtracts the amount reserved for previous unclaimed fee distribution.
-    let amount_to_distribute = query_token_balance(
-        &deps.querier,
-        config.glow_token,
-        state.contract_addr.clone(),
-    )?
-    .checked_sub(state.total_distributed_unclaimed_fees)?;
+    let amount_to_distribute =
+        query_token_balance(&deps.querier, config.glow_token, env.contract.address)?
+            .checked_sub(state.total_distributed_unclaimed_fees)?;
 
     // Verify that the amount to distribute is non zero.
     if amount_to_distribute == Uint128::zero() {
@@ -307,7 +303,7 @@ pub fn update_config(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     match msg {
         QueryMsg::Config {} => Ok(to_binary(&query_config(deps)?)?),
-        QueryMsg::State {} => Ok(to_binary(&query_state(deps)?)?),
+        QueryMsg::State {} => Ok(to_binary(&query_state(deps, env)?)?),
         QueryMsg::Staker {
             address,
             fee_limit,
@@ -332,10 +328,10 @@ fn query_config(deps: Deps) -> Result<ConfigResponse, ContractError> {
     })
 }
 
-fn query_state(deps: Deps) -> Result<StateResponse, ContractError> {
+fn query_state(deps: Deps, env: Env) -> Result<StateResponse, ContractError> {
     let state = STATE.load(deps.storage)?;
     Ok(StateResponse {
-        contract_addr: state.contract_addr.to_string(),
+        contract_addr: env.contract.address.to_string(),
         total_distributed_unclaimed_fees: state.total_distributed_unclaimed_fees,
     })
 }

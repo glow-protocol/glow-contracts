@@ -90,7 +90,6 @@ fn proper_initialization() {
     assert_eq!(
         state,
         State {
-            contract_addr: deps.api.addr_validate(MOCK_CONTRACT_ADDR).unwrap(),
             total_distributed_unclaimed_fees: Uint128::zero(),
         }
     );

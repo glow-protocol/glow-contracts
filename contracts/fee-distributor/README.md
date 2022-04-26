@@ -13,7 +13,7 @@ The fee distributor contract supports `Claim`, `DistributeGlow`, and `Sweep` fun
 
 ### DistributeGlow
 
-Distribute glow can be called to distribute all available glow in the gov contract to veGlow holders. Available glow means the Glow balance of the gov contract minus the amount reserved for polls and reserved for past glow distributions. 
+Distribute glow can be called to distribute all available glow in the fee distributor contract to veGlow holders. Available glow means the Glow balance of the fee distributor contract minus the amount reserved for past glow distributions. 
 
 Glow distribution works by making use of the `WEEKLY_TOKEN_DISTRIBUTION` map.
 

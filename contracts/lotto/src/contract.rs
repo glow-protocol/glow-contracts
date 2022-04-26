@@ -118,6 +118,7 @@ pub fn instantiate(
         if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
             if msg_lotto_winner_boost_config.base_multiplier
                 > msg_lotto_winner_boost_config.max_multiplier
+                || msg_lotto_winner_boost_config.total_voting_power_weight == Decimal256::zero()
             {
                 return Err(ContractError::InvalidBoostConfig {});
             }
@@ -1437,7 +1438,9 @@ pub fn execute_update_config(
     }
 
     if let Some(lotto_winner_boost_config) = lotto_winner_boost_config {
-        if lotto_winner_boost_config.base_multiplier > lotto_winner_boost_config.max_multiplier {
+        if lotto_winner_boost_config.base_multiplier > lotto_winner_boost_config.max_multiplier
+            || lotto_winner_boost_config.total_voting_power_weight == Decimal256::zero()
+        {
             return Err(ContractError::InvalidBoostConfig {});
         }
         config.lotto_winner_boost_config = lotto_winner_boost_config
@@ -1895,7 +1898,7 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
     // Migration Notes
     // The changes to storage:
     // - CONFIG (reuses storage key)
@@ -1920,10 +1923,9 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> StdResult<Response> 
         if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
             if msg_lotto_winner_boost_config.base_multiplier
                 > msg_lotto_winner_boost_config.max_multiplier
+                || msg_lotto_winner_boost_config.total_voting_power_weight == Decimal256::zero()
             {
-                return Err(StdError::generic_err(
-                    "boost config base multiplier must be less than max multiplier",
-                ));
+                return Err(ContractError::InvalidBoostConfig {});
             }
             msg_lotto_winner_boost_config
         } else {

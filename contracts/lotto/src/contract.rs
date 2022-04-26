@@ -320,35 +320,7 @@ pub fn execute(
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
-        ExecuteMsg::UpdateConfig {
-            owner,
-            oracle_addr,
-            reserve_factor,
-            instant_withdrawal_fee,
-            unbonding_period,
-            epoch_interval,
-            max_holders,
-            max_tickets_per_depositor,
-            paused,
-            lotto_winner_boost_config,
-            operator_glow_emission_rate,
-            sponsor_glow_emission_rate,
-        } => execute_update_config(
-            deps,
-            info,
-            owner,
-            oracle_addr,
-            reserve_factor,
-            instant_withdrawal_fee,
-            unbonding_period,
-            epoch_interval,
-            max_holders,
-            max_tickets_per_depositor,
-            paused,
-            lotto_winner_boost_config,
-            operator_glow_emission_rate,
-            sponsor_glow_emission_rate,
-        ),
+        ExecuteMsg::UpdateConfig { .. } => unreachable!(),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
             block_time,
@@ -364,9 +336,7 @@ pub fn execute(
             prize_distribution,
             round_delta,
         ),
-        ExecuteMsg::MigrateOldDepositors { .. } => Err(ContractError::Std(StdError::generic_err(
-            "Cannot call MigrateLoop when unpaused.",
-        ))),
+        ExecuteMsg::MigrateOldDepositors { .. } => unreachable!(),
     }
 }
 
@@ -2140,24 +2110,30 @@ pub fn migrate_old_depositors(
         // Don't need to include state.current_lottery
         // because nothing has been saved with id state.current_lottery yet
         for i in 0..state.current_lottery {
-            let old_lottery_info = old_read_lottery_info(deps.storage, i);
+            let old_lottery_info = old_read_lottery_info(deps.storage, i)?;
 
-            let new_lottery_info = LotteryInfo {
-                rand_round: old_lottery_info.rand_round,
-                sequence: old_lottery_info.sequence,
-                awarded: old_lottery_info.awarded,
-                timestamp: Timestamp::from_seconds(0),
-                prize_buckets: old_lottery_info.prize_buckets,
-                number_winners: old_lottery_info.number_winners,
-                page: old_lottery_info.page,
-                glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-                block_height: old_lottery_info.timestamp,
-                total_user_shares: pool.total_user_shares,
-            };
+            if let Some(old_lottery_info) = old_lottery_info {
+                let new_lottery_info = LotteryInfo {
+                    rand_round: old_lottery_info.rand_round,
+                    sequence: old_lottery_info.sequence,
+                    awarded: old_lottery_info.awarded,
+                    timestamp: Timestamp::from_seconds(0),
+                    prize_buckets: old_lottery_info.prize_buckets,
+                    number_winners: old_lottery_info.number_winners,
+                    page: old_lottery_info.page,
+                    glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+                    block_height: old_lottery_info.timestamp,
+                    total_user_shares: pool.total_user_shares,
+                };
 
-            store_lottery_info(deps.storage, i, &new_lottery_info)?;
+                store_lottery_info(deps.storage, i, &new_lottery_info)?;
 
-            old_remove_lottery_info(deps.storage, i);
+                old_remove_lottery_info(deps.storage, i);
+            } else {
+                return Err(ContractError::Std(StdError::generic_err(
+                    "Already migrated depositors and lotteries",
+                )));
+            }
         }
 
         // Set paused to false and save

@@ -272,7 +272,7 @@ pub struct LotteryInfo {
     pub total_user_shares: Uint256,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct OldLotteryInfo {
     pub rand_round: u64,
     pub sequence: String,
@@ -315,19 +315,11 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
     }
 }
 
-pub fn old_read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> OldLotteryInfo {
-    match bucket_read(storage, OLD_PREFIX_LOTTERY).load(&lottery_id.to_be_bytes()) {
-        Ok(v) => v,
-        _ => OldLotteryInfo {
-            rand_round: 0,
-            sequence: "".to_string(),
-            awarded: false,
-            timestamp: 0,
-            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-            number_winners: [0; NUM_PRIZE_BUCKETS],
-            page: "".to_string(),
-        },
-    }
+pub fn old_read_lottery_info(
+    storage: &dyn Storage,
+    lottery_id: u64,
+) -> StdResult<Option<OldLotteryInfo>> {
+    bucket_read(storage, OLD_PREFIX_LOTTERY).may_load(&lottery_id.to_be_bytes())
 }
 
 pub fn old_remove_lottery_info(storage: &mut dyn Storage, lottery_id: u64) {

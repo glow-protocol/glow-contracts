@@ -15,8 +15,9 @@ use crate::state::{
     old_read_depositor_info, old_read_lottery_info, old_remove_depositor_info, read_depositor_info,
     read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes, read_prize,
     read_sponsor_info, store_depositor_info, store_depositor_stats, Config, DepositorInfo,
-    DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, OldPool, OldState, Pool,
-    PrizeInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
+    DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, OldLotteryInfo, OldPool,
+    OldState, Pool, PrizeInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL,
+    PRIZES, STATE,
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
@@ -6366,9 +6367,10 @@ pub fn test_migrate() {
     // Store some old lotteries
 
     for i in 0..old_state.current_lottery {
-        let mut old_lottery = old_read_lottery_info(deps.as_ref().storage, 100);
-
-        old_lottery.sequence = format!("00000{}", i);
+        let old_lottery = OldLotteryInfo {
+            sequence: format!("00000{}", i),
+            ..Default::default()
+        };
 
         old_store_lottery_info(deps.as_mut().storage, i, &old_lottery).unwrap();
     }
@@ -6538,7 +6540,9 @@ pub fn test_migrate() {
     // New Lottery Info
 
     for i in 0..state.current_lottery {
-        let mut old_lottery = old_read_lottery_info(deps.as_ref().storage, 100);
+        let mut old_lottery = old_read_lottery_info(deps.as_ref().storage, 100)
+            .unwrap()
+            .unwrap();
 
         old_lottery.sequence = format!("00000{}", i);
 

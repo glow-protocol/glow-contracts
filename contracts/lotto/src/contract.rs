@@ -1052,7 +1052,10 @@ pub fn execute_claim_unbonded(
         .iter()
         .fold(Uint256::zero(), |sum, val| sum + *val);
 
-    if to_send > (balance - reserved_for_prizes).into() {
+    let reserved_for_reserves = state.total_reserve;
+
+    if to_send > (balance - reserved_for_prizes - reserved_for_reserves).into() {
+        // Should never happen
         return Err(ContractError::InsufficientFunds {
             to_send,
             available_balance: balance - reserved_for_prizes,
@@ -1165,6 +1168,7 @@ pub fn execute_claim_lottery(
     )?;
 
     if ust_to_send > balance.into() {
+        // Should never happen
         return Err(ContractError::InsufficientFunds {
             to_send: ust_to_send,
             available_balance: balance,

@@ -139,7 +139,7 @@ pub fn instantiate(
             oracle_contract: deps.api.addr_validate(msg.oracle_contract.as_str())?,
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.addr_validate(msg.anchor_contract.as_str())?,
-            lottery_interval: Duration::Time(msg.lottery_interval),
+            lottery_interval: msg.lottery_interval,
             epoch_interval: Duration::Time(msg.epoch_interval),
             block_time: Duration::Time(msg.block_time),
             round_delta: msg.round_delta,
@@ -1478,7 +1478,7 @@ pub fn execute_update_lottery_config(
     }
 
     if let Some(lottery_interval) = lottery_interval {
-        config.lottery_interval = Duration::Time(lottery_interval);
+        config.lottery_interval = lottery_interval;
     }
 
     if let Some(block_time) = block_time {
@@ -1930,6 +1930,14 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             default_lotto_winner_boost_config
         };
 
+    let lottery_interval_seconds = if let Duration::Time(time) = old_config.lottery_interval {
+        time
+    } else {
+        return Err(ContractError::Std(StdError::generic_err(
+            "Invalid lottery interval",
+        )));
+    };
+
     let new_config = Config {
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
@@ -1940,7 +1948,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         oracle_contract: old_config.oracle_contract,
         stable_denom: old_config.stable_denom,
         anchor_contract: old_config.anchor_contract,
-        lottery_interval: old_config.lottery_interval,
+        lottery_interval: lottery_interval_seconds,
         epoch_interval: old_config.epoch_interval,
         block_time: old_config.block_time,
         round_delta: old_config.round_delta,
@@ -1976,7 +1984,9 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         if let Expiration::AtTime(next_lottery_time) = old_state.next_lottery_time {
             next_lottery_time
         } else {
-            return Err(StdError::generic_err("invalid lottery next time"));
+            return Err(ContractError::Std(StdError::generic_err(
+                "invalid lottery next time",
+            )));
         };
 
     let state = State {

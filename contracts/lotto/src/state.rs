@@ -58,7 +58,7 @@ pub struct Config {
     pub anchor_contract: Addr,
     pub oracle_contract: Addr,
     pub stable_denom: String,
-    pub lottery_interval: Duration,
+    pub lottery_interval: u64,
     pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,

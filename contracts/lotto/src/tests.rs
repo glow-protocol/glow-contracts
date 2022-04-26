@@ -270,7 +270,7 @@ fn proper_initialization() {
             distributor_contract: "".to_string(),
             anchor_contract: ANCHOR.to_string(),
             stable_denom: DENOM.to_string(),
-            lottery_interval: WEEK,
+            lottery_interval: WEEK_SECONDS,
             epoch_interval: HOUR.mul(3),
             block_time: HOUR,
             round_delta: ROUND_DELTA,
@@ -414,7 +414,7 @@ fn update_config() {
     // check lottery_interval has changed
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config_response: ConfigResponse = from_binary(&res).unwrap();
-    assert_eq!(config_response.lottery_interval, Duration::Time(1800));
+    assert_eq!(config_response.lottery_interval, 1800);
 
     // update reserve_factor to 1%
     let info = mock_info("owner1", &[]);
@@ -6337,7 +6337,7 @@ pub fn test_migrate() {
         anchor_contract: config.anchor_contract,
         oracle_contract: config.oracle_contract,
         stable_denom: config.stable_denom,
-        lottery_interval: config.lottery_interval,
+        lottery_interval: Duration::Time(config.lottery_interval),
         epoch_interval: config.epoch_interval,
         block_time: config.block_time,
         round_delta: config.round_delta,
@@ -6493,6 +6493,12 @@ pub fn test_migrate() {
         total_voting_power_weight: Decimal256::percent(150),
     };
 
+    let lottery_interval_seconds = if let Duration::Time(time) = old_config.lottery_interval {
+        time
+    } else {
+        panic!("ERROR");
+    };
+
     let new_config = Config {
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
@@ -6509,7 +6515,7 @@ pub fn test_migrate() {
         oracle_contract: old_config.oracle_contract,
         stable_denom: old_config.stable_denom,
         anchor_contract: old_config.anchor_contract,
-        lottery_interval: old_config.lottery_interval,
+        lottery_interval: lottery_interval_seconds,
         epoch_interval: old_config.epoch_interval,
         block_time: old_config.block_time,
         round_delta: old_config.round_delta,

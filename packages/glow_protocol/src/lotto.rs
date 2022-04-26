@@ -196,7 +196,7 @@ pub struct ConfigResponse {
     pub ve_contract: String,
     pub community_contract: String,
     pub distributor_contract: String,
-    pub lottery_interval: Duration,
+    pub lottery_interval: u64,
     pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,

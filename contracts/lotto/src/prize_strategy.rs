@@ -10,7 +10,7 @@ use cosmwasm_std::{
     attr, coin, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult,
     WasmMsg,
 };
-use cw0::{Duration, Expiration};
+use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
@@ -346,19 +346,12 @@ pub fn execute_prize(
             .time
             .minus_seconds(state.next_lottery_time.seconds());
 
-        // Get the lottery interval in seconds
-        let lottery_interval_seconds = if let Duration::Time(time) = config.lottery_interval {
-            time
-        } else {
-            return Err(ContractError::InvalidLotteryInterval {});
-        };
-
         // Get the number of lottery intervals that have passed
         // since the lottery became runnable
         // this should be 0 everytime
         // unless somebody forgot to run the lottery for a week for example
         let lottery_intervals_since_last_lottery =
-            time_since_next_lottery_time.seconds() / lottery_interval_seconds;
+            time_since_next_lottery_time.seconds() / config.lottery_interval;
 
         // Set the next_lottery_time to the closest time in the future that is
         // the current value of next_lottery_time plus a multiple of lottery_interval
@@ -366,7 +359,7 @@ pub fn execute_prize(
         // but if somebody forgot to run the lottery for a week, it will be 2 for example
         state.next_lottery_time = state
             .next_lottery_time
-            .plus_seconds(lottery_interval_seconds * (1 + lottery_intervals_since_last_lottery));
+            .plus_seconds(config.lottery_interval * (1 + lottery_intervals_since_last_lottery));
 
         // Set next_lottery_exec_time to never
         state.next_lottery_exec_time = Expiration::Never {};

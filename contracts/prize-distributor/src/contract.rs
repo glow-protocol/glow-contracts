@@ -24,8 +24,7 @@ use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
 
 use glow_protocol::prize_distributor::{
     BoostConfig, ConfigResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,
-    LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse, PrizeInfosResponse, QueryMsg,
-    RewardEmissionsIndex, StateResponse,
+    LotteryInfoResponse, MigrateMsg, PrizeInfoResponse, PrizeInfosResponse, QueryMsg, StateResponse,
 };
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::ExecuteMsg as AnchorMsg;
@@ -231,7 +230,7 @@ pub fn execute(
             operator_glow_emission_rate,
             sponsor_glow_emission_rate,
         } => {
-            return execute_update_config(
+            execute_update_config(
                 deps,
                 info,
                 owner,
@@ -246,7 +245,7 @@ pub fn execute(
                 lotto_winner_boost_config,
                 operator_glow_emission_rate,
                 sponsor_glow_emission_rate,
-            );
+            )
         }
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -430,15 +429,15 @@ pub fn execute_update_config(
     owner: Option<String>,
     oracle_addr: Option<String>,
     reserve_factor: Option<Decimal256>,
-    instant_withdrawal_fee: Option<Decimal256>,
-    unbonding_period: Option<u64>,
+    _instant_withdrawal_fee: Option<Decimal256>,
+    _unbonding_period: Option<u64>,
     epoch_interval: Option<u64>,
-    max_holders: Option<u8>,
-    max_tickets_per_depositor: Option<u64>,
-    paused: Option<bool>,
+    _max_holders: Option<u8>,
+    _max_tickets_per_depositor: Option<u64>,
+    _paused: Option<bool>,
     lotto_winner_boost_config: Option<BoostConfig>,
-    operator_glow_emission_rate: Option<Decimal256>,
-    sponsor_glow_emission_rate: Option<Decimal256>,
+    _operator_glow_emission_rate: Option<Decimal256>,
+    _sponsor_glow_emission_rate: Option<Decimal256>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -493,7 +492,7 @@ pub fn execute_update_lottery_config(
     info: MessageInfo,
     lottery_interval: Option<u64>,
     block_time: Option<u64>,
-    ticket_price: Option<Uint256>,
+    _ticket_price: Option<Uint256>,
     prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
     round_delta: Option<u64>,
 ) -> Result<Response, ContractError> {
@@ -672,7 +671,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     })
 }
 
-pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
+pub fn query_state(deps: Deps, _env: Env, _block_height: Option<u64>) -> StdResult<StateResponse> {
     let state = STATE.load(deps.storage)?;
 
     Ok(StateResponse {
@@ -717,14 +716,14 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
     let state = STATE.load(deps.storage)?;
 
     // Get the contract's aust balance
-    let contract_a_balance = Uint256::from(query_token_balance(
+    let _contract_a_balance = Uint256::from(query_token_balance(
         &deps.querier,
         config.a_terra_contract.clone(),
         env.clone().contract.address,
     )?);
 
     // Get the aust exchange rate
-    let aust_exchange_rate =
+    let _aust_exchange_rate =
         query_exchange_rate(deps, config.anchor_contract.to_string(), env.block.height)?
             .exchange_rate;
 

@@ -36,7 +36,7 @@ pub fn execute_lottery(
     let config = CONFIG.load(deps.storage)?;
 
     // Get the contract's aust balance
-    let contract_a_balance = query_token_balance(
+    let _contract_a_balance = query_token_balance(
         &deps.querier,
         deps.api.addr_validate(config.a_terra_contract.as_str())?,
         env.clone().contract.address,
@@ -94,7 +94,7 @@ pub fn execute_lottery(
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
     let ExecuteLotteryRedeemedAustInfo {
-        user_aust_to_redeem,
+        user_aust_to_redeem: _,
         aust_to_redeem,
         aust_to_redeem_value,
         ..

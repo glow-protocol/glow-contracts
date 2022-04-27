@@ -1,13 +1,11 @@
-use crate::helpers::{
-    calculate_value_of_aust_to_be_redeemed_for_lottery, ExecuteLotteryRedeemedAustInfo,
-};
+use crate::helpers::calculate_value_of_aust_to_be_redeemed_for_lottery;
 use crate::mock_querier::MOCK_CONTRACT_ADDR;
 use crate::state::{
     OldDepositorInfo, OldLotteryInfo, CONFIG, OLD_PREFIX_DEPOSIT, OLD_PREFIX_LOTTERY, POOL, STATE,
 };
 use crate::tests::{A_UST, RATE};
 use cosmwasm_storage::bucket;
-use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
+use glow_protocol::lotto::{ExecuteLotteryRedeemedAustInfo, NUM_PRIZE_BUCKETS};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{coin, Addr, Deps, StdResult, Storage};

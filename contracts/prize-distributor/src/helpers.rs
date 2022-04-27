@@ -1,20 +1,13 @@
-use std::convert::TryInto;
-
-
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, QuerierWrapper, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{DepositorInfo, DepositorStatsInfo};
-use glow_protocol::prize_distributor::{
-    BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
-};
-use sha3::{Digest};
-
+use glow_protocol::prize_distributor::{BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 
 use crate::querier::{
     query_address_voting_balance_at_timestamp, query_total_voting_balance_at_timestamp,
 };
 
-use crate::state::{Config, LotteryInfo, Pool, PrizeInfo, State};
+use crate::state::{Config, LotteryInfo, PrizeInfo, State};
 
 pub fn calculate_winner_prize(
     querier: &QuerierWrapper,
@@ -157,13 +150,6 @@ pub fn calculate_max_bound(min_bound: &str, minimum_matches_for_winning_ticket: 
     )
 }
 
-pub fn is_valid_sequence(sequence: &str, len: usize) -> bool {
-    sequence.len() == len
-        && sequence
-            .chars()
-            .all(|c| c.is_digit(10) || ('a'..='f').contains(&c))
-}
-
 pub fn count_seq_matches(a: &str, b: &str) -> u8 {
     let mut count = 0;
     for (i, c) in a.chars().enumerate() {
@@ -203,124 +189,6 @@ pub fn get_minimum_matches_for_winning_ticket(
     Err(StdError::generic_err(
         "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
     ))
-}
-
-pub struct ExecuteLotteryRedeemedAustInfo {
-    pub value_of_user_aust_to_be_redeemed_for_lottery: Uint256,
-    pub user_aust_to_redeem: Uint256,
-    pub value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256,
-    pub sponsor_aust_to_redeem: Uint256,
-    pub aust_to_redeem: Uint256,
-    pub aust_to_redeem_value: Uint256,
-}
-
-pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
-    state: &State,
-    pool: &Pool,
-    config: &Config,
-    contract_a_balance: Uint256,
-    aust_exchange_rate: Decimal256,
-) -> ExecuteLotteryRedeemedAustInfo {
-    // Get the aust_user_balance
-    let total_user_aust = pool.total_user_aust;
-
-    // Get the amount to take from the users
-    // Split factor percent of the appreciation since the last lottery
-    let value_of_user_aust_to_be_redeemed_for_lottery = total_user_aust
-        * (aust_exchange_rate - state.last_lottery_execution_aust_exchange_rate)
-        * config.split_factor;
-
-    // Get the user_aust_to_redeem
-    let user_aust_to_redeem = value_of_user_aust_to_be_redeemed_for_lottery / aust_exchange_rate;
-
-    // Sponsor balance equals aust_balance - total_user_aust
-    let total_sponsor_aust = contract_a_balance - pool.total_user_aust;
-
-    // This should always equal total_sponsor_aust * (aust_exchange_rate - state.last_lottery_exchange_rate)
-    let value_of_sponsor_aust_to_be_redeemed_for_lottery =
-        total_sponsor_aust * aust_exchange_rate - pool.total_sponsor_lottery_deposits;
-
-    // Get the sponsor_aust_to_redeem
-    let sponsor_aust_to_redeem =
-        value_of_sponsor_aust_to_be_redeemed_for_lottery / aust_exchange_rate;
-
-    // Get the aust_to_redeem and aust_to_redeem_value
-    let aust_to_redeem = user_aust_to_redeem + sponsor_aust_to_redeem;
-    let aust_to_redeem_value = aust_to_redeem * aust_exchange_rate;
-
-    ExecuteLotteryRedeemedAustInfo {
-        value_of_user_aust_to_be_redeemed_for_lottery,
-        user_aust_to_redeem,
-        value_of_sponsor_aust_to_be_redeemed_for_lottery,
-        sponsor_aust_to_redeem,
-        aust_to_redeem,
-        aust_to_redeem_value,
-    }
-}
-
-#[allow(dead_code)]
-pub fn calculate_depositor_balance(
-    pool: &Pool,
-    depositor_info: &DepositorInfo,
-    aust_exchange_rate: Decimal256,
-) -> Uint256 {
-    // Calculate the depositor's balance from their aust balance
-    pool.total_user_aust
-        * decimal_from_ratio_or_one(depositor_info.shares, pool.total_user_shares)
-        * aust_exchange_rate
-}
-
-pub fn base64_encoded_tickets_to_vec_string_tickets(
-    encoded_tickets: String,
-) -> StdResult<Vec<String>> {
-    // Encoded_tickets to binary
-    let decoded_binary_tickets = match base64::decode(encoded_tickets) {
-        Ok(decoded_binary_tickets) => decoded_binary_tickets,
-        Err(_) => {
-            return Err(StdError::generic_err(
-                "Couldn't base64 decode the encoded tickets.".to_string(),
-            ));
-        }
-    };
-
-    // Validate that the decoded value is the right length
-    if decoded_binary_tickets.len() % 3 != 0 {
-        return Err(StdError::generic_err("Decoded tickets wrong length."));
-    };
-
-    // Will always return a Vec of 6 character hex strings
-    Ok(decoded_binary_tickets
-        .chunks(3)
-        .map(hex::encode)
-        .collect::<Vec<String>>())
-}
-
-pub fn vec_string_tickets_to_vec_binary_tickets(
-    vec_string_tickets: Vec<String>,
-) -> StdResult<Vec<[u8; 3]>> {
-    vec_string_tickets
-        .iter()
-        .map(|s| {
-            let vec_ticket = match hex::decode(s) {
-                Ok(b) => b,
-                Err(_) => return Err(StdError::generic_err("Couldn't hex decode string ticket")),
-            };
-
-            match vec_ticket.try_into() {
-                Ok(b) => Ok(b),
-                Err(_) => Err(StdError::generic_err(
-                    "Couldn't convert vec ticket to [u8, 3]",
-                )),
-            }
-        })
-        .collect::<StdResult<Vec<[u8; 3]>>>()
-}
-
-pub fn vec_binary_tickets_to_vec_string_tickets(vec_binary_tickets: Vec<[u8; 3]>) -> Vec<String> {
-    vec_binary_tickets
-        .iter()
-        .map(hex::encode)
-        .collect::<Vec<String>>()
 }
 
 pub fn decimal_from_ratio_or_one(a: Uint256, b: Uint256) -> Decimal256 {

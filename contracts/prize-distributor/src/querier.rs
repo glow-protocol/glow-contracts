@@ -6,7 +6,7 @@ use cosmwasm_std::{
     QueryRequest, StdResult, WasmQuery,
 };
 use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
-use glow_protocol::lotto::DepositorStatsInfo;
+use glow_protocol::lotto::{DepositorStatsInfo, ExecuteLotteryRedeemedAustInfo};
 use glow_protocol::ve_token::{QueryMsg as VEQueryMessage, StakerResponse, StateResponse};
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 
@@ -59,6 +59,17 @@ pub fn read_depositor_stats_at_height(
         shares: Uint256::zero(),
         num_tickets: 0,
         operator_addr: Addr::unchecked(""),
+    })
+}
+
+pub fn query_redeemable_funds_info(_deps: Deps) -> StdResult<ExecuteLotteryRedeemedAustInfo> {
+    Ok(ExecuteLotteryRedeemedAustInfo {
+        value_of_user_aust_to_be_redeemed_for_lottery: Uint256::zero(),
+        user_aust_to_redeem: Uint256::zero(),
+        value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256::zero(),
+        sponsor_aust_to_redeem: Uint256::zero(),
+        aust_to_redeem: Uint256::zero(),
+        aust_to_redeem_value: Uint256::zero(),
     })
 }
 

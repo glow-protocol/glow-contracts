@@ -6,7 +6,6 @@ use crate::helpers::{
     base64_encoded_tickets_to_vec_string_tickets, calculate_boost_multiplier, calculate_max_bound,
     calculate_value_of_aust_to_be_redeemed_for_lottery, calculate_winner_prize,
     get_minimum_matches_for_winning_ticket, uint256_times_decimal256_ceil,
-    ExecuteLotteryRedeemedAustInfo,
 };
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
@@ -26,8 +25,9 @@ use crate::test_helpers::{
 use cosmwasm_storage::bucket;
 use cw_storage_plus::U64Key;
 use glow_protocol::lotto::{
-    BoostConfig, DepositorInfo, DepositorStatsInfo, MigrateMsg, OperatorInfoResponse,
-    PrizeInfoResponse, RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
+    BoostConfig, DepositorInfo, DepositorStatsInfo, ExecuteLotteryRedeemedAustInfo, MigrateMsg,
+    OperatorInfoResponse, PrizeInfoResponse, RewardEmissionsIndex, NUM_PRIZE_BUCKETS,
+    TICKET_LENGTH,
 };
 use lazy_static::lazy_static;
 

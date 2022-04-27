@@ -9,7 +9,7 @@ use cosmwasm_std::{Addr, Deps, Order, StdError, StdResult, Storage, Timestamp};
 
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
-use glow_protocol::prize_distributor::{BoostConfig, RewardEmissionsIndex};
+use glow_protocol::prize_distributor::BoostConfig;
 
 use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
 
@@ -17,7 +17,6 @@ pub const PREFIX_OPERATOR: &[u8] = b"operator";
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
-pub const POOL: Item<Pool> = Item::new("pool");
 pub const PRIZES: Map<(U64Key, &Addr), PrizeInfo> = Map::new("prizes_v2");
 pub const LOTTERIES: Map<U64Key, LotteryInfo> = Map::new("lo_v2");
 
@@ -39,17 +38,9 @@ pub struct Config {
     pub epoch_interval: Duration,
     pub block_time: Duration,
     pub round_delta: u64,
-    pub ticket_price: Uint256,
-    pub max_holders: u8,
     pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
-    pub target_award: Uint256,
     pub reserve_factor: Decimal256,
-    pub split_factor: Decimal256,
-    pub instant_withdrawal_fee: Decimal256,
-    pub unbonding_period: Duration,
-    pub max_tickets_per_depositor: u64,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub paused: bool,
     pub lotto_winner_boost_config: BoostConfig,
 }
 
@@ -63,41 +54,13 @@ impl Config {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub total_tickets: Uint256,
     pub total_reserve: Uint256,
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub current_lottery: u64,
     pub next_lottery_time: Timestamp,
     pub next_lottery_exec_time: Expiration,
     pub next_epoch: Expiration,
-    pub operator_reward_emission_index: RewardEmissionsIndex,
-    pub sponsor_reward_emission_index: RewardEmissionsIndex,
     pub last_lottery_execution_aust_exchange_rate: Decimal256,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Pool {
-    // This is the amount of aust which belongs to users
-    // It is equal to the cumulative amount of aust deposited by all users
-    // minus the cumulative amount of aust withdrawn by all users
-    // minut user aust redeemed when executing the lottery.
-    pub total_user_aust: Uint256,
-    // This is the sum of shares across all depositors.
-    // It starts out as equal to total_user_aust,
-    // but total_user_aust smaller during each lottery execution
-    // while total_user_shares stays the same
-    pub total_user_shares: Uint256,
-    // Sum of all sponsor lottery deposits
-    // which equals the sum of sponsor long term deposits
-    // because all sponsor long term deposits go entirely towards the lottery
-    // This is used for:
-    // - calculating the global sponsor reward index
-    // - calculating the amount sponsored aust to redeem when executing a lottery
-    pub total_sponsor_lottery_deposits: Uint256,
-    // Sum of all user lottery shares that have operators
-    // This is used for
-    // - calculating the global operator reward index
-    pub total_operator_shares: Uint256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -144,14 +107,6 @@ pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo 
             total_user_shares: Uint256::zero(),
         },
     }
-}
-
-fn old_calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
-    start_after.map(|addr| {
-        let mut v = addr.as_bytes().to_vec();
-        v.push(1);
-        v
-    })
 }
 
 pub fn read_prize(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<PrizeInfo> {

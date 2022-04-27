@@ -4,8 +4,8 @@ use std::ops::Add;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, QuerierWrapper, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{
-    BoostConfig, DepositorInfo, DepositorStatsInfo, RewardEmissionsIndex, NUM_PRIZE_BUCKETS,
-    TICKET_LENGTH,
+    BoostConfig, DepositorInfo, DepositorStatsInfo, ExecuteLotteryRedeemedAustInfo,
+    RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
 };
 use sha3::{Digest, Keccak256};
 
@@ -514,15 +514,6 @@ pub fn get_minimum_matches_for_winning_ticket(
     Err(StdError::generic_err(
         "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
     ))
-}
-
-pub struct ExecuteLotteryRedeemedAustInfo {
-    pub value_of_user_aust_to_be_redeemed_for_lottery: Uint256,
-    pub user_aust_to_redeem: Uint256,
-    pub value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256,
-    pub sponsor_aust_to_redeem: Uint256,
-    pub aust_to_redeem: Uint256,
-    pub aust_to_redeem_value: Uint256,
 }
 
 pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(

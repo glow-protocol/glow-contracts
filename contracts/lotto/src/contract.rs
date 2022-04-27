@@ -7,7 +7,7 @@ use crate::helpers::{
     claim_unbonded_withdrawals, compute_global_operator_reward, compute_global_sponsor_reward,
     compute_operator_reward, compute_sponsor_reward, decimal_from_ratio_or_one,
     handle_depositor_operator_updates, handle_depositor_ticket_updates,
-    old_compute_depositor_reward, old_compute_reward, ExecuteLotteryRedeemedAustInfo,
+    old_compute_depositor_reward, old_compute_reward,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate};
@@ -31,10 +31,10 @@ use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorStatsResponse,
-    DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg, InstantiateMsg,
-    LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, OperatorInfoResponse, PoolResponse,
-    PrizeInfoResponse, PrizeInfosResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse,
-    StateResponse, TicketInfoResponse,
+    DepositorsInfoResponse, DepositorsStatsResponse, ExecuteLotteryRedeemedAustInfo, ExecuteMsg,
+    InstantiateMsg, LotteryBalanceResponse, LotteryInfoResponse, MigrateMsg, OperatorInfoResponse,
+    PoolResponse, PrizeInfoResponse, PrizeInfosResponse, QueryMsg, RewardEmissionsIndex,
+    SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::lotto::{DepositorInfo, NUM_PRIZE_BUCKETS};
 use glow_protocol::querier::deduct_tax;

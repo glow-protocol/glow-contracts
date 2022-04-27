@@ -1,16 +1,15 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
+use glow_protocol::lotto::ExecuteLotteryRedeemedAustInfo;
 
 use crate::error::ContractError;
-use crate::helpers::{
-    calculate_value_of_aust_to_be_redeemed_for_lottery, calculate_winner_prize,
-    ExecuteLotteryRedeemedAustInfo,
-};
+use crate::helpers::calculate_winner_prize;
 use crate::prize_strategy::{execute_lottery, execute_prize};
-use crate::querier::{query_balance, query_exchange_rate, read_depositor_stats_at_height};
+use crate::querier::{
+    query_balance, query_exchange_rate, query_redeemable_funds_info, read_depositor_stats_at_height,
+};
 use crate::state::{
-    read_lottery_info, read_lottery_prizes, Config, Pool, PrizeInfo, State, CONFIG, POOL, PRIZES,
-    STATE,
+    read_lottery_info, read_lottery_prizes, Config, PrizeInfo, State, CONFIG, PRIZES, STATE,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -134,17 +133,9 @@ pub fn instantiate(
             epoch_interval: Duration::Time(msg.epoch_interval),
             block_time: Duration::Time(msg.block_time),
             round_delta: msg.round_delta,
-            ticket_price: msg.ticket_price,
-            max_holders: msg.max_holders,
             prize_distribution: msg.prize_distribution,
-            target_award: msg.target_award,
             reserve_factor: msg.reserve_factor,
-            split_factor: msg.split_factor,
-            instant_withdrawal_fee: msg.instant_withdrawal_fee,
-            unbonding_period: Duration::Time(msg.unbonding_period),
-            max_tickets_per_depositor: msg.max_tickets_per_depositor,
             glow_prize_buckets: msg.glow_prize_buckets,
-            paused: false,
             lotto_winner_boost_config,
         },
     )?;
@@ -167,34 +158,13 @@ pub fn instantiate(
     STATE.save(
         deps.storage,
         &State {
-            total_tickets: Uint256::zero(),
             total_reserve: Uint256::zero(),
             prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
             current_lottery: 0,
             next_lottery_time: Timestamp::from_seconds(msg.initial_lottery_execution),
             next_lottery_exec_time: Expiration::Never {},
             next_epoch: Duration::Time(msg.epoch_interval).after(&env.block),
-            operator_reward_emission_index: RewardEmissionsIndex {
-                last_reward_updated: env.block.height,
-                global_reward_index: Decimal256::zero(),
-                glow_emission_rate: msg.initial_operator_glow_emission_rate,
-            },
-            sponsor_reward_emission_index: RewardEmissionsIndex {
-                last_reward_updated: env.block.height,
-                global_reward_index: Decimal256::zero(),
-                glow_emission_rate: msg.initial_sponsor_glow_emission_rate,
-            },
             last_lottery_execution_aust_exchange_rate: aust_exchange_rate,
-        },
-    )?;
-
-    POOL.save(
-        deps.storage,
-        &Pool {
-            total_user_aust: Uint256::zero(),
-            total_user_shares: Uint256::zero(),
-            total_sponsor_lottery_deposits: Uint256::zero(),
-            total_operator_shares: Uint256::zero(),
         },
     )?;
 
@@ -227,44 +197,6 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    if let ExecuteMsg::UpdateConfig {
-        owner,
-        oracle_addr,
-        reserve_factor,
-        instant_withdrawal_fee,
-        unbonding_period,
-        epoch_interval,
-        max_holders,
-        max_tickets_per_depositor,
-        paused,
-        lotto_winner_boost_config,
-        operator_glow_emission_rate,
-        sponsor_glow_emission_rate,
-    } = msg
-    {
-        return execute_update_config(
-            deps,
-            info,
-            owner,
-            oracle_addr,
-            reserve_factor,
-            instant_withdrawal_fee,
-            unbonding_period,
-            epoch_interval,
-            max_holders,
-            max_tickets_per_depositor,
-            paused,
-            lotto_winner_boost_config,
-            operator_glow_emission_rate,
-            sponsor_glow_emission_rate,
-        );
-    }
-
-    let config = CONFIG.load(deps.storage)?;
-    if config.paused {
-        return Err(ContractError::ContractPaused {});
-    }
-
     match msg {
         ExecuteMsg::RegisterContracts {
             gov_contract,
@@ -285,7 +217,37 @@ pub fn execute(
         ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
-        ExecuteMsg::UpdateConfig { .. } => unreachable!(),
+        ExecuteMsg::UpdateConfig {
+            owner,
+            oracle_addr,
+            reserve_factor,
+            instant_withdrawal_fee,
+            unbonding_period,
+            epoch_interval,
+            max_holders,
+            max_tickets_per_depositor,
+            paused,
+            lotto_winner_boost_config,
+            operator_glow_emission_rate,
+            sponsor_glow_emission_rate,
+        } => {
+            return execute_update_config(
+                deps,
+                info,
+                owner,
+                oracle_addr,
+                reserve_factor,
+                instant_withdrawal_fee,
+                unbonding_period,
+                epoch_interval,
+                max_holders,
+                max_tickets_per_depositor,
+                paused,
+                lotto_winner_boost_config,
+                operator_glow_emission_rate,
+                sponsor_glow_emission_rate,
+            );
+        }
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
             block_time,
@@ -503,17 +465,6 @@ pub fn execute_update_config(
         config.reserve_factor = reserve_factor;
     }
 
-    if let Some(instant_withdrawal_fee) = instant_withdrawal_fee {
-        if instant_withdrawal_fee > Decimal256::one() {
-            return Err(ContractError::InvalidWithdrawalFee {});
-        }
-        config.instant_withdrawal_fee = instant_withdrawal_fee;
-    }
-
-    if let Some(unbonding_period) = unbonding_period {
-        config.unbonding_period = Duration::Time(unbonding_period);
-    }
-
     if let Some(epoch_interval) = epoch_interval {
         // Validate that epoch_interval is at least 30 minutes
         if epoch_interval < THIRTY_MINUTE_TIME {
@@ -521,29 +472,6 @@ pub fn execute_update_config(
         }
 
         config.epoch_interval = Duration::Time(epoch_interval);
-    }
-
-    if let Some(max_holders) = max_holders {
-        // Validate that max_holders is within the bounds
-        if !(MAX_HOLDERS_FLOOR..=MAX_HOLDERS_CAP).contains(&max_holders) {
-            return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
-        }
-
-        // Validate that max_holders is increasing
-        if max_holders < config.max_holders {
-            return Err(ContractError::InvalidMaxHoldersAttemptedDecrease {});
-        }
-
-        config.max_holders = max_holders;
-    }
-
-    if let Some(max_tickets_per_depositor) = max_tickets_per_depositor {
-        config.max_tickets_per_depositor = max_tickets_per_depositor;
-    }
-
-    if let Some(paused) = paused {
-        if !paused {}
-        config.paused = paused;
     }
 
     if let Some(lotto_winner_boost_config) = lotto_winner_boost_config {
@@ -556,18 +484,6 @@ pub fn execute_update_config(
     }
 
     CONFIG.save(deps.storage, &config)?;
-
-    let mut state = STATE.load(deps.storage)?;
-
-    if let Some(operator_glow_emission_rate) = operator_glow_emission_rate {
-        state.operator_reward_emission_index.glow_emission_rate = operator_glow_emission_rate;
-    }
-
-    if let Some(sponsor_glow_emission_rate) = sponsor_glow_emission_rate {
-        state.sponsor_reward_emission_index.glow_emission_rate = sponsor_glow_emission_rate;
-    }
-
-    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new().add_attributes(vec![("action", "update_config")]))
 }
@@ -600,10 +516,6 @@ pub fn execute_update_lottery_config(
         config.round_delta = round_delta;
     }
 
-    if let Some(ticket_price) = ticket_price {
-        config.ticket_price = ticket_price;
-    }
-
     if let Some(prize_distribution) = prize_distribution {
         if prize_distribution.len() != NUM_PRIZE_BUCKETS {
             return Err(ContractError::InvalidPrizeDistribution {});
@@ -631,7 +543,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State { block_height } => to_binary(&query_state(deps, env, block_height)?),
-        QueryMsg::Pool {} => to_binary(&query_pool(deps)?),
         QueryMsg::LotteryInfo { lottery_id } => {
             to_binary(&query_lottery_info(deps, env, lottery_id)?)
         }
@@ -756,59 +667,22 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         epoch_interval: config.epoch_interval,
         block_time: config.block_time,
         round_delta: config.round_delta,
-        ticket_price: config.ticket_price,
-        max_holders: config.max_holders,
         prize_distribution: config.prize_distribution,
-        target_award: config.target_award,
         reserve_factor: config.reserve_factor,
-        split_factor: config.split_factor,
-        instant_withdrawal_fee: config.instant_withdrawal_fee,
-        unbonding_period: config.unbonding_period,
-        max_tickets_per_depositor: config.max_tickets_per_depositor,
-        paused: config.paused,
     })
 }
 
 pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
-    let _pool = POOL.load(deps.storage)?;
     let state = STATE.load(deps.storage)?;
 
-    let block_height = if let Some(block_height) = block_height {
-        block_height
-    } else {
-        env.block.height
-    };
-
-    if block_height < state.operator_reward_emission_index.last_reward_updated
-        || block_height < state.sponsor_reward_emission_index.last_reward_updated
-    {
-        return Err(StdError::generic_err(
-            "Block_height must be greater than both operator and sponsor last_reward_updated",
-        ));
-    }
-
     Ok(StateResponse {
-        total_tickets: state.total_tickets,
         total_reserve: state.total_reserve,
         prize_buckets: state.prize_buckets,
         current_lottery: state.current_lottery,
         next_lottery_time: state.next_lottery_time,
         next_lottery_exec_time: state.next_lottery_exec_time,
         next_epoch: state.next_epoch,
-        operator_reward_emission_index: state.operator_reward_emission_index,
-        sponsor_reward_emission_index: state.sponsor_reward_emission_index,
         last_lottery_execution_aust_exchange_rate: state.last_lottery_execution_aust_exchange_rate,
-    })
-}
-
-pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
-    let pool = POOL.load(deps.storage)?;
-
-    Ok(PoolResponse {
-        total_user_shares: pool.total_user_shares,
-        total_user_aust: pool.total_user_aust,
-        total_sponsor_lottery_deposits: pool.total_sponsor_lottery_deposits,
-        total_operator_shares: pool.total_operator_shares,
     })
 }
 
@@ -840,7 +714,6 @@ pub fn query_lottery_info(
 
 pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceResponse> {
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
     let state = STATE.load(deps.storage)?;
 
     // Get the contract's aust balance
@@ -862,13 +735,7 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
         sponsor_aust_to_redeem,
         aust_to_redeem,
         aust_to_redeem_value,
-    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
-        &state,
-        &pool,
-        &config,
-        contract_a_balance,
-        aust_exchange_rate,
-    );
+    } = query_redeemable_funds_info(deps)?;
 
     Ok(LotteryBalanceResponse {
         value_of_user_aust_to_be_redeemed_for_lottery,

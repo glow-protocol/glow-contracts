@@ -13,12 +13,12 @@ use cosmwasm_std::{
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::{Bound, U64Key};
-use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
+use glow_protocol::lotto::{ExecuteLotteryRedeemedAustInfo, NUM_PRIZE_BUCKETS};
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::{
     calculate_max_bound, calculate_value_of_aust_to_be_redeemed_for_lottery, count_seq_matches,
-    get_minimum_matches_for_winning_ticket, ExecuteLotteryRedeemedAustInfo,
+    get_minimum_matches_for_winning_ticket,
 };
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use glow_protocol::querier::deduct_tax;

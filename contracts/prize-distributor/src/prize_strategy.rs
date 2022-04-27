@@ -1,8 +1,10 @@
 use crate::error::ContractError;
-use crate::querier::{query_exchange_rate, query_oracle, query_tickets};
+use crate::querier::{
+    query_exchange_rate, query_oracle, query_redeemable_funds_info, query_tickets,
+};
 
 use crate::state::{
-    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, POOL, PRIZES, STATE,
+    read_lottery_info, store_lottery_info, LotteryInfo, PrizeInfo, CONFIG, PRIZES, STATE,
 };
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
@@ -11,12 +13,12 @@ use cosmwasm_std::{
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::U64Key;
+use glow_protocol::lotto::ExecuteLotteryRedeemedAustInfo;
 use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
 use terraswap::querier::query_token_balance;
 
 use crate::helpers::{
-    calculate_max_bound, calculate_value_of_aust_to_be_redeemed_for_lottery, count_seq_matches,
-    get_minimum_matches_for_winning_ticket, ExecuteLotteryRedeemedAustInfo,
+    calculate_max_bound, count_seq_matches, get_minimum_matches_for_winning_ticket,
 };
 use crate::oracle::{calculate_lottery_rand_round, sequence_from_hash};
 use glow_protocol::querier::deduct_tax;
@@ -32,7 +34,6 @@ pub fn execute_lottery(
 ) -> Result<Response, ContractError> {
     let mut state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
-    let mut pool = POOL.load(deps.storage)?;
 
     // Get the contract's aust balance
     let contract_a_balance = query_token_balance(
@@ -61,11 +62,6 @@ pub fn execute_lottery(
         });
     }
 
-    // Validate that there are a non zero number of tickets
-    if state.total_tickets.is_zero() {
-        return Err(ContractError::InvalidLotteryExecutionTickets {});
-    }
-
     // Set the next_lottery_exec_time to the current block time plus `config.block_time`
     // This is so that `execute_prize` can't be run until the randomness oracle is ready
     // with the rand_round calculated below
@@ -91,7 +87,8 @@ pub fn execute_lottery(
         glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
         block_height: env.block.height,
         timestamp: env.block.time,
-        total_user_shares: pool.total_user_shares,
+        // TODO revisit
+        total_user_shares: Uint256::zero(),
     };
 
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
@@ -101,13 +98,7 @@ pub fn execute_lottery(
         aust_to_redeem,
         aust_to_redeem_value,
         ..
-    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
-        &state,
-        &pool,
-        &config,
-        Uint256::from(contract_a_balance),
-        aust_exchange_rate,
-    );
+    } = query_redeemable_funds_info(deps.as_ref())?;
 
     // Get the amount of ust that will be received after accounting for taxes
     let net_amount = Uint256::from(
@@ -146,13 +137,13 @@ pub fn execute_lottery(
     // Update last_lottery_exchange_rate
     state.last_lottery_execution_aust_exchange_rate = aust_exchange_rate;
 
-    // Update the user shares
-    pool.total_user_aust = pool.total_user_aust - user_aust_to_redeem;
+    // // Update the user shares
+    // pool.total_user_aust = pool.total_user_aust - user_aust_to_redeem;
 
     // Store the state
     STATE.save(deps.storage, &state)?;
-    // Store the pool
-    POOL.save(deps.storage, &pool)?;
+    // // Store the pool
+    // POOL.save(deps.storage, &pool)?;
 
     let res = Response::new().add_messages(msgs).add_attributes(vec![
         attr("action", "execute_lottery"),

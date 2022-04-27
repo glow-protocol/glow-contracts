@@ -86,38 +86,8 @@ pub enum ExecuteMsg {
         prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
         round_delta: Option<u64>,
     },
-    /// Deposit amount of stable into the pool
-    Deposit {
-        encoded_tickets: String,
-        operator: Option<String>,
-    },
-    /// Claim tickets
-    ClaimTickets { encoded_tickets: String },
-    /// Deposit amount of stable into the pool in the name of the recipient
-    Gift {
-        encoded_tickets: String,
-        recipient: String,
-        operator: Option<String>,
-    },
-    /// Sponsor the pool. If award is true, sponsor the award available directly
-    Sponsor {
-        award: Option<bool>,
-        prize_distribution: Option<[Decimal256; NUM_PRIZE_BUCKETS]>,
-    },
-    /// Withdraws the sponsorship of the sender
-    SponsorWithdraw {},
-    /// Withdraws amount from the pool. If amount is None, it tries to withdraw all
-    /// the pooled funds of the sender. If instant true, incurs on withdrawal fee.
-    Withdraw {
-        amount: Option<Uint128>,
-        instant: Option<bool>,
-    },
-    /// Claim unbonded withdrawals
-    Claim {},
     /// Claims pending lottery prizes for a given list of lottery ids
     ClaimLottery { lottery_ids: Vec<u64> },
-    /// Claims pending depositor rewards
-    ClaimRewards {},
     /// First step on the lottery execution. Sets oracle round number
     ExecuteLottery {},
     /// Second step (paginated) on the lottery execution. Sets winner sequence and
@@ -125,8 +95,6 @@ pub enum ExecuteMsg {
     ExecutePrize { limit: Option<u32> },
     /// Updates rewards emission rate and transfer outstanding reserve to gov
     ExecuteEpochOps {},
-    /// Handles the migrate loop
-    MigrateOldDepositors { limit: Option<u32> },
 }
 
 /// Migration message
@@ -152,8 +120,6 @@ pub enum QueryMsg {
     Pool {},
     /// Lottery information by lottery id
     LotteryInfo { lottery_id: Option<u64> },
-    /// Ticket information by sequence. Returns a list of holders (addresses)
-    TicketInfo { sequence: String },
     /// Prizes for a given address on a given lottery id
     PrizeInfo { address: String, lottery_id: u64 },
     /// Prizes for a given lottery id
@@ -162,24 +128,6 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
-    /// Depositor information by address
-    DepositorInfo { address: String },
-    /// Depositor stats by address
-    DepositorStatsInfo { address: String },
-    /// List (paginated) of DepositorInfo
-    DepositorInfos {
-        start_after: Option<String>,
-        limit: Option<u32>,
-    },
-    /// List (paginated) of DepositorStats
-    DepositorsStatsInfos {
-        start_after: Option<String>,
-        limit: Option<u32>,
-    },
-    /// Sponsor information by address
-    Sponsor { address: String },
-    /// Sponsor information by address
-    Operator { address: String },
     /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
     /// now.
     LotteryBalance {},
@@ -252,64 +200,6 @@ pub struct LotteryInfoResponse {
     pub total_user_shares: Uint256,
 }
 
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorInfoResponse {
-    pub depositor: String,
-    pub shares: Uint256,
-    pub tickets: Vec<String>,
-    pub unbonding_info: Vec<Claim>,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorStatsResponse {
-    pub depositor: String,
-    pub shares: Uint256,
-    pub num_tickets: usize,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct SponsorInfoResponse {
-    pub sponsor: String,
-    pub lottery_deposit: Uint256,
-    pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct OperatorInfoResponse {
-    pub operator: String,
-    pub shares: Uint256,
-    pub reward_index: Decimal256,
-    pub pending_rewards: Decimal256,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorsInfoResponse {
-    pub depositors: Vec<DepositorInfoResponse>,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorsStatsResponse {
-    pub depositors: Vec<DepositorStatsResponse>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Claim {
-    pub amount: Uint256,
-    pub release_at: Expiration,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TicketInfoResponse {
-    pub holders: Vec<Addr>,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PrizeInfoResponse {
     pub holder: Addr,
@@ -334,44 +224,4 @@ pub struct LotteryBalanceResponse {
     pub aust_to_redeem: Uint256,
     pub aust_to_redeem_value: Uint256,
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorStatsInfo {
-    // This is the amount of shares the depositor owns out of total_user_aust
-    // shares * total_user_aust / total_user_shares gives the amount of aust
-    // that a depositor owns and has available to withdraw.
-    pub shares: Uint256,
-    // The number of tickets owned by the depositor
-    pub num_tickets: usize,
-    // Stores the address of the operator / referrer used by depositor.
-    pub operator_addr: Addr,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorData {
-    // The number of tickets the user owns.
-    pub vec_binary_tickets: Vec<[u8; 3]>,
-    // Stores information on the user's unbonding claims.
-    pub unbonding_info: Vec<Claim>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorInfo {
-    // This is the amount of shares the depositor owns out of total_user_aust
-    // shares * total_user_aust / total_user_shares gives the amount of aust
-    // that a depositor owns and has available to withdraw.
-    pub shares: Uint256,
-    // The number of tickets the user owns.
-    pub tickets: Vec<String>,
-    // Stores information on the user's unbonding claims.
-    pub unbonding_info: Vec<Claim>,
-    // Stores the address of the operator / referrer used by depositor.
-    pub operator_addr: Addr,
-}
-
-impl DepositorInfo {
-    pub fn operator_registered(&self) -> bool {
-        self.operator_addr != Addr::unchecked("")
-    }
 }

@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "type": "object",
+  "required": [
+    "anchor_contract",
+    "aterra_contract",
+    "block_time",
+    "epoch_interval",
+    "glow_prize_buckets",
+    "initial_emission_rate",
+    "initial_lottery_execution",
+    "instant_withdrawal_fee",
+    "lottery_interval",
+    "max_holders",
+    "max_tickets_per_depositor",
+    "oracle_contract",
+    "owner",
+    "prize_distribution",
+    "reserve_factor",
+    "round_delta",
+    "split_factor",
+    "stable_denom",
+    "target_award",
+    "ticket_price",
+    "unbonding_period"
+  ],
+  "properties": {
+    "anchor_contract": {
+      "type": "string"
+    },
+    "aterra_contract": {
+      "type": "string"
+    },
+    "block_time": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "epoch_interval": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "glow_prize_buckets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Uint256"
+      },
+      "maxItems": 7,
+      "minItems": 7
+    },
+    "initial_emission_rate": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "initial_lottery_execution": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "instant_withdrawal_fee": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "lottery_interval": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "lotto_winner_boost_config": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BoostConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "max_holders": {
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
+    },
+    "max_tickets_per_depositor": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "oracle_contract": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "prize_distribution": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Decimal256"
+      },
+      "maxItems": 7,
+      "minItems": 7
+    },
+    "reserve_factor": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "round_delta": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "split_factor": {
+      "$ref": "#/definitions/Decimal256"
+    },
+    "stable_denom": {
+      "type": "string"
+    },
+    "target_award": {
+      "$ref": "#/definitions/Uint256"
+    },
+    "ticket_price": {
+      "$ref": "#/definitions/Uint256"
+    },
+    "unbonding_period": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    }
+  },
+  "definitions": {
+    "BoostConfig": {
+      "type": "object",
+      "required": [
+        "base_multiplier",
+        "max_multiplier",
+        "total_voting_power_weight"
+      ],
+      "properties": {
+        "base_multiplier": {
+          "$ref": "#/definitions/Decimal256"
+        },
+        "max_multiplier": {
+          "$ref": "#/definitions/Decimal256"
+        },
+        "total_voting_power_weight": {
+          "$ref": "#/definitions/Decimal256"
+        }
+      }
+    },
+    "Decimal256": {
+      "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal256(1_000_000_000_000_000_000) == 1.0 The greatest possible value that can be represented is 115792089237316195423570985008687907853269984665640564039457.584007913129639935 (which is (2^128 - 1) / 10^18)",
+      "type": "string"
+    },
+    "Uint256": {
+      "type": "string"
+    }
+  }
+}

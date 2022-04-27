@@ -10,7 +10,8 @@ use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Bound, Item, Map, SnapshotMap, U64Key};
 use glow_protocol::lotto::{
-    BoostConfig, Claim, DepositorInfoResponse, DepositorStatsResponse, RewardEmissionsIndex,
+    BoostConfig, Claim, DepositorData, DepositorInfo, DepositorInfoResponse, DepositorStatsInfo,
+    DepositorStatsResponse, RewardEmissionsIndex,
 };
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
@@ -174,26 +175,6 @@ pub struct OldPool {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorStatsInfo {
-    // This is the amount of shares the depositor owns out of total_user_aust
-    // shares * total_user_aust / total_user_shares gives the amount of aust
-    // that a depositor owns and has available to withdraw.
-    pub shares: Uint256,
-    // The number of tickets owned by the depositor
-    pub num_tickets: usize,
-    // Stores the address of the operator / referrer used by depositor.
-    pub operator_addr: Addr,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorData {
-    // The number of tickets the user owns.
-    pub vec_binary_tickets: Vec<[u8; 3]>,
-    // Stores information on the user's unbonding claims.
-    pub unbonding_info: Vec<Claim>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct OldDepositorInfo {
     // Cumulative value of the depositor's lottery deposits
     // The sums of all depositor deposit amounts equals total_user_lottery_deposits
@@ -214,26 +195,6 @@ pub struct OldDepositorInfo {
     pub tickets: Vec<String>,
     // Stores information on the user's unbonding claims.
     pub unbonding_info: Vec<Claim>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct DepositorInfo {
-    // This is the amount of shares the depositor owns out of total_user_aust
-    // shares * total_user_aust / total_user_shares gives the amount of aust
-    // that a depositor owns and has available to withdraw.
-    pub shares: Uint256,
-    // The number of tickets the user owns.
-    pub tickets: Vec<String>,
-    // Stores information on the user's unbonding claims.
-    pub unbonding_info: Vec<Claim>,
-    // Stores the address of the operator / referrer used by depositor.
-    pub operator_addr: Addr,
-}
-
-impl DepositorInfo {
-    pub fn operator_registered(&self) -> bool {
-        self.operator_addr != Addr::unchecked("")
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

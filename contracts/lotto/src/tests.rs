@@ -14,10 +14,9 @@ use crate::mock_querier::{
 use crate::state::{
     old_read_depositor_info, old_read_lottery_info, old_remove_depositor_info, read_depositor_info,
     read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes, read_prize,
-    read_sponsor_info, store_depositor_info, store_depositor_stats, Config, DepositorInfo,
-    DepositorStatsInfo, LotteryInfo, OldConfig, OldDepositorInfo, OldLotteryInfo, OldPool,
-    OldState, Pool, PrizeInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL,
-    PRIZES, STATE,
+    read_sponsor_info, store_depositor_info, store_depositor_stats, Config, LotteryInfo, OldConfig,
+    OldDepositorInfo, OldLotteryInfo, OldPool, OldState, Pool, PrizeInfo, State, CONFIG, OLDCONFIG,
+    OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
 };
 use crate::test_helpers::{
     calculate_lottery_prize_buckets, calculate_prize_buckets,
@@ -27,8 +26,8 @@ use crate::test_helpers::{
 use cosmwasm_storage::bucket;
 use cw_storage_plus::U64Key;
 use glow_protocol::lotto::{
-    BoostConfig, MigrateMsg, OperatorInfoResponse, PrizeInfoResponse, RewardEmissionsIndex,
-    NUM_PRIZE_BUCKETS, TICKET_LENGTH,
+    BoostConfig, DepositorInfo, DepositorStatsInfo, MigrateMsg, OperatorInfoResponse,
+    PrizeInfoResponse, RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
 };
 use lazy_static::lazy_static;
 

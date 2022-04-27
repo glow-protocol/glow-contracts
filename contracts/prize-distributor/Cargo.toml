@@ -1,0 +1,62 @@
+[package]
+name = "glow-prize-distributor"
+version = "1.0.0"
+authors = ["Glow Protocol Ltd. <info@glowyield.com>"]
+edition = "2018"
+
+exclude = [
+  # Those files are rust-optimizer artifacts. You might want to commit them for convenience but they should not be part of the source code publication.
+  "contract.wasm",
+  "hash.txt",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'abort'
+incremental = false
+overflow-checks = true
+
+[features]
+# for more explicit tests, cargo test --features=backtraces
+backtraces = ["cosmwasm-std/backtraces"]
+
+[dependencies]
+cw20 = "0.8.0"
+cw0 = "0.8.0"
+terraswap = "2.3.0"
+moneymarket = "0.3.0"
+glow-protocol = { version = "1.0.0", path = "../../packages/glow_protocol" }
+cosmwasm-std = "0.16.0"
+cosmwasm-storage = "0.16.0"
+cosmwasm-bignumber = "2.2.0"
+schemars = "0.8.1"
+sha3 = "0.9.1"
+serde = { version = "1.0.103", default-features = false, features = ["derive"] }
+snafu = "0.6.3"
+hex = "0.4.2"
+terra-cosmwasm = "2.2.0"
+thiserror = { version = "1.0.20" }
+cw-storage-plus = "0.9.0"
+base64 = "0.13.0"
+
+
+[dev-dependencies]
+cosmwasm-schema = { version = "0.16.0" }
+terra-multi-test = { git = "https://github.com/astroport-fi/terra-plus", rev = "b3991b9b109accf445fec086ce9792b197be6ca4", package = "terra-multi-test" }
+lazy_static = "1.1.1"
+cw20-base = "0.8.1"
+
+
+[profile.dev]
+overflow-checks = true

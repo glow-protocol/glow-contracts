@@ -16,9 +16,9 @@ use crate::state::{
     parse_length, read_depositor_info, read_depositor_stats, read_depositor_stats_at_height,
     read_depositors_info, read_depositors_stats, read_lottery_info, read_lottery_prizes,
     read_operator_info, read_sponsor_info, store_depositor_info, store_lottery_info,
-    store_operator_info, store_sponsor_info, Config, DepositorInfo, LotteryInfo, OperatorInfo,
-    Pool, PrizeInfo, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL,
-    PRIZES, STATE, TICKETS,
+    store_operator_info, store_sponsor_info, Config, LotteryInfo, OperatorInfo, Pool, PrizeInfo,
+    SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
+    TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -29,7 +29,6 @@ use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 use glow_protocol::lotto::{
     BoostConfig, Claim, ConfigResponse, DepositorInfoResponse, DepositorStatsResponse,
     DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg, InstantiateMsg,
@@ -37,6 +36,7 @@ use glow_protocol::lotto::{
     PrizeInfoResponse, PrizeInfosResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse,
     StateResponse, TicketInfoResponse,
 };
+use glow_protocol::lotto::{DepositorInfo, NUM_PRIZE_BUCKETS};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};

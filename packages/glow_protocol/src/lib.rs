@@ -5,6 +5,7 @@ pub mod distributor;
 pub mod fee_distributor;
 pub mod gov;
 pub mod lotto;
+pub mod prize_distributor;
 pub mod querier;
 pub mod staking;
 pub mod ve_token;

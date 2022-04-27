@@ -1,0 +1,318 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QueryMsg",
+  "oneOf": [
+    {
+      "description": "Lotto contract configuration",
+      "type": "object",
+      "required": [
+        "config"
+      ],
+      "properties": {
+        "config": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Current state. If block_height is provided, return current depositor rewards",
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "type": "object",
+          "properties": {
+            "block_height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Lotto pool current state. Savings aust and lottery deposits.",
+      "type": "object",
+      "required": [
+        "pool"
+      ],
+      "properties": {
+        "pool": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Lottery information by lottery id",
+      "type": "object",
+      "required": [
+        "lottery_info"
+      ],
+      "properties": {
+        "lottery_info": {
+          "type": "object",
+          "properties": {
+            "lottery_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Ticket information by sequence. Returns a list of holders (addresses)",
+      "type": "object",
+      "required": [
+        "ticket_info"
+      ],
+      "properties": {
+        "ticket_info": {
+          "type": "object",
+          "required": [
+            "sequence"
+          ],
+          "properties": {
+            "sequence": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Prizes for a given address on a given lottery id",
+      "type": "object",
+      "required": [
+        "prize_info"
+      ],
+      "properties": {
+        "prize_info": {
+          "type": "object",
+          "required": [
+            "address",
+            "lottery_id"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Prizes for a given lottery id",
+      "type": "object",
+      "required": [
+        "lottery_prize_infos"
+      ],
+      "properties": {
+        "lottery_prize_infos": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "start_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Depositor information by address",
+      "type": "object",
+      "required": [
+        "depositor_info"
+      ],
+      "properties": {
+        "depositor_info": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Depositor stats by address",
+      "type": "object",
+      "required": [
+        "depositor_stats_info"
+      ],
+      "properties": {
+        "depositor_stats_info": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "List (paginated) of DepositorInfo",
+      "type": "object",
+      "required": [
+        "depositor_infos"
+      ],
+      "properties": {
+        "depositor_infos": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "start_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "List (paginated) of DepositorStats",
+      "type": "object",
+      "required": [
+        "depositors_stats_infos"
+      ],
+      "properties": {
+        "depositors_stats_infos": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "start_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Sponsor information by address",
+      "type": "object",
+      "required": [
+        "sponsor"
+      ],
+      "properties": {
+        "sponsor": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Sponsor information by address",
+      "type": "object",
+      "required": [
+        "operator"
+      ],
+      "properties": {
+        "operator": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right now.",
+      "type": "object",
+      "required": [
+        "lottery_balance"
+      ],
+      "properties": {
+        "lottery_balance": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

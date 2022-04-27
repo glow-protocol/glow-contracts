@@ -1963,7 +1963,7 @@ fn withdraw() {
 
     // Withdraws a very small amount, burns a ticket as rounding
     let msg = ExecuteMsg::Withdraw {
-        amount: Some(Uint128::from(1u128)),
+        amount: Some(Uint128::from(100u128)),
         instant: None,
     };
 
@@ -4579,13 +4579,13 @@ fn small_withdraw() {
 
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Withdraw {
-        amount: Some(10u128.into()),
+        amount: Some(100u128.into()),
         instant: None,
     };
     let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // Get the withdrawn shares and aust
-    let withdrawn_shares = Uint256::from(10u128) / Decimal256::permille(RATE);
+    let withdrawn_shares = Uint256::from(100u128) / Decimal256::permille(RATE);
     let withdrawn_aust = withdrawn_shares;
 
     // Message for redeem amount operation of aUST

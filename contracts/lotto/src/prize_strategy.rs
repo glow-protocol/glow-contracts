@@ -121,7 +121,7 @@ pub fn execute_lottery(
     );
 
     if net_amount.is_zero() {
-        // If aust_to_redeem and award_available are zero, return error
+        // If aust_to_redeem_value is zero, return an error
         return Err(ContractError::InsufficientLotteryFunds {});
     }
 

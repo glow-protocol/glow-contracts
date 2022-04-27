@@ -143,22 +143,26 @@ pub struct OldState {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pool {
-    // This is the cumulative amount of aust deposited by all users
-    // minus user aust redeemed when executing the lottery.
+    // This is the amount of aust which belongs to users
+    // It is equal to the cumulative amount of aust deposited by all users
+    // minus the cumulative amount of aust withdrawn by all users
+    // minut user aust redeemed when executing the lottery.
     pub total_user_aust: Uint256,
     // This is the sum of shares across all depositors.
+    // It starts out as equal to total_user_aust,
+    // but total_user_aust smaller during each lottery execution
+    // while total_user_shares stays the same
     pub total_user_shares: Uint256,
     // Sum of all sponsor lottery deposits
-    // which equals the sum of sponsor deposits
-    // because all sponsor deposits go entirely towards the lottery
+    // which equals the sum of sponsor long term deposits
+    // because all sponsor long term deposits go entirely towards the lottery
     // This is used for:
-    // - checking for pool solvency
-    // - calculating the global reward index
-    // - calculating the amount to redeem when executing a lottery
+    // - calculating the global sponsor reward index
+    // - calculating the amount sponsored aust to redeem when executing a lottery
     pub total_sponsor_lottery_deposits: Uint256,
-    // Sum of all user lottery deposits that are operated or delegated by a third party
+    // Sum of all user lottery shares that have operators
     // This is used for
-    // - calculating the global reward index
+    // - calculating the global operator reward index
     pub total_operator_shares: Uint256,
 }
 
@@ -177,7 +181,7 @@ pub struct DepositorStatsInfo {
     pub shares: Uint256,
     // The number of tickets owned by the depositor
     pub num_tickets: usize,
-    // Stores information on the frontend operator or referrer used by depositor
+    // Stores the address of the operator / referrer used by depositor.
     pub operator_addr: Addr,
 }
 
@@ -222,7 +226,7 @@ pub struct DepositorInfo {
     pub tickets: Vec<String>,
     // Stores information on the user's unbonding claims.
     pub unbonding_info: Vec<Claim>,
-    // Stores information on the frontend operator or referrer used
+    // Stores the address of the operator / referrer used by depositor.
     pub operator_addr: Addr,
 }
 
@@ -250,7 +254,7 @@ pub struct OperatorInfo {
     // Cumulative value of the operators' shares.
     // The sums of all operator share amounts equals total_operator_shares
     // This is used for:
-    // - calculating the operator balance when calculating operator reward
+    // - calculating the operator's reward
     pub shares: Uint256,
     // Stores the amount rewards that are available for the operator to claim.
     pub pending_rewards: Decimal256,

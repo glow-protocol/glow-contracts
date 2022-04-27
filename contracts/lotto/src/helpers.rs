@@ -99,6 +99,13 @@ pub fn old_compute_depositor_reward(
     depositor.reward_index = global_reward_index;
 }
 
+/// Takes info relating to a deposit and does the following:
+///
+/// - Validates the tickets being minted
+/// - Generates pseudo random tickets for the depositor when they are eligible (up to 100)
+/// - Saves the newly minted tickets to the `depositor_info` and `TICKETS`
+///
+/// Then it returns the number of tickets which were minted
 #[allow(clippy::too_many_arguments)]
 pub fn handle_depositor_ticket_updates(
     deps: DepsMut,
@@ -125,7 +132,7 @@ pub fn handle_depositor_ticket_updates(
     let post_transaction_depositor_shares = depositor_info.shares + minted_shares;
 
     let post_transaction_depositor_balance = (pool.total_user_aust + minted_aust)
-        * Decimal256::from_ratio(
+        * decimal_from_ratio_or_one(
             post_transaction_depositor_shares,
             pool.total_user_shares + minted_shares,
         )
@@ -218,6 +225,7 @@ pub fn handle_depositor_ticket_updates(
 /// Handles all changes to operator's following a deposit
 /// Modifies state and depositor_info, but doesn't save them to storage.
 /// Call this function before modifying depositor_stats following a deposit.
+/// Call `compute_global_operator` before calling this function.
 pub fn handle_depositor_operator_updates(
     deps: DepsMut,
     state: &mut State,
@@ -235,9 +243,9 @@ pub fn handle_depositor_operator_updates(
         compute_operator_reward(state, &mut operator);
         // Then add the new deposit on the operator
         operator.shares = operator.shares.add(minted_shares);
-        // store operator info
+        // Save updated operator_info
         store_operator_info(deps.storage, &depositor_info.operator_addr, operator)?;
-        // update pool
+        // Update pool
         pool.total_operator_shares = pool.total_operator_shares.add(minted_shares);
     } else if let Some(new_operator_addr) = new_operator_addr {
         // If there is no operator registered and a new operator address is provided
@@ -250,7 +258,7 @@ pub fn handle_depositor_operator_updates(
             ));
         }
 
-        // Set the new depositor_info operator_addr
+        // Set the operator_addr of the depositor_info
         depositor_info.operator_addr = new_operator_addr;
 
         // Read the new operator in question
@@ -264,7 +272,7 @@ pub fn handle_depositor_operator_updates(
 
         new_operator.shares = new_operator.shares.add(post_transaction_depositor_shares);
 
-        // Store new operator info
+        // Save changes to operator info
         store_operator_info(deps.storage, &depositor_info.operator_addr, new_operator)?;
 
         // Update pool
@@ -416,7 +424,7 @@ pub fn calculate_boost_multiplier(
         let inverted_user_lottery_deposit_proportion =
             decimal_from_ratio_or_one(snapshotted_total_user_shares, snapshotted_user_shares);
 
-        let user_voting_balance_proportion = Decimal256::from_ratio(
+        let user_voting_balance_proportion = decimal_from_ratio_or_one(
             Uint256::from(snapshotted_user_voting_balance),
             boost_config.total_voting_power_weight
                 * Uint256::from(snapshotted_total_voting_balance),
@@ -537,7 +545,7 @@ pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
     // Sponsor balance equals aust_balance - total_user_aust
     let total_sponsor_aust = contract_a_balance - pool.total_user_aust;
 
-    // This should equal aust_sponsor_balance * (rate - state.last_lottery_exchange_rate) * config.split_factor;
+    // This should always equal total_sponsor_aust * (aust_exchange_rate - state.last_lottery_exchange_rate)
     let value_of_sponsor_aust_to_be_redeemed_for_lottery =
         total_sponsor_aust * aust_exchange_rate - pool.total_sponsor_lottery_deposits;
 
@@ -566,7 +574,6 @@ pub fn calculate_depositor_balance(
     aust_exchange_rate: Decimal256,
 ) -> Uint256 {
     // Calculate the depositor's balance from their aust balance
-
     pool.total_user_aust
         * decimal_from_ratio_or_one(depositor_info.shares, pool.total_user_shares)
         * aust_exchange_rate

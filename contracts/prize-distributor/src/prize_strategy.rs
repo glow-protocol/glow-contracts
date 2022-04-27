@@ -239,7 +239,7 @@ pub fn execute_prize(
             1,
         )?;
 
-        if next_tickets.len() > 0 {
+        if !next_tickets.is_empty() {
             // Set the page to the next value after the last winning_ticket from the previous limited query
             // TODO Revisit this clone
             lottery_info.page = next_tickets[0].0.clone();

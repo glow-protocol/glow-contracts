@@ -28,10 +28,10 @@ pub fn query_exchange_rate(
 }
 
 pub fn query_tickets(
-    deps: Deps,
-    min_bound: String,
-    max_bound: String,
-    limit: usize,
+    _deps: Deps,
+    _min_bound: String,
+    _max_bound: String,
+    _limit: usize,
 ) -> StdResult<Vec<(String, Vec<String>)>> {
     // // Get winning tickets
     // let winning_tickets: Vec<_> = TICKETS
@@ -51,9 +51,9 @@ pub fn query_tickets(
 }
 
 pub fn read_depositor_stats_at_height(
-    deps: Deps,
-    depositor: &str,
-    block_height: u64,
+    _deps: Deps,
+    _depositor: &str,
+    _block_height: u64,
 ) -> StdResult<DepositorStatsInfo> {
     Ok(DepositorStatsInfo {
         shares: Uint256::zero(),

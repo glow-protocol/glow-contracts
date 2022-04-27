@@ -4,33 +4,33 @@ use cosmwasm_std::entry_point;
 use crate::error::ContractError;
 use crate::helpers::{
     calculate_value_of_aust_to_be_redeemed_for_lottery, calculate_winner_prize,
-    decimal_from_ratio_or_one, ExecuteLotteryRedeemedAustInfo,
+    ExecuteLotteryRedeemedAustInfo,
 };
 use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{query_balance, query_exchange_rate, read_depositor_stats_at_height};
 use crate::state::{
-    parse_length, read_lottery_info, read_lottery_prizes, store_lottery_info, Config, LotteryInfo,
-    Pool, PrizeInfo, State, CONFIG, POOL, PRIZES, STATE,
+    read_lottery_info, read_lottery_prizes, Config, Pool, PrizeInfo, State, CONFIG, POOL, PRIZES,
+    STATE,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Order, Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
+    Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
 };
 use cw0::{Duration, Expiration};
-use cw20::Cw20ExecuteMsg;
+
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
+
 use glow_protocol::prize_distributor::{
     BoostConfig, ConfigResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,
     LotteryInfoResponse, MigrateMsg, PoolResponse, PrizeInfoResponse, PrizeInfosResponse, QueryMsg,
     RewardEmissionsIndex, StateResponse,
 };
 use glow_protocol::querier::deduct_tax;
-use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use std::ops::{Add, Sub};
-use std::str::from_utf8;
+use moneymarket::market::ExecuteMsg as AnchorMsg;
+
 use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
@@ -370,7 +370,7 @@ pub fn execute_claim_lottery(
 
             let snapshotted_depositor_stats_info = read_depositor_stats_at_height(
                 deps.as_ref(),
-                &info.sender.as_str(),
+                info.sender.as_str(),
                 lottery_info.block_height,
             )?;
 
@@ -457,7 +457,7 @@ pub fn execute_claim_lottery(
     ]))
 }
 
-pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
+pub fn execute_epoch_ops(_deps: DepsMut, _env: Env) -> Result<Response, ContractError> {
     Ok(Response::default())
 }
 
@@ -770,8 +770,8 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 }
 
 pub fn query_state(deps: Deps, env: Env, block_height: Option<u64>) -> StdResult<StateResponse> {
-    let pool = POOL.load(deps.storage)?;
-    let mut state = STATE.load(deps.storage)?;
+    let _pool = POOL.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
 
     let block_height = if let Some(block_height) = block_height {
         block_height
@@ -882,6 +882,6 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
 }

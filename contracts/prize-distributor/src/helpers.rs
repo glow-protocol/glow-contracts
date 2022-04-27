@@ -1,15 +1,15 @@
 use std::convert::TryInto;
-use std::ops::Add;
+
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, QuerierWrapper, StdError, StdResult, Uint128};
+use cosmwasm_std::{Addr, QuerierWrapper, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{DepositorInfo, DepositorStatsInfo};
 use glow_protocol::prize_distributor::{
-    BoostConfig, RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
+    BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
 };
-use sha3::{Digest, Keccak256};
+use sha3::{Digest};
 
-use crate::error::ContractError;
+
 use crate::querier::{
     query_address_voting_balance_at_timestamp, query_total_voting_balance_at_timestamp,
 };

@@ -50,7 +50,7 @@ pub fn execute_initiate_prize_distribution(
     }
 
     // Validate that the lottery hasn't already started
-    let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
+    let lottery_info = read_lottery_info(deps.storage, state.current_lottery);
     if lottery_info.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
@@ -68,14 +68,7 @@ pub fn execute_initiate_prize_distribution(
     };
 
     // Send submessage to send prize funds from savings to prize distributor
-    Ok(
-        Response::default().add_submessage(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            // TODO Update from distributor to savings contract
-            contract_addr: config.distributor_contract.to_string(),
-            funds: vec![],
-            msg: to_binary(&SavingsExecuteMsg::SendPrizeFundsToPrizeDistributor {})?,
-        }))),
-    )
+    Ok(Response::default().add_submessage(submessage))
 }
 
 pub fn execute_update_prize_buckets(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
@@ -169,7 +162,7 @@ fn calc_limit(request: Option<u32>) -> usize {
 
 const DEFAULT_LIMIT: u32 = 50;
 
-pub fn execute_prize(
+pub fn execute_prize_distribution(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,

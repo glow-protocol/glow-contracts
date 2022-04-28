@@ -5,7 +5,7 @@ use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
 use crate::error::ContractError;
 use crate::helpers::calculate_winner_prize;
 use crate::prize_strategy::{
-    execute_initiate_prize_distribution, execute_prize, execute_update_prize_buckets,
+    execute_initiate_prize_distribution, execute_prize_distribution, execute_update_prize_buckets,
 };
 use crate::querier::{
     query_balance, query_exchange_rate, query_redeemable_funds_info, read_depositor_stats_at_height,
@@ -199,7 +199,7 @@ pub fn execute(
             execute_claim_lottery(deps, env, info, lottery_ids)
         }
         ExecuteMsg::ExecuteLottery {} => execute_initiate_prize_distribution(deps, env, info),
-        ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
+        ExecuteMsg::ExecutePrize { limit } => execute_prize_distribution(deps, env, info, limit),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,

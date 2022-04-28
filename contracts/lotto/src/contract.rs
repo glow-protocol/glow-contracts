@@ -10,11 +10,11 @@ use crate::helpers::{
 };
 use crate::querier::{query_balance, query_exchange_rate};
 use crate::state::{
-    old_read_depositors, old_read_lottery_info, old_remove_depositor_info, parse_length,
-    read_depositor_info, read_depositor_stats, read_depositors_info, read_depositors_stats,
-    read_operator_info, read_sponsor_info, store_depositor_info, store_operator_info,
-    store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL,
-    OLDSTATE, OLD_PRIZES, POOL, STATE, TICKETS,
+    old_read_depositors, old_read_lottery_info, old_read_prize_infos, old_remove_depositor_info,
+    parse_length, read_depositor_info, read_depositor_stats, read_depositors_info,
+    read_depositors_stats, read_operator_info, read_sponsor_info, store_depositor_info,
+    store_operator_info, store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State,
+    CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -24,9 +24,8 @@ use cosmwasm_std::{
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 
-use cw_storage_plus::U64Key;
+use cw_storage_plus::{Bound, PrimaryKey, U64Key};
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::lotto::DepositorInfo;
 use glow_protocol::lotto::{
     AmountRedeemableForPrizesResponse, BoostConfig, Claim, ConfigResponse, DepositorInfoResponse,
     DepositorStatsResponse, DepositorsInfoResponse, DepositorsStatsResponse,
@@ -34,8 +33,10 @@ use glow_protocol::lotto::{
     OperatorInfoResponse, PoolResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse,
     StateResponse, TicketInfoResponse,
 };
+use glow_protocol::lotto::{DepositorInfo, OldPrizeInfosResponse};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
+use std::convert::TryInto;
 use std::ops::{Add, Sub};
 use std::str::from_utf8;
 use terraswap::querier::query_token_balance;
@@ -1128,13 +1129,12 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::State { block_height } => to_binary(&query_state(deps, env, block_height)?),
         QueryMsg::Pool {} => to_binary(&query_pool(deps)?),
         QueryMsg::LotteryInfo { lottery_id } => {
-            to_binary(&old_query_lottery_info(deps, env, lottery_id)?)
+            to_binary(&query_old_lottery_info(deps, env, lottery_id)?)
         }
         QueryMsg::TicketInfo { sequence } => to_binary(&query_ticket_info(deps, sequence)?),
-        QueryMsg::PrizeInfo {
-            address: _,
-            lottery_id: _,
-        } => unreachable!(),
+        QueryMsg::OldPrizeInfos { start_after, limit } => {
+            to_binary(&query_old_prize_infos(deps, env, start_after, limit)?)
+        }
         QueryMsg::LotteryPrizeInfos {
             lottery_id: _,
             start_after: _,
@@ -1321,7 +1321,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
     })
 }
 
-pub fn old_query_lottery_info(
+pub fn query_old_lottery_info(
     deps: Deps,
     _env: Env,
     lottery_id: Option<u64>,
@@ -1347,6 +1347,17 @@ pub fn old_query_lottery_info(
         number_winners: lottery.number_winners,
         page: lottery.page,
     })
+}
+
+pub fn query_old_prize_infos(
+    deps: Deps,
+    _env: Env,
+    start_after: Option<(String, u64)>,
+    limit: Option<u32>,
+) -> StdResult<OldPrizeInfosResponse> {
+    let old_prizes = old_read_prize_infos(deps, start_after, limit)?;
+
+    Ok(OldPrizeInfosResponse { prizes: old_prizes })
 }
 
 pub fn query_depositor_info(
@@ -1606,43 +1617,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
     };
 
     POOL.save(deps.storage, &new_pool)?;
-
-    // Migrate prize info
-    let _old_prizes = OLD_PRIZES
-        .range(deps.storage, None, None, Order::Ascending)
-        .map(|item| {
-            let (mut k, v) = item?;
-
-            // https://github.com/CosmWasm/cw-plus/issues/466
-
-            // Gets the length prefix from the composite key
-            let mut tu = k.split_off(2);
-
-            // Calculate the size of the first key in the composite key
-            // using the length prefix
-            let t_len = parse_length(&k)?;
-
-            // Split tu into the first and second key.
-            // u is the second key, and tu is the first key
-            let u = tu.split_off(t_len);
-
-            // Extract address from the first key
-            let addr = Addr::unchecked(from_utf8(&tu)?);
-
-            // Extract the lottery id from the second key
-            let lottery_id = U64Key::from(u);
-
-            // Return
-            Ok((lottery_id, addr, v))
-        })
-        .collect::<StdResult<Vec<_>>>()?;
-
-    // for old_prize in old_prizes {
-    //     let (lottery_id, addr, prize_info) = old_prize;
-    //     OLD_PRIZES.remove(deps.storage, (&addr, lottery_id.clone()));
-
-    //     PRIZES.save(deps.storage, (lottery_id, &addr), &prize_info)?;
-    // }
 
     Ok(Response::default())
 }

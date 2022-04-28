@@ -5,6 +5,8 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
+use crate::prize_distributor::PrizeInfo;
+
 pub const TICKET_LENGTH: usize = 6;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
 
@@ -130,7 +132,10 @@ pub enum QueryMsg {
     /// Ticket information by sequence. Returns a list of holders (addresses)
     TicketInfo { sequence: String },
     /// Prizes for a given address on a given lottery id
-    PrizeInfo { address: String, lottery_id: u64 },
+    OldPrizeInfos {
+        start_after: Option<(String, u64)>,
+        limit: Option<u32>,
+    },
     /// Prizes for a given lottery id
     LotteryPrizeInfos {
         lottery_id: u64,
@@ -266,6 +271,11 @@ pub struct Claim {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TicketInfoResponse {
     pub holders: Vec<Addr>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldPrizeInfosResponse {
+    pub prizes: Vec<(Addr, u64, PrizeInfo)>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -212,3 +212,9 @@ pub struct LotteryBalanceResponse {
     pub aust_to_redeem_value: Uint256,
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct PrizeInfo {
+    pub claimed: bool,
+    pub matches: [u32; NUM_PRIZE_BUCKETS],
+}

@@ -8,9 +8,7 @@ use crate::prize_strategy::{execute_lottery, execute_prize};
 use crate::querier::{
     query_balance, query_exchange_rate, query_redeemable_funds_info, read_depositor_stats_at_height,
 };
-use crate::state::{
-    read_lottery_info, read_lottery_prizes, Config, PrizeInfo, State, CONFIG, PRIZES, STATE,
-};
+use crate::state::{read_lottery_info, read_lottery_prizes, Config, State, CONFIG, PRIZES, STATE};
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
@@ -20,7 +18,7 @@ use cw0::{Duration, Expiration};
 
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
+use glow_protocol::prize_distributor::{PrizeInfo, NUM_PRIZE_BUCKETS};
 
 use glow_protocol::prize_distributor::{
     BoostConfig, ConfigResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,

@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::str::from_utf8;
 
+use glow_protocol::prize_distributor::PrizeInfo;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -75,12 +76,6 @@ pub struct LotteryInfo {
     pub page: String,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub total_user_shares: Uint256,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct PrizeInfo {
-    pub claimed: bool,
-    pub matches: [u32; NUM_PRIZE_BUCKETS],
 }
 
 pub fn store_lottery_info(

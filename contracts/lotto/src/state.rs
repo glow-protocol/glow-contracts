@@ -1,6 +1,7 @@
 use std::convert::TryInto;
+use std::str::from_utf8;
 
-
+use glow_protocol::prize_distributor::PrizeInfo;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +9,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Deps, Order, StdError, StdResult, Storage, Timestamp};
 use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
-use cw_storage_plus::{Bound, Item, Map, SnapshotMap, U64Key};
+use cw_storage_plus::{Bound, Item, Map, PrimaryKey, SnapshotMap, U64Key};
 use glow_protocol::lotto::{
     Claim, DepositorData, DepositorInfo, DepositorInfoResponse, DepositorStatsInfo,
     DepositorStatsResponse, RewardEmissionsIndex,
@@ -231,12 +232,6 @@ pub struct OldLotteryInfo {
     pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub number_winners: [u32; NUM_PRIZE_BUCKETS],
     pub page: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct PrizeInfo {
-    pub claimed: bool,
-    pub matches: [u32; NUM_PRIZE_BUCKETS],
 }
 
 pub fn old_read_lottery_info(
@@ -515,6 +510,55 @@ pub fn old_read_depositors(
             ))
         })
         .collect()
+}
+
+pub fn old_read_prize_infos(
+    deps: Deps,
+    start_after: Option<(String, u64)>,
+    limit: Option<u32>,
+) -> StdResult<Vec<(Addr, u64, PrizeInfo)>> {
+    let min_bound = start_after.map(|(start_after_depositor, start_after_lottery_id)| {
+        Bound::exclusive(
+            (
+                Addr::unchecked(start_after_depositor),
+                U64Key::from(start_after_lottery_id),
+            )
+                .joined_key(),
+        )
+    });
+
+    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
+
+    let old_prizes = OLD_PRIZES
+        .range(deps.storage, min_bound, None, Order::Ascending)
+        .take(limit)
+        .map(|item| {
+            let (mut k, v) = item?;
+
+            // https://github.com/CosmWasm/cw-plus/issues/466
+
+            // Gets the length prefix from the composite key
+            let mut tu = k.split_off(2);
+
+            // Calculate the size of the first key in the composite key
+            // using the length prefix
+            let t_len = parse_length(&k)?;
+
+            // Split tu into the first and second key.
+            // u is the second key, and tu is the first key
+            let u = tu.split_off(t_len);
+
+            // Extract address from the first key
+            let addr = Addr::unchecked(from_utf8(&tu)?);
+
+            let lottery_id = u64::from_be_bytes(u.try_into().unwrap());
+
+            // Return
+            Ok((addr, lottery_id, v))
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    Ok(old_prizes)
 }
 
 fn old_calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {

@@ -1,13 +1,13 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, QuerierWrapper, StdError, StdResult, Uint128};
-use glow_protocol::lotto::{DepositorStatsInfo};
-use glow_protocol::prize_distributor::{BoostConfig, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
+use glow_protocol::lotto::DepositorStatsInfo;
+use glow_protocol::prize_distributor::{BoostConfig, PrizeInfo, NUM_PRIZE_BUCKETS, TICKET_LENGTH};
 
 use crate::querier::{
     query_address_voting_balance_at_timestamp, query_total_voting_balance_at_timestamp,
 };
 
-use crate::state::{Config, LotteryInfo, PrizeInfo};
+use crate::state::{Config, LotteryInfo};
 
 pub fn calculate_winner_prize(
     querier: &QuerierWrapper,

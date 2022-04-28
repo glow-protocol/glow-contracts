@@ -395,8 +395,56 @@ pub fn execute_claim_lottery(
     ]))
 }
 
-pub fn execute_epoch_ops(_deps: DepsMut, _env: Env) -> Result<Response, ContractError> {
-    Ok(Response::default())
+pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
+
+    // Validate distributor contract has already been registered
+    if !config.contracts_registered() {
+        return Err(ContractError::NotRegistered {});
+    }
+
+    // Validate that executing epoch will follow rate limiting
+    if !state.next_epoch.is_expired(&env.block) {
+        return Err(ContractError::InvalidEpochExecution {});
+    }
+
+    // Validate that the lottery is not in the process of running
+    // This helps avoid delaying the computing of the reward following lottery execution.
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+    if current_lottery.rand_round != 0 {
+        return Err(ContractError::LotteryAlreadyStarted {});
+    }
+
+    // Compute total_reserves to fund community contract
+    let total_reserves = state.total_reserve;
+    let messages: Vec<CosmosMsg> = if !total_reserves.is_zero() {
+        vec![CosmosMsg::Bank(BankMsg::Send {
+            to_address: config.community_contract.to_string(),
+            amount: vec![deduct_tax(
+                deps.as_ref(),
+                Coin {
+                    denom: config.stable_denom,
+                    amount: total_reserves.into(),
+                },
+            )?],
+        })]
+    } else {
+        vec![]
+    };
+
+    // Update next_epoch based on epoch_interval
+    state.next_epoch = Expiration::AtTime(env.block.time).add(config.epoch_interval)?;
+
+    // Empty total reserve and store state
+    state.total_reserve = Uint256::zero();
+    STATE.save(deps.storage, &state)?;
+
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "execute_epoch_operations"),
+        attr("total_reserves", total_reserves.to_string()),
+    ]))
 }
 
 #[allow(clippy::too_many_arguments)]

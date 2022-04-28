@@ -464,9 +464,10 @@ pub fn decimal_from_ratio_or_one(a: Uint256, b: Uint256) -> Decimal256 {
 
 pub fn assert_prize_distribution_not_pending(
     deps: Deps,
-    prize_distributor_address: Addr,
+    prize_distributor_contract: &Addr,
 ) -> StdResult<()> {
-    if query_prize_distribution_pending(deps, prize_distributor_address)?.prize_distribution_pending
+    if query_prize_distribution_pending(deps, prize_distributor_contract)?
+        .prize_distribution_pending
         == true
     {
         return Err(StdError::generic_err("Prize distribution pending"));

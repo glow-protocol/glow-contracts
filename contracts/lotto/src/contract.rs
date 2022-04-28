@@ -3,10 +3,11 @@ use cosmwasm_std::entry_point;
 
 use crate::error::ContractError;
 use crate::helpers::{
-    calculate_value_of_aust_to_be_redeemed_for_lottery, claim_unbonded_withdrawals,
-    compute_global_operator_reward, compute_global_sponsor_reward, compute_operator_reward,
-    compute_sponsor_reward, decimal_from_ratio_or_one, handle_depositor_operator_updates,
-    handle_depositor_ticket_updates, old_compute_depositor_reward, old_compute_reward,
+    assert_prize_distribution_not_pending, calculate_value_of_aust_to_be_redeemed_for_lottery,
+    claim_unbonded_withdrawals, compute_global_operator_reward, compute_global_sponsor_reward,
+    compute_operator_reward, compute_sponsor_reward, decimal_from_ratio_or_one,
+    handle_depositor_operator_updates, handle_depositor_ticket_updates,
+    old_compute_depositor_reward, old_compute_reward,
 };
 use crate::querier::{query_balance, query_exchange_rate};
 use crate::state::{
@@ -252,13 +253,13 @@ pub fn execute(
         }
         ExecuteMsg::Claim {} => execute_claim_unbonded(deps, env, info),
         ExecuteMsg::ClaimRewards {} => execute_claim_rewards(deps, env, info),
-        ExecuteMsg::UpdateConfig { .. } => unreachable!(),
         ExecuteMsg::UpdateLotteryConfig { ticket_price } => {
             execute_update_lottery_config(deps, info, ticket_price)
         }
         ExecuteMsg::SendPrizeFundsToPrizeDistributor {} => {
             execute_send_prize_funds_to_prize_distributor(deps, env)
         }
+        ExecuteMsg::UpdateConfig { .. } => unreachable!(),
         ExecuteMsg::MigrateOldDepositors { .. } => unreachable!(),
     }
 }
@@ -386,6 +387,9 @@ pub fn deposit(
         info.sender.clone()
     };
     let mut depositor_info: DepositorInfo = read_depositor_info(deps.storage, &depositor);
+
+    // Validate that the prize distribution isn't pending
+    assert_prize_distribution_not_pending(deps.as_ref(), &config.prize_distributor_contract)?;
 
     // Validate that the deposit amount is non zero
     if deposit_amount.is_zero() {
@@ -518,6 +522,9 @@ pub fn execute_claim_tickets(
     )?
     .exchange_rate;
 
+    // Validate that the prize distribution isn't pending
+    assert_prize_distribution_not_pending(deps.as_ref(), &config.prize_distributor_contract)?;
+
     // Propogate depositor ticket updates
     let number_of_new_tickets = handle_depositor_ticket_updates(
         deps.branch(),
@@ -583,6 +590,9 @@ pub fn execute_sponsor(
         .find(|c| c.denom == config.stable_denom)
         .map(|c| Uint256::from(c.amount))
         .unwrap_or_else(Uint256::zero);
+
+    // Validate that the prize distribution isn't pending
+    assert_prize_distribution_not_pending(deps.as_ref(), &config.prize_distributor_contract)?;
 
     // Validate that the sponsor amount is non zero
     if sponsor_amount.is_zero() {
@@ -668,10 +678,13 @@ pub fn execute_sponsor_withdraw(
     )?
     .exchange_rate;
 
-    // TODO query
-    // if rate < state.last_lottery_execution_aust_exchange_rate {
-    //     return Err(ContractError::AnchorExchangeRateCollapse {});
-    // }
+    // Validate that the prize distribution isn't pending
+    assert_prize_distribution_not_pending(deps.as_ref(), &config.prize_distributor_contract)?;
+
+    // Don't let sponsors withdraw if the aust exchange rate collapses
+    if rate < state.last_lottery_execution_aust_exchange_rate {
+        return Err(ContractError::AnchorExchangeRateCollapse {});
+    }
 
     let mut sponsor_info: SponsorInfo = read_sponsor_info(deps.storage, &info.sender);
 
@@ -759,6 +772,9 @@ pub fn execute_withdraw(
         env.block.height,
     )?
     .exchange_rate;
+
+    // Validate that the prize distribution isn't pending
+    assert_prize_distribution_not_pending(deps.as_ref(), &config.prize_distributor_contract)?;
 
     // Validate that the user has savings aust to withdraw
     if depositor_info.shares.is_zero() {
@@ -964,6 +980,9 @@ pub fn execute_claim_unbonded(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let state = STATE.load(deps.storage)?;
+
+    // Validate that the prize distribution isn't pending
+    assert_prize_distribution_not_pending(deps.as_ref(), &config.prize_distributor_contract)?;
 
     let mut depositor = read_depositor_info(deps.storage, &info.sender);
 

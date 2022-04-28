@@ -39,11 +39,11 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
 
 pub fn query_prize_distribution_pending(
     deps: Deps,
-    prize_distributor_address: Addr,
+    prize_distributor_contract: &Addr,
 ) -> StdResult<PrizeDistributionPendingResponse> {
     let prize_distribution_pending_response: PrizeDistributionPendingResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: prize_distributor_address.to_string(),
+            contract_addr: prize_distributor_contract.to_string(),
             msg: to_binary(&PrizeDistributorQueryMsg::PrizeDistributionPending {})?,
         }))?;
 

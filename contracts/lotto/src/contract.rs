@@ -1608,7 +1608,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
     POOL.save(deps.storage, &new_pool)?;
 
     // Migrate prize info
-    let old_prizes = OLD_PRIZES
+    let _old_prizes = OLD_PRIZES
         .range(deps.storage, None, None, Order::Ascending)
         .map(|item| {
             let (mut k, v) = item?;

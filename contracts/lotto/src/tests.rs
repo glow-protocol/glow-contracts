@@ -8,14 +8,14 @@ use crate::mock_querier::{
 };
 use crate::state::{
     old_remove_depositor_info, read_depositor_info, read_depositor_stats_at_height,
-    read_sponsor_info, store_depositor_info, store_depositor_stats, OldDepositorInfo, PrizeInfo,
+    read_sponsor_info, store_depositor_info, store_depositor_stats, OldDepositorInfo,
     STATE,
 };
 use crate::test_helpers::{
     generate_sequential_ticket_combinations, vec_string_tickets_to_encoded_tickets,
 };
 use cosmwasm_storage::bucket;
-use cw_storage_plus::U64Key;
+
 use glow_protocol::lotto::{
     DepositorInfo, DepositorStatsInfo, OperatorInfoResponse, RewardEmissionsIndex,
     NUM_PRIZE_BUCKETS, TICKET_LENGTH,

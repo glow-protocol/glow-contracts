@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Addr, Binary, BlockInfo, Coin, ContractInfo,
+    from_binary, from_slice, to_binary, Addr, BlockInfo, Coin, ContractInfo,
     ContractResult, Decimal, Env, MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest,
     SystemError, SystemResult, Timestamp, Uint128, WasmQuery,
 };

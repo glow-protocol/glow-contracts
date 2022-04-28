@@ -13,7 +13,6 @@ mod integration_test;
 #[cfg(test)]
 mod mock_querier;
 mod oracle;
-mod prize_strategy;
 mod querier;
 #[cfg(test)]
 mod tests;

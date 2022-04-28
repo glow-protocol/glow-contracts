@@ -12,48 +12,48 @@ use cosmwasm_std::{coin, Addr, Deps, StdResult, Storage};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use std::convert::TryInto;
 
-pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
-    let pool = POOL.load(deps.storage).unwrap();
-    let config = CONFIG.load(deps.storage).unwrap();
-    let state = STATE.load(deps.storage).unwrap();
+// pub fn calculate_prize_buckets(deps: Deps) -> [Uint256; NUM_PRIZE_BUCKETS] {
+//     let pool = POOL.load(deps.storage).unwrap();
+//     let config = CONFIG.load(deps.storage).unwrap();
+//     let state = STATE.load(deps.storage).unwrap();
 
-    let aust_exchange_rate = Decimal256::permille(RATE);
+//     let aust_exchange_rate = Decimal256::permille(RATE);
 
-    let contract_a_balance = query_token_balance(
-        deps,
-        Addr::unchecked(A_UST),
-        Addr::unchecked(MOCK_CONTRACT_ADDR),
-    )
-    .unwrap();
+//     let contract_a_balance = query_token_balance(
+//         deps,
+//         Addr::unchecked(A_UST),
+//         Addr::unchecked(MOCK_CONTRACT_ADDR),
+//     )
+//     .unwrap();
 
-    let ExecuteLotteryRedeemedAustInfo {
-        aust_to_redeem_value,
-        ..
-    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
-        &state,
-        &pool,
-        &config,
-        contract_a_balance,
-        aust_exchange_rate,
-    );
+//     let ExecuteLotteryRedeemedAustInfo {
+//         aust_to_redeem_value,
+//         ..
+//     } = calculate_value_of_aust_to_be_redeemed_for_lottery(
+//         &state,
+//         &pool,
+//         &config,
+//         contract_a_balance,
+//         aust_exchange_rate,
+//     );
 
-    // Get the post tax amount
-    let net_amount = Uint256::from(
-        deduct_tax(deps, coin((aust_to_redeem_value).into(), "uusd"))
-            .unwrap()
-            .amount,
-    );
+//     // Get the post tax amount
+//     let net_amount = Uint256::from(
+//         deduct_tax(deps, coin((aust_to_redeem_value).into(), "uusd"))
+//             .unwrap()
+//             .amount,
+//     );
 
-    let mut prize_buckets = state.prize_buckets;
+//     let mut prize_buckets = state.prize_buckets;
 
-    for index in 0..state.prize_buckets.len() {
-        // Add the proportional amount of the net redeemed amount to the relevant award bucket.
-        prize_buckets[index] += net_amount * config.prize_distribution[index];
-    }
+//     for index in 0..state.prize_buckets.len() {
+//         // Add the proportional amount of the net redeemed amount to the relevant award bucket.
+//         prize_buckets[index] += net_amount * config.prize_distribution[index];
+//     }
 
-    // Return the initial balance plus the post tax redeemed aust value
-    prize_buckets
-}
+//     // Return the initial balance plus the post tax redeemed aust value
+//     prize_buckets
+// }
 
 pub fn calculate_lottery_prize_buckets(
     state_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],

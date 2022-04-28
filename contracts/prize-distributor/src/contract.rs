@@ -24,7 +24,8 @@ use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
 
 use glow_protocol::prize_distributor::{
     BoostConfig, ConfigResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,
-    LotteryInfoResponse, MigrateMsg, PrizeInfoResponse, PrizeInfosResponse, QueryMsg, StateResponse,
+    LotteryInfoResponse, MigrateMsg, PrizeInfoResponse, PrizeInfosResponse, QueryMsg,
+    StateResponse,
 };
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::ExecuteMsg as AnchorMsg;
@@ -229,24 +230,22 @@ pub fn execute(
             lotto_winner_boost_config,
             operator_glow_emission_rate,
             sponsor_glow_emission_rate,
-        } => {
-            execute_update_config(
-                deps,
-                info,
-                owner,
-                oracle_addr,
-                reserve_factor,
-                instant_withdrawal_fee,
-                unbonding_period,
-                epoch_interval,
-                max_holders,
-                max_tickets_per_depositor,
-                paused,
-                lotto_winner_boost_config,
-                operator_glow_emission_rate,
-                sponsor_glow_emission_rate,
-            )
-        }
+        } => execute_update_config(
+            deps,
+            info,
+            owner,
+            oracle_addr,
+            reserve_factor,
+            instant_withdrawal_fee,
+            unbonding_period,
+            epoch_interval,
+            max_holders,
+            max_tickets_per_depositor,
+            paused,
+            lotto_winner_boost_config,
+            operator_glow_emission_rate,
+            sponsor_glow_emission_rate,
+        ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
             block_time,

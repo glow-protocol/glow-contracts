@@ -4,8 +4,8 @@ use std::fs::create_dir_all;
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
 use glow_protocol::lotto::{
-    ConfigResponse, DepositorInfoResponse, DepositorsInfoResponse, ExecuteMsg, InstantiateMsg,
-    LotteryBalanceResponse, LotteryInfoResponse, PoolResponse, PrizeInfoResponse, QueryMsg,
+    AmountRedeemableForPrizesResponse, ConfigResponse, DepositorInfoResponse,
+    DepositorsInfoResponse, ExecuteMsg, InstantiateMsg, PoolResponse, PrizeInfoResponse, QueryMsg,
     SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 
@@ -22,10 +22,9 @@ fn main() {
     export_schema(&schema_for!(StateResponse), &out_dir);
     export_schema(&schema_for!(DepositorInfoResponse), &out_dir);
     export_schema(&schema_for!(DepositorsInfoResponse), &out_dir);
-    export_schema(&schema_for!(LotteryInfoResponse), &out_dir);
     export_schema(&schema_for!(PoolResponse), &out_dir);
     export_schema(&schema_for!(PrizeInfoResponse), &out_dir);
     export_schema(&schema_for!(SponsorInfoResponse), &out_dir);
     export_schema(&schema_for!(TicketInfoResponse), &out_dir);
-    export_schema(&schema_for!(LotteryBalanceResponse), &out_dir);
+    export_schema(&schema_for!(AmountRedeemableForPrizesResponse), &out_dir);
 }

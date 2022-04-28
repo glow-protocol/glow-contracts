@@ -59,22 +59,13 @@ pub struct Config {
     pub anchor_contract: Addr,
     pub oracle_contract: Addr,
     pub stable_denom: String,
-    pub lottery_interval: u64,
-    pub epoch_interval: Duration,
-    pub block_time: Duration,
-    pub round_delta: u64,
     pub ticket_price: Uint256,
     pub max_holders: u8,
-    pub prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
-    pub target_award: Uint256,
-    pub reserve_factor: Decimal256,
     pub split_factor: Decimal256,
     pub instant_withdrawal_fee: Decimal256,
     pub unbonding_period: Duration,
     pub max_tickets_per_depositor: u64,
-    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub paused: bool,
-    pub lotto_winner_boost_config: BoostConfig,
 }
 
 impl Config {
@@ -117,12 +108,6 @@ impl OldConfig {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub total_tickets: Uint256,
-    pub total_reserve: Uint256,
-    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub current_lottery: u64,
-    pub next_lottery_time: Timestamp,
-    pub next_lottery_exec_time: Expiration,
-    pub next_epoch: Expiration,
     pub operator_reward_emission_index: RewardEmissionsIndex,
     pub sponsor_reward_emission_index: RewardEmissionsIndex,
     pub last_lottery_execution_aust_exchange_rate: Decimal256,

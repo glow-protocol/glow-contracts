@@ -268,7 +268,7 @@ pub fn execute_send_prize_funds_to_prize_distributor(
     env: Env,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
+    let mut pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
     // Get the contract's aust balance
@@ -296,7 +296,14 @@ pub fn execute_send_prize_funds_to_prize_distributor(
 
     // Update the latest aust_exchange_rate
     state.last_lottery_execution_aust_exchange_rate = aust_exchange_rate;
+    // Subtract from the total_user_aust
+    pool.total_user_aust = pool.total_user_aust - amount_redeemable_for_prizes.user_aust_to_redeem;
+
+    // Save changes to state
     STATE.save(deps.storage, &state)?;
+
+    // Save changes to pool
+    POOL.save(deps.storage, &pool)?;
 
     // Send message to send funds to prize distributor
     Ok(

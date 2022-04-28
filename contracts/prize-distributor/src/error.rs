@@ -169,4 +169,7 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("InvalidTokenReplyId")]
+    InvalidTokenReplyId {},
 }

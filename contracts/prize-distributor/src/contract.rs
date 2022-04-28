@@ -4,7 +4,9 @@ use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
 
 use crate::error::ContractError;
 use crate::helpers::calculate_winner_prize;
-use crate::prize_strategy::{execute_lottery, execute_prize};
+use crate::prize_strategy::{
+    execute_initiate_prize_distribution, execute_prize, execute_update_prize_buckets,
+};
 use crate::querier::{
     query_balance, query_exchange_rate, query_redeemable_funds_info, read_depositor_stats_at_height,
 };
@@ -12,7 +14,7 @@ use crate::state::{read_lottery_info, read_lottery_prizes, Config, State, CONFIG
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
+    Reply, Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
 };
 use cw0::{Duration, Expiration};
 
@@ -35,6 +37,7 @@ pub const MAX_CLAIMS: u8 = 15;
 pub const THIRTY_MINUTE_TIME: u64 = 60 * 30;
 pub const MAX_HOLDERS_FLOOR: u8 = 10;
 pub const MAX_HOLDERS_CAP: u8 = 100;
+pub const SEND_PRIZE_FUNDS_TO_PRIZE_DISTRIBUTOR_REPLY: u64 = 1;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -195,7 +198,7 @@ pub fn execute(
         ExecuteMsg::ClaimLottery { lottery_ids } => {
             execute_claim_lottery(deps, env, info, lottery_ids)
         }
-        ExecuteMsg::ExecuteLottery {} => execute_lottery(deps, env, info),
+        ExecuteMsg::ExecuteLottery {} => execute_initiate_prize_distribution(deps, env, info),
         ExecuteMsg::ExecutePrize { limit } => execute_prize(deps, env, info, limit),
         ExecuteMsg::ExecuteEpochOps {} => execute_epoch_ops(deps, env),
         ExecuteMsg::UpdateConfig {
@@ -713,4 +716,13 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
+}
+
+// Reply callback triggered from cw721 contract instantiation
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    match msg.id {
+        SEND_PRIZE_FUNDS_TO_PRIZE_DISTRIBUTOR_REPLY => execute_update_prize_buckets(deps, env),
+        id => Err(ContractError::InvalidTokenReplyId {}),
+    }
 }

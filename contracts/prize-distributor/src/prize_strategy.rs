@@ -1,3 +1,4 @@
+use crate::contract::SEND_PRIZE_FUNDS_TO_PRIZE_DISTRIBUTOR_REPLY;
 use crate::error::ContractError;
 use crate::querier::{
     query_exchange_rate, query_oracle, query_redeemable_funds_info, query_tickets,
@@ -6,7 +7,8 @@ use crate::querier::{
 use crate::state::{read_lottery_info, store_lottery_info, LotteryInfo, CONFIG, PRIZES, STATE};
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
-    attr, coin, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Response, WasmMsg,
+    attr, coin, to_binary, Addr, CosmosMsg, DepsMut, Empty, Env, MessageInfo, ReplyOn, Response,
+    SubMsg, WasmMsg,
 };
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
@@ -14,6 +16,8 @@ use cw_storage_plus::U64Key;
 use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
 use glow_protocol::prize_distributor::{PrizeInfo, NUM_PRIZE_BUCKETS};
 use terraswap::querier::query_token_balance;
+
+use glow_protocol::lotto::ExecuteMsg as SavingsExecuteMsg;
 
 use crate::helpers::{
     calculate_max_bound, count_seq_matches, get_minimum_matches_for_winning_ticket,
@@ -25,28 +29,13 @@ use std::ops::Add;
 use std::str;
 use std::usize;
 
-pub fn execute_lottery(
+pub fn execute_initiate_prize_distribution(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let mut state = STATE.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
-
-    // Get the contract's aust balance
-    let _contract_a_balance = query_token_balance(
-        &deps.querier,
-        deps.api.addr_validate(config.a_terra_contract.as_str())?,
-        env.clone().contract.address,
-    )?;
-
-    // Get the aust exchange rate
-    let aust_exchange_rate = query_exchange_rate(
-        deps.as_ref(),
-        config.anchor_contract.to_string(),
-        env.block.height,
-    )?
-    .exchange_rate;
 
     // Validate that no funds are sent when executing the lottery
     if !info.funds.is_empty() {
@@ -60,22 +49,66 @@ pub fn execute_lottery(
         });
     }
 
-    // Set the next_lottery_exec_time to the current block time plus `config.block_time`
-    // This is so that `execute_prize` can't be run until the randomness oracle is ready
-    // with the rand_round calculated below
-    state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
-
     // Validate that the lottery hasn't already started
     let mut lottery_info = read_lottery_info(deps.storage, state.current_lottery);
     if lottery_info.rand_round != 0 {
         return Err(ContractError::LotteryAlreadyStarted {});
     }
 
+    let submessage: SubMsg<Empty> = SubMsg {
+        msg: WasmMsg::Execute {
+            contract_addr: config.distributor_contract.to_string(),
+            funds: vec![],
+            msg: to_binary(&SavingsExecuteMsg::SendPrizeFundsToPrizeDistributor {})?,
+        }
+        .into(),
+        id: SEND_PRIZE_FUNDS_TO_PRIZE_DISTRIBUTOR_REPLY,
+        gas_limit: None,
+        reply_on: ReplyOn::Success,
+    };
+
+    // Send submessage to send prize funds from savings to prize distributor
+    Ok(
+        Response::default().add_submessage(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            // TODO Update from distributor to savings contract
+            contract_addr: config.distributor_contract.to_string(),
+            funds: vec![],
+            msg: to_binary(&SavingsExecuteMsg::SendPrizeFundsToPrizeDistributor {})?,
+        }))),
+    )
+}
+
+pub fn execute_update_prize_buckets(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
+    let mut state = STATE.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+
+    // Get the contract's aust balance
+    let contract_a_balance = Uint256::from(query_token_balance(
+        &deps.querier,
+        deps.api.addr_validate(config.a_terra_contract.as_str())?,
+        env.clone().contract.address,
+    )?);
+
+    // Get the aust exchange rate
+    let aust_exchange_rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
+    let contract_a_balance_value = contract_a_balance * aust_exchange_rate;
+
+    // Set the next_lottery_exec_time to the current block time plus `config.block_time`
+    // This is so that `execute_prize` can't be run until the randomness oracle is ready
+    // with the rand_round calculated below
+    state.next_lottery_exec_time = Expiration::AtTime(env.block.time).add(config.block_time)?;
+
     // Get the lottery_rand_round
     let lottery_rand_round = calculate_lottery_rand_round(env.clone(), config.round_delta);
 
     // Populate lottery_info
-    lottery_info = LotteryInfo {
+    let lottery_info = LotteryInfo {
         rand_round: lottery_rand_round,
         sequence: "".to_string(),
         awarded: false,
@@ -91,18 +124,11 @@ pub fn execute_lottery(
 
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
-    let AmountRedeemableForPrizesInfo {
-        user_aust_to_redeem: _,
-        aust_to_redeem,
-        aust_to_redeem_value,
-        ..
-    } = query_redeemable_funds_info(deps.as_ref())?;
-
     // Get the amount of ust that will be received after accounting for taxes
     let net_amount = Uint256::from(
         deduct_tax(
             deps.as_ref(),
-            coin(aust_to_redeem_value.into(), config.clone().stable_denom),
+            coin(contract_a_balance_value.into(), config.clone().stable_denom),
         )?
         .amount,
     );
@@ -117,36 +143,23 @@ pub fn execute_lottery(
         state.prize_buckets[index] += net_amount * *fraction_of_prize
     }
 
-    let mut msgs: Vec<CosmosMsg> = vec![];
-
     // Message to redeem "aust_to_redeem" of aust from the Anchor contract
     let redeem_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.a_terra_contract.to_string(),
         funds: vec![],
         msg: to_binary(&Cw20Send {
             contract: config.anchor_contract.to_string(),
-            amount: aust_to_redeem.into(),
+            amount: contract_a_balance.into(),
             msg: to_binary(&Cw20HookMsg::RedeemStable {})?,
         })?,
     });
 
-    msgs.push(redeem_msg);
-
-    // Update last_lottery_exchange_rate
-    state.last_lottery_execution_aust_exchange_rate = aust_exchange_rate;
-
-    // // Update the user shares
-    // pool.total_user_aust = pool.total_user_aust - user_aust_to_redeem;
-
-    // Store the state
-    STATE.save(deps.storage, &state)?;
-    // // Store the pool
-    // POOL.save(deps.storage, &pool)?;
-
-    let res = Response::new().add_messages(msgs).add_attributes(vec![
+    let res = Response::new().add_message(redeem_msg).add_attributes(vec![
         attr("action", "execute_lottery"),
-        attr("redeemed_amount", aust_to_redeem.to_string()),
+        attr("redeemed_amount", contract_a_balance.to_string()),
     ]);
+
+    // Return res
     Ok(res)
 }
 

@@ -5,7 +5,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
-use crate::prize_distributor::{self, PrizeInfo};
+use crate::prize_distributor::{PrizeInfo};
 
 pub const TICKET_LENGTH: usize = 6;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;

@@ -1,8 +1,6 @@
 use crate::contract::SEND_PRIZE_FUNDS_TO_PRIZE_DISTRIBUTOR_REPLY;
 use crate::error::ContractError;
-use crate::querier::{
-    query_exchange_rate, query_oracle, query_redeemable_funds_info, query_tickets,
-};
+use crate::querier::{query_exchange_rate, query_oracle, query_tickets};
 
 use crate::state::{read_lottery_info, store_lottery_info, LotteryInfo, CONFIG, PRIZES, STATE};
 use cosmwasm_bignumber::Uint256;
@@ -13,7 +11,7 @@ use cosmwasm_std::{
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::U64Key;
-use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
+
 use glow_protocol::prize_distributor::{PrizeInfo, NUM_PRIZE_BUCKETS};
 use terraswap::querier::query_token_balance;
 
@@ -57,7 +55,7 @@ pub fn execute_initiate_prize_distribution(
 
     let submessage: SubMsg<Empty> = SubMsg {
         msg: WasmMsg::Execute {
-            contract_addr: config.distributor_contract.to_string(),
+            contract_addr: config.savings_contract.to_string(),
             funds: vec![],
             msg: to_binary(&SavingsExecuteMsg::SendPrizeFundsToPrizeDistributor {})?,
         }

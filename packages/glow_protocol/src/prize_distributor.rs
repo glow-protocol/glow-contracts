@@ -46,6 +46,8 @@ pub enum ExecuteMsg {
         distributor_contract: String,
         /// veGLOW contract for calculating boost multipliers
         ve_contract: String,
+        /// Savings contract for redeeming prize funds
+        savings_contract: String,
     },
     /// Update contract configuration - restricted to owner
     UpdateConfig {
@@ -112,6 +114,7 @@ pub struct ConfigResponse {
     pub ve_contract: String,
     pub community_contract: String,
     pub distributor_contract: String,
+    pub savings_contract: String,
     pub lottery_interval: u64,
     pub epoch_interval: Duration,
     pub block_time: Duration,

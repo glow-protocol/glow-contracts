@@ -30,6 +30,7 @@ pub struct Config {
     pub gov_contract: Addr,
     pub community_contract: Addr,
     pub distributor_contract: Addr,
+    pub savings_contract: Addr,
     pub anchor_contract: Addr,
     pub oracle_contract: Addr,
     pub stable_denom: String,
@@ -48,6 +49,7 @@ impl Config {
         self.gov_contract != Addr::unchecked("")
             && self.community_contract != Addr::unchecked("")
             && self.distributor_contract != Addr::unchecked("")
+            && self.savings_contract != Addr::unchecked("")
     }
 }
 

@@ -110,6 +110,7 @@ pub fn instantiate(
             ve_contract: Addr::unchecked(""),
             community_contract: Addr::unchecked(""),
             distributor_contract: Addr::unchecked(""),
+            savings_contract: Addr::unchecked(""),
             oracle_contract: deps.api.addr_validate(msg.oracle_contract.as_str())?,
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.addr_validate(msg.anchor_contract.as_str())?,
@@ -187,6 +188,7 @@ pub fn execute(
             community_contract,
             distributor_contract,
             ve_contract,
+            savings_contract,
         } => execute_register_contracts(
             deps,
             info,
@@ -194,6 +196,7 @@ pub fn execute(
             community_contract,
             distributor_contract,
             ve_contract,
+            savings_contract,
         ),
         ExecuteMsg::ClaimLottery { lottery_ids } => {
             execute_claim_lottery(deps, env, info, lottery_ids)
@@ -243,6 +246,7 @@ pub fn execute_register_contracts(
     community_contract: String,
     distributor_contract: String,
     ve_contract: String,
+    savings_contract: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -260,6 +264,7 @@ pub fn execute_register_contracts(
     config.community_contract = deps.api.addr_validate(&community_contract)?;
     config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
     config.ve_contract = deps.api.addr_validate(&ve_contract)?;
+    config.savings_contract = deps.api.addr_validate(&savings_contract)?;
 
     CONFIG.save(deps.storage, &config)?;
 
@@ -628,6 +633,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         ve_contract: config.ve_contract.to_string(),
         community_contract: config.community_contract.to_string(),
         distributor_contract: config.distributor_contract.to_string(),
+        savings_contract: config.savings_contract.to_string(),
         lottery_interval: config.lottery_interval,
         epoch_interval: config.epoch_interval,
         block_time: config.block_time,
@@ -723,6 +729,6 @@ pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, 
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     match msg.id {
         SEND_PRIZE_FUNDS_TO_PRIZE_DISTRIBUTOR_REPLY => execute_update_prize_buckets(deps, env),
-        id => Err(ContractError::InvalidTokenReplyId {}),
+        _id => Err(ContractError::InvalidTokenReplyId {}),
     }
 }

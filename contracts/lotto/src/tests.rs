@@ -1,32 +1,29 @@
 use crate::contract::{
-    execute, instantiate, migrate, query, query_config, query_pool, query_state, query_ticket_info,
+    execute, instantiate, query, query_config, query_pool, query_state, query_ticket_info,
     INITIAL_DEPOSIT_AMOUNT,
 };
 use crate::helpers::{
-    base64_encoded_tickets_to_vec_string_tickets, calculate_max_bound,
-    calculate_value_of_aust_to_be_redeemed_for_lottery, get_minimum_matches_for_winning_ticket,
+    base64_encoded_tickets_to_vec_string_tickets, calculate_max_bound, get_minimum_matches_for_winning_ticket,
     uint256_times_decimal256_ceil,
 };
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
 };
 use crate::state::{
-    old_read_depositor_info, old_read_lottery_info, old_remove_depositor_info, read_depositor_info,
-    read_depositor_stats_at_height, read_lottery_info, read_lottery_prizes, read_prize,
-    read_sponsor_info, store_depositor_info, store_depositor_stats, Config, LotteryInfo, OldConfig,
-    OldDepositorInfo, OldLotteryInfo, OldPool, OldState, Pool, PrizeInfo, State, CONFIG, OLDCONFIG,
-    OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
+    old_remove_depositor_info, read_depositor_info,
+    read_depositor_stats_at_height, read_lottery_prizes,
+    read_sponsor_info, store_depositor_info, store_depositor_stats,
+    OldDepositorInfo, PrizeInfo, PRIZES, STATE,
 };
 use crate::test_helpers::{
-    calculate_lottery_prize_buckets, calculate_remaining_state_prize_buckets,
-    generate_sequential_ticket_combinations, old_store_depositor_info, old_store_lottery_info,
+    generate_sequential_ticket_combinations,
     vec_string_tickets_to_encoded_tickets,
 };
 use cosmwasm_storage::bucket;
 use cw_storage_plus::U64Key;
 use glow_protocol::lotto::{
-    BoostConfig, DepositorInfo, DepositorStatsInfo, ExecuteLotteryRedeemedAustInfo, MigrateMsg,
-    OperatorInfoResponse, PrizeInfoResponse, RewardEmissionsIndex, NUM_PRIZE_BUCKETS,
+    DepositorInfo, DepositorStatsInfo,
+    OperatorInfoResponse, RewardEmissionsIndex, NUM_PRIZE_BUCKETS,
     TICKET_LENGTH,
 };
 use lazy_static::lazy_static;
@@ -45,10 +42,10 @@ use glow_protocol::lotto::{
 };
 
 use crate::error::ContractError;
-use cw0::{Duration, Expiration, HOUR, WEEK};
+use cw0::{Duration, WEEK};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Sub};
 use std::str::FromStr;
 
 pub const TEST_CREATOR: &str = "creator";
@@ -3851,7 +3848,7 @@ fn test_premature_emissions() {
         }],
     );
 
-    let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    let _res = execute(deps.as_mut(), env.clone(), info, msg);
 
     // Get the number of minted aust
     let minted_aust = Uint256::from(2 * TICKET_PRICE) / Decimal256::permille(RATE);

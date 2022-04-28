@@ -10,31 +10,30 @@ use crate::helpers::{
 };
 use crate::querier::{query_balance, query_exchange_rate};
 use crate::state::{
-    old_read_depositors, old_read_lottery_info, old_remove_depositor_info, old_remove_lottery_info,
-    parse_length, read_depositor_info, read_depositor_stats, read_depositor_stats_at_height,
-    read_depositors_info, read_depositors_stats, read_lottery_info, read_lottery_prizes,
-    read_operator_info, read_sponsor_info, store_depositor_info, store_lottery_info,
-    store_operator_info, store_sponsor_info, Config, LotteryInfo, OperatorInfo, Pool, PrizeInfo,
-    SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE,
-    TICKETS,
+    old_read_depositors, old_read_lottery_info, old_remove_depositor_info, parse_length,
+    read_depositor_info, read_depositor_stats, read_depositors_info, read_depositors_stats,
+    read_operator_info, read_sponsor_info, store_depositor_info, store_operator_info,
+    store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL,
+    OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Order, Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
+    Order, Response, StdError, StdResult, Uint128, WasmMsg,
 };
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
+
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
+use glow_protocol::lotto::DepositorInfo;
 use glow_protocol::lotto::{
     AmountRedeemableForPrizesResponse, BoostConfig, Claim, ConfigResponse, DepositorInfoResponse,
     DepositorStatsResponse, DepositorsInfoResponse, DepositorsStatsResponse,
     ExecuteLotteryRedeemedAustInfo, ExecuteMsg, InstantiateMsg, MigrateMsg, OldLotteryInfoResponse,
-    OperatorInfoResponse, PoolResponse, PrizeInfoResponse, PrizeInfosResponse, QueryMsg,
-    RewardEmissionsIndex, SponsorInfoResponse, StateResponse, TicketInfoResponse,
+    OperatorInfoResponse, PoolResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse,
+    StateResponse, TicketInfoResponse,
 };
-use glow_protocol::lotto::{DepositorInfo, NUM_PRIZE_BUCKETS};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 use std::ops::{Add, Sub};
@@ -84,7 +83,7 @@ pub fn instantiate(
     }
 
     // Get and validate the lotto winner boost config
-    let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
+    let _default_lotto_winner_boost_config: BoostConfig = BoostConfig {
         base_multiplier: Decimal256::from_ratio(Uint256::from(40u128), Uint256::from(100u128)),
         max_multiplier: Decimal256::one(),
         total_voting_power_weight: Decimal256::percent(150),
@@ -242,15 +241,15 @@ pub fn execute(
             operator,
         } => execute_gift(deps, env, info, encoded_tickets, recipient, operator),
         ExecuteMsg::Sponsor {
-            award,
-            prize_distribution,
+            award: _,
+            prize_distribution: _,
         } => execute_sponsor(deps, env, info),
         ExecuteMsg::SponsorWithdraw {} => execute_sponsor_withdraw(deps, env, info),
         ExecuteMsg::Withdraw { amount, instant } => {
             execute_withdraw(deps, env, info, amount, instant)
         }
         ExecuteMsg::Claim {} => execute_claim_unbonded(deps, env, info),
-        ExecuteMsg::ClaimLottery { lottery_ids } => {
+        ExecuteMsg::ClaimLottery { lottery_ids: _ } => {
             unreachable!()
         }
         ExecuteMsg::ClaimRewards {} => execute_claim_rewards(deps, env, info),
@@ -446,7 +445,7 @@ pub fn execute_claim_tickets(
     encoded_tickets: String,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let state = STATE.load(deps.storage)?;
+    let _state = STATE.load(deps.storage)?;
     let pool = POOL.load(deps.storage)?;
 
     let depositor = info.sender.clone();
@@ -1133,13 +1132,13 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::TicketInfo { sequence } => to_binary(&query_ticket_info(deps, sequence)?),
         QueryMsg::PrizeInfo {
-            address,
-            lottery_id,
+            address: _,
+            lottery_id: _,
         } => unreachable!(),
         QueryMsg::LotteryPrizeInfos {
-            lottery_id,
-            start_after,
-            limit,
+            lottery_id: _,
+            start_after: _,
+            limit: _,
         } => unreachable!(),
         QueryMsg::DepositorInfo { address } => {
             to_binary(&query_depositor_info(deps, env, address)?)
@@ -1324,7 +1323,7 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
 
 pub fn old_query_lottery_info(
     deps: Deps,
-    env: Env,
+    _env: Env,
     lottery_id: Option<u64>,
 ) -> StdResult<OldLotteryInfoResponse> {
     let (lottery_id, lottery) = if let Some(lottery_id) = lottery_id {
@@ -1516,7 +1515,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         total_voting_power_weight: Decimal256::percent(150),
     };
 
-    let lotto_winner_boost_config =
+    let _lotto_winner_boost_config =
         if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
             if msg_lotto_winner_boost_config.base_multiplier
                 > msg_lotto_winner_boost_config.max_multiplier
@@ -1529,7 +1528,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             default_lotto_winner_boost_config
         };
 
-    let lottery_interval_seconds = if let Duration::Time(time) = old_config.lottery_interval {
+    let _lottery_interval_seconds = if let Duration::Time(time) = old_config.lottery_interval {
         time
     } else {
         return Err(ContractError::Std(StdError::generic_err(
@@ -1570,7 +1569,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
     old_compute_reward(&mut old_state, &old_pool, env.block.height);
 
-    let next_lottery_time =
+    let _next_lottery_time =
         if let Expiration::AtTime(next_lottery_time) = old_state.next_lottery_time {
             next_lottery_time
         } else {

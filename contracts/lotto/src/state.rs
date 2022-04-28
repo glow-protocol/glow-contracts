@@ -10,7 +10,7 @@ use cosmwasm_storage::{bucket, bucket_read, ReadonlyBucket};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Bound, Item, Map, SnapshotMap, U64Key};
 use glow_protocol::lotto::{
-    BoostConfig, Claim, DepositorData, DepositorInfo, DepositorInfoResponse, DepositorStatsInfo,
+    Claim, DepositorData, DepositorInfo, DepositorInfoResponse, DepositorStatsInfo,
     DepositorStatsResponse, RewardEmissionsIndex,
 };
 

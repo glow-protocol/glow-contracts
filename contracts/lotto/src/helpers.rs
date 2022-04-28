@@ -2,21 +2,19 @@ use std::convert::TryInto;
 use std::ops::Add;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, QuerierWrapper, StdError, StdResult, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{
-    BoostConfig, DepositorInfo, DepositorStatsInfo, ExecuteLotteryRedeemedAustInfo,
+    DepositorInfo, ExecuteLotteryRedeemedAustInfo,
     RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
 };
 use sha3::{Digest, Keccak256};
 
 use crate::error::ContractError;
-use crate::querier::{
-    query_address_voting_balance_at_timestamp, query_total_voting_balance_at_timestamp,
-};
+
 
 use crate::state::{
-    read_operator_info, store_operator_info, Config, LotteryInfo, OldDepositorInfo, OldPool,
-    OldState, OperatorInfo, Pool, PrizeInfo, SponsorInfo, State, TICKETS,
+    read_operator_info, store_operator_info, Config, OldDepositorInfo, OldPool,
+    OldState, OperatorInfo, Pool, SponsorInfo, State, TICKETS,
 };
 
 /// Compute distributed reward and update global reward index for operators

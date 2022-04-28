@@ -8,8 +8,7 @@ use crate::mock_querier::{
 };
 use crate::state::{
     old_remove_depositor_info, read_depositor_info, read_depositor_stats_at_height,
-    read_sponsor_info, store_depositor_info, store_depositor_stats, OldDepositorInfo,
-    STATE,
+    read_sponsor_info, store_depositor_info, store_depositor_stats, OldDepositorInfo, STATE,
 };
 use crate::test_helpers::{
     generate_sequential_ticket_combinations, vec_string_tickets_to_encoded_tickets,
@@ -50,6 +49,7 @@ pub const GOV_ADDR: &str = "gov";
 pub const COMMUNITY_ADDR: &str = "community";
 pub const DISTRIBUTOR_ADDR: &str = "distributor";
 pub const VE_ADDR: &str = "ve_addr";
+pub const PRIZE_DISTRIBUTOR_ADDR: &str = "prize_distributor_addr";
 pub const ORACLE_ADDR: &str = "oracle";
 
 pub const RATE: u64 = 1023; // as a permille
@@ -196,6 +196,7 @@ fn mock_register_contracts(deps: DepsMut) {
         community_contract: COMMUNITY_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
         ve_contract: VE_ADDR.to_string(),
+        prize_distributor_contract: PRIZE_DISTRIBUTOR_ADDR.to_string(),
     };
     let _res = execute(deps, mock_env(), info, msg)
         .expect("contract successfully executes RegisterContracts");
@@ -278,6 +279,7 @@ fn proper_initialization() {
         community_contract: COMMUNITY_ADDR.to_string(),
         distributor_contract: DISTRIBUTOR_ADDR.to_string(),
         ve_contract: VE_ADDR.to_string(),
+        prize_distributor_contract: PRIZE_DISTRIBUTOR_ADDR.to_string(),
     };
 
     let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();

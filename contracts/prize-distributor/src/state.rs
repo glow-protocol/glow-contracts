@@ -14,12 +14,10 @@ use glow_protocol::prize_distributor::BoostConfig;
 
 use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
 
-pub const PREFIX_OPERATOR: &[u8] = b"operator";
-
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
-pub const PRIZES: Map<(U64Key, &Addr), PrizeInfo> = Map::new("prizes_v2");
-pub const LOTTERIES: Map<U64Key, LotteryInfo> = Map::new("lo_v2");
+pub const PRIZES: Map<(U64Key, &Addr), PrizeInfo> = Map::new("prizes");
+pub const LOTTERIES: Map<U64Key, LotteryInfo> = Map::new("lo");
 
 // settings for pagination
 const DEFAULT_LIMIT: u32 = 10;

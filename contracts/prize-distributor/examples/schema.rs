@@ -5,7 +5,7 @@ use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
 use glow_protocol::prize_distributor::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse, LotteryInfoResponse,
-    PoolResponse, PrizeInfoResponse, QueryMsg, StateResponse,
+    PrizeInfoResponse, QueryMsg, StateResponse,
 };
 
 fn main() {
@@ -20,7 +20,6 @@ fn main() {
     export_schema(&schema_for!(ConfigResponse), &out_dir);
     export_schema(&schema_for!(StateResponse), &out_dir);
     export_schema(&schema_for!(LotteryInfoResponse), &out_dir);
-    export_schema(&schema_for!(PoolResponse), &out_dir);
     export_schema(&schema_for!(PrizeInfoResponse), &out_dir);
     export_schema(&schema_for!(LotteryBalanceResponse), &out_dir);
 }

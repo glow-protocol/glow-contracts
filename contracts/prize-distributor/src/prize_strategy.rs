@@ -11,7 +11,7 @@ use cosmwasm_std::{
 use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::U64Key;
-use glow_protocol::lotto::ExecuteLotteryRedeemedAustInfo;
+use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
 use glow_protocol::prize_distributor::{PrizeInfo, NUM_PRIZE_BUCKETS};
 use terraswap::querier::query_token_balance;
 
@@ -91,7 +91,7 @@ pub fn execute_lottery(
 
     store_lottery_info(deps.storage, state.current_lottery, &lottery_info)?;
 
-    let ExecuteLotteryRedeemedAustInfo {
+    let AmountRedeemableForPrizesInfo {
         user_aust_to_redeem: _,
         aust_to_redeem,
         aust_to_redeem_value,

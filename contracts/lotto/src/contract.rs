@@ -11,34 +11,32 @@ use crate::helpers::{
 use crate::querier::{query_balance, query_exchange_rate};
 use crate::state::{
     old_read_depositors, old_read_lottery_info, old_read_prize_infos, old_remove_depositor_info,
-    parse_length, read_depositor_info, read_depositor_stats, read_depositors_info,
-    read_depositors_stats, read_operator_info, read_sponsor_info, store_depositor_info,
-    store_operator_info, store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State,
-    CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, OLD_PRIZES, POOL, STATE, TICKETS,
+    read_depositor_info, read_depositor_stats, read_depositors_info, read_depositors_stats,
+    read_operator_info, read_sponsor_info, store_depositor_info, store_operator_info,
+    store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL,
+    OLDSTATE, POOL, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Order, Response, StdError, StdResult, Uint128, WasmMsg,
+    Response, StdError, StdResult, Uint128, WasmMsg,
 };
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
 
-use cw_storage_plus::{Bound, PrimaryKey, U64Key};
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     AmountRedeemableForPrizesResponse, BoostConfig, Claim, ConfigResponse, DepositorInfoResponse,
-    DepositorStatsResponse, DepositorsInfoResponse, DepositorsStatsResponse,
-    ExecuteLotteryRedeemedAustInfo, ExecuteMsg, InstantiateMsg, MigrateMsg, OldLotteryInfoResponse,
-    OperatorInfoResponse, PoolResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse,
-    StateResponse, TicketInfoResponse,
+    DepositorStatsResponse, DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg,
+    InstantiateMsg, MigrateMsg, OldLotteryInfoResponse, OperatorInfoResponse, PoolResponse,
+    QueryMsg, RewardEmissionsIndex, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
 use glow_protocol::lotto::{DepositorInfo, OldPrizeInfosResponse};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use std::convert::TryInto;
+
 use std::ops::{Add, Sub};
-use std::str::from_utf8;
+
 use terraswap::querier::query_token_balance;
 
 pub const INITIAL_DEPOSIT_AMOUNT: u128 = 10_000_000;
@@ -99,6 +97,7 @@ pub fn instantiate(
             ve_contract: Addr::unchecked(""),
             community_contract: Addr::unchecked(""),
             distributor_contract: Addr::unchecked(""),
+            prize_distributor_contract: Addr::unchecked(""),
             oracle_contract: deps.api.addr_validate(msg.oracle_contract.as_str())?,
             stable_denom: msg.stable_denom.clone(),
             anchor_contract: deps.api.addr_validate(msg.anchor_contract.as_str())?,
@@ -221,6 +220,7 @@ pub fn execute(
             community_contract,
             distributor_contract,
             ve_contract,
+            prize_distributor_contract,
         } => execute_register_contracts(
             deps,
             info,
@@ -228,6 +228,7 @@ pub fn execute(
             community_contract,
             distributor_contract,
             ve_contract,
+            prize_distributor_contract,
         ),
         ExecuteMsg::Deposit {
             encoded_tickets,
@@ -250,16 +251,64 @@ pub fn execute(
             execute_withdraw(deps, env, info, amount, instant)
         }
         ExecuteMsg::Claim {} => execute_claim_unbonded(deps, env, info),
-        ExecuteMsg::ClaimLottery { lottery_ids: _ } => {
-            unreachable!()
-        }
         ExecuteMsg::ClaimRewards {} => execute_claim_rewards(deps, env, info),
         ExecuteMsg::UpdateConfig { .. } => unreachable!(),
         ExecuteMsg::UpdateLotteryConfig { ticket_price } => {
             execute_update_lottery_config(deps, info, ticket_price)
         }
+        ExecuteMsg::SendPrizeFundsToPrizeDistributor {} => {
+            execute_send_prize_funds_to_prize_distributor(deps, env)
+        }
         ExecuteMsg::MigrateOldDepositors { .. } => unreachable!(),
     }
+}
+
+pub fn execute_send_prize_funds_to_prize_distributor(
+    deps: DepsMut,
+    env: Env,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let pool = POOL.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
+
+    // Get the contract's aust balance
+    let contract_a_balance = Uint256::from(query_token_balance(
+        &deps.querier,
+        config.a_terra_contract.clone(),
+        env.clone().contract.address,
+    )?);
+
+    // Get the aust exchange rate
+    let aust_exchange_rate = query_exchange_rate(
+        deps.as_ref(),
+        config.anchor_contract.to_string(),
+        env.block.height,
+    )?
+    .exchange_rate;
+
+    let amount_redeemable_for_prizes = calculate_value_of_aust_to_be_redeemed_for_lottery(
+        &state,
+        &pool,
+        &config,
+        contract_a_balance,
+        aust_exchange_rate,
+    );
+
+    // Update the latest aust_exchange_rate
+    state.last_lottery_execution_aust_exchange_rate = aust_exchange_rate;
+    STATE.save(deps.storage, &state)?;
+
+    // Send message to send funds to prize distributor
+    Ok(
+        Response::default().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.a_terra_contract.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: config.prize_distributor_contract.to_string(),
+                amount: amount_redeemable_for_prizes.aust_to_redeem.into(),
+            })?,
+        })),
+    )
 }
 
 pub fn execute_register_contracts(
@@ -269,6 +318,7 @@ pub fn execute_register_contracts(
     community_contract: String,
     distributor_contract: String,
     ve_contract: String,
+    prize_distributor_contract: String,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -286,6 +336,7 @@ pub fn execute_register_contracts(
     config.community_contract = deps.api.addr_validate(&community_contract)?;
     config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
     config.ve_contract = deps.api.addr_validate(&ve_contract)?;
+    config.prize_distributor_contract = deps.api.addr_validate(&prize_distributor_contract)?;
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
@@ -1128,18 +1179,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State { block_height } => to_binary(&query_state(deps, env, block_height)?),
         QueryMsg::Pool {} => to_binary(&query_pool(deps)?),
-        QueryMsg::LotteryInfo { lottery_id } => {
-            to_binary(&query_old_lottery_info(deps, env, lottery_id)?)
-        }
         QueryMsg::TicketInfo { sequence } => to_binary(&query_ticket_info(deps, sequence)?),
-        QueryMsg::OldPrizeInfos { start_after, limit } => {
-            to_binary(&query_old_prize_infos(deps, env, start_after, limit)?)
-        }
-        QueryMsg::LotteryPrizeInfos {
-            lottery_id: _,
-            start_after: _,
-            limit: _,
-        } => unreachable!(),
         QueryMsg::DepositorInfo { address } => {
             to_binary(&query_depositor_info(deps, env, address)?)
         }
@@ -1154,7 +1194,15 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::Sponsor { address } => to_binary(&query_sponsor(deps, env, address)?),
         QueryMsg::Operator { address } => to_binary(&query_operator(deps, env, address)?),
-        QueryMsg::LotteryBalance {} => to_binary(&query_amount_redeemable_for_prizes(deps, env)?),
+        QueryMsg::AmountRedeemableForPrizes {} => {
+            to_binary(&query_amount_redeemable_for_prizes(deps, env)?)
+        }
+        QueryMsg::OldLotteryInfo { lottery_id } => {
+            to_binary(&query_old_lottery_info(deps, env, lottery_id)?)
+        }
+        QueryMsg::OldPrizeInfos { start_after, limit } => {
+            to_binary(&query_old_prize_infos(deps, env, start_after, limit)?)
+        }
     }
 }
 
@@ -1164,98 +1212,6 @@ pub fn query_ticket_info(deps: Deps, ticket: String) -> StdResult<TicketInfoResp
         .unwrap_or_default();
     Ok(TicketInfoResponse { holders })
 }
-
-// pub fn query_prizes(deps: Deps, address: String, lottery_id: u64) -> StdResult<PrizeInfoResponse> {
-//     // Get config
-//     let config = CONFIG.load(deps.storage)?;
-
-//     // Get lottery info
-//     let lottery_info = read_lottery_info(deps.storage, lottery_id);
-
-//     // Get prize info
-//     let lottery_key = U64Key::from(lottery_id);
-//     let addr = deps.api.addr_validate(&address)?;
-//     let prize_info =
-//         if let Some(prize_info) = PRIZES.may_load(deps.storage, (lottery_key, &addr))? {
-//             prize_info
-//         } else {
-//             return Err(StdError::generic_err(
-//                 "No prize with the specified address and lottery id.",
-//             ));
-//         };
-
-//     // Get ust and glow to send
-//     let snapshotted_depositor_stats_info =
-//         read_depositor_stats_at_height(deps.storage, &addr, lottery_info.block_height);
-
-//     let (local_ust_to_send, local_glow_to_send): (Uint128, Uint128) = calculate_winner_prize(
-//         &deps.querier,
-//         &config,
-//         &prize_info,
-//         &lottery_info,
-//         &snapshotted_depositor_stats_info,
-//         &addr,
-//     )?;
-
-//     Ok(PrizeInfoResponse {
-//         holder: addr,
-//         lottery_id,
-//         claimed: prize_info.claimed,
-//         matches: prize_info.matches,
-//         won_ust: local_ust_to_send,
-//         won_glow: local_glow_to_send,
-//     })
-// }
-
-// pub fn query_lottery_prizes(
-//     deps: Deps,
-//     lottery_id: u64,
-//     start_after: Option<String>,
-//     limit: Option<u32>,
-// ) -> StdResult<PrizeInfosResponse> {
-//     let config = CONFIG.load(deps.storage)?;
-
-//     let addr = if let Some(s) = start_after {
-//         Some(deps.api.addr_validate(&s)?)
-//     } else {
-//         None
-//     };
-
-//     let lottery_info = read_lottery_info(deps.storage, lottery_id);
-
-//     let prize_infos = read_lottery_prizes(deps, lottery_id, addr, limit)?;
-
-//     let prize_info_responses = prize_infos
-//         .into_iter()
-//         .map(|(addr, prize_info)| {
-//             let snapshotted_depositor_stats_info =
-//                 read_depositor_stats_at_height(deps.storage, &addr, lottery_info.block_height);
-
-//             let (local_ust_to_send, local_glow_to_send): (Uint128, Uint128) =
-//                 calculate_winner_prize(
-//                     &deps.querier,
-//                     &config,
-//                     &prize_info,
-//                     &lottery_info,
-//                     &snapshotted_depositor_stats_info,
-//                     &addr,
-//                 )?;
-
-//             Ok(PrizeInfoResponse {
-//                 holder: addr,
-//                 lottery_id,
-//                 claimed: prize_info.claimed,
-//                 matches: prize_info.matches,
-//                 won_ust: local_ust_to_send,
-//                 won_glow: local_glow_to_send,
-//             })
-//         })
-//         .collect::<StdResult<Vec<_>>>()?;
-
-//     Ok(PrizeInfosResponse {
-//         prize_infos: prize_info_responses,
-//     })
-// }
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = CONFIG.load(deps.storage)?;
@@ -1479,14 +1435,7 @@ pub fn query_amount_redeemable_for_prizes(
         query_exchange_rate(deps, config.anchor_contract.to_string(), env.block.height)?
             .exchange_rate;
 
-    let ExecuteLotteryRedeemedAustInfo {
-        value_of_user_aust_to_be_redeemed_for_lottery,
-        user_aust_to_redeem,
-        value_of_sponsor_aust_to_be_redeemed_for_lottery,
-        sponsor_aust_to_redeem,
-        aust_to_redeem,
-        aust_to_redeem_value,
-    } = calculate_value_of_aust_to_be_redeemed_for_lottery(
+    let amount_redeemable_for_prizes = calculate_value_of_aust_to_be_redeemed_for_lottery(
         &state,
         &pool,
         &config,
@@ -1495,12 +1444,7 @@ pub fn query_amount_redeemable_for_prizes(
     );
 
     Ok(AmountRedeemableForPrizesResponse {
-        value_of_user_aust_to_be_redeemed_for_lottery,
-        user_aust_to_redeem,
-        value_of_sponsor_aust_to_be_redeemed_for_lottery,
-        sponsor_aust_to_redeem,
-        aust_to_redeem,
-        aust_to_redeem_value,
+        amount_redeemable_for_prizes,
     })
 }
 
@@ -1554,6 +1498,9 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         ve_contract: deps.api.addr_validate(msg.ve_contract.as_str())?,
         community_contract: deps.api.addr_validate(msg.community_contract.as_str())?,
         distributor_contract: old_config.distributor_contract,
+        prize_distributor_contract: deps
+            .api
+            .addr_validate(msg.prize_distributor_contract.as_str())?,
         oracle_contract: old_config.oracle_contract,
         stable_denom: old_config.stable_denom,
         anchor_contract: old_config.anchor_contract,

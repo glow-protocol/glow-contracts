@@ -4,7 +4,7 @@ use std::ops::Add;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{
-    DepositorInfo, ExecuteLotteryRedeemedAustInfo, RewardEmissionsIndex, TICKET_LENGTH,
+    AmountRedeemableForPrizesInfo, DepositorInfo, RewardEmissionsIndex, TICKET_LENGTH,
 };
 use sha3::{Digest, Keccak256};
 
@@ -350,7 +350,7 @@ pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
     config: &Config,
     contract_a_balance: Uint256,
     aust_exchange_rate: Decimal256,
-) -> ExecuteLotteryRedeemedAustInfo {
+) -> AmountRedeemableForPrizesInfo {
     // Get the aust_user_balance
     let total_user_aust = pool.total_user_aust;
 
@@ -378,7 +378,7 @@ pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(
     let aust_to_redeem = user_aust_to_redeem + sponsor_aust_to_redeem;
     let aust_to_redeem_value = aust_to_redeem * aust_exchange_rate;
 
-    ExecuteLotteryRedeemedAustInfo {
+    AmountRedeemableForPrizesInfo {
         value_of_user_aust_to_be_redeemed_for_lottery,
         user_aust_to_redeem,
         value_of_sponsor_aust_to_be_redeemed_for_lottery,

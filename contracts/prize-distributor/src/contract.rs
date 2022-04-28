@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use glow_protocol::lotto::ExecuteLotteryRedeemedAustInfo;
+use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
 
 use crate::error::ContractError;
 use crate::helpers::calculate_winner_prize;
@@ -72,27 +72,10 @@ pub fn instantiate(
     if msg.reserve_factor > Decimal256::one() {
         return Err(ContractError::InvalidReserveFactor {});
     }
-    if msg.split_factor > Decimal256::one() {
-        return Err(ContractError::InvalidSplitFactor {});
-    }
-    if msg.instant_withdrawal_fee > Decimal256::one() {
-        return Err(ContractError::InvalidWithdrawalFee {});
-    }
-
-    // Validate ticket price
-    if msg.ticket_price < Uint256::from(10u128) {
-        // Ticket price must be at least 10 uusd
-        return Err(ContractError::InvalidTicketPrice {});
-    }
 
     // Validate that epoch_interval is at least 30 minutes
     if msg.epoch_interval < THIRTY_MINUTE_TIME {
         return Err(ContractError::InvalidEpochInterval {});
-    }
-
-    // Validate that max_holders is within the bounds
-    if msg.max_holders < MAX_HOLDERS_FLOOR || MAX_HOLDERS_CAP < msg.max_holders {
-        return Err(ContractError::InvalidMaxHoldersOutsideBounds {});
     }
 
     // Get and validate the lotto winner boost config
@@ -219,30 +202,18 @@ pub fn execute(
             owner,
             oracle_addr,
             reserve_factor,
-            instant_withdrawal_fee,
-            unbonding_period,
             epoch_interval,
-            max_holders,
-            max_tickets_per_depositor,
             paused,
             lotto_winner_boost_config,
-            operator_glow_emission_rate,
-            sponsor_glow_emission_rate,
         } => execute_update_config(
             deps,
             info,
             owner,
             oracle_addr,
             reserve_factor,
-            instant_withdrawal_fee,
-            unbonding_period,
             epoch_interval,
-            max_holders,
-            max_tickets_per_depositor,
             paused,
             lotto_winner_boost_config,
-            operator_glow_emission_rate,
-            sponsor_glow_emission_rate,
         ),
         ExecuteMsg::UpdateLotteryConfig {
             lottery_interval,
@@ -286,6 +257,7 @@ pub fn execute_register_contracts(
     config.community_contract = deps.api.addr_validate(&community_contract)?;
     config.distributor_contract = deps.api.addr_validate(&distributor_contract)?;
     config.ve_contract = deps.api.addr_validate(&ve_contract)?;
+
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
@@ -426,15 +398,9 @@ pub fn execute_update_config(
     owner: Option<String>,
     oracle_addr: Option<String>,
     reserve_factor: Option<Decimal256>,
-    _instant_withdrawal_fee: Option<Decimal256>,
-    _unbonding_period: Option<u64>,
     epoch_interval: Option<u64>,
-    _max_holders: Option<u8>,
-    _max_tickets_per_depositor: Option<u64>,
     _paused: Option<bool>,
     lotto_winner_boost_config: Option<BoostConfig>,
-    _operator_glow_emission_rate: Option<Decimal256>,
-    _sponsor_glow_emission_rate: Option<Decimal256>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -724,7 +690,7 @@ pub fn query_lottery_balance(deps: Deps, env: Env) -> StdResult<LotteryBalanceRe
         query_exchange_rate(deps, config.anchor_contract.to_string(), env.block.height)?
             .exchange_rate;
 
-    let ExecuteLotteryRedeemedAustInfo {
+    let AmountRedeemableForPrizesInfo {
         value_of_user_aust_to_be_redeemed_for_lottery,
         user_aust_to_redeem,
         value_of_sponsor_aust_to_be_redeemed_for_lottery,

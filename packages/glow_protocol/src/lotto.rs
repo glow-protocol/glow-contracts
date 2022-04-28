@@ -5,7 +5,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Uint128};
 use cw0::{Duration, Expiration};
 
-use crate::prize_distributor::PrizeInfo;
+use crate::prize_distributor::{self, PrizeInfo};
 
 pub const TICKET_LENGTH: usize = 6;
 pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
@@ -55,6 +55,8 @@ pub enum ExecuteMsg {
         distributor_contract: String,
         /// veGLOW contract for calculating boost multipliers
         ve_contract: String,
+        /// Prize distributor contract for paying out prizes
+        prize_distributor_contract: String,
     },
     /// Update contract configuration - restricted to owner
     UpdateConfig {
@@ -98,10 +100,10 @@ pub enum ExecuteMsg {
     },
     /// Claim unbonded withdrawals
     Claim {},
-    /// Claims pending lottery prizes for a given list of lottery ids
-    ClaimLottery { lottery_ids: Vec<u64> },
     /// Claims pending depositor rewards
     ClaimRewards {},
+    /// Send Prize Funds
+    SendPrizeFundsToPrizeDistributor {},
     /// Handles the migrate loop
     MigrateOldDepositors { limit: Option<u32> },
 }
@@ -114,6 +116,7 @@ pub struct MigrateMsg {
     pub community_contract: String,     // Glow community contract address
     pub lotto_winner_boost_config: Option<BoostConfig>, // The boost config to apply to glow emissions for lotto winners
     pub ve_contract: String,                            // Glow ve token contract address
+    pub prize_distributor_contract: String,             // Prize distributor contract
     pub operator_glow_emission_rate: Decimal256,        // The emission rate to set for operators
     pub sponsor_glow_emission_rate: Decimal256,         // The emission rate to set for sponsors
 }
@@ -128,18 +131,12 @@ pub enum QueryMsg {
     /// Lotto pool current state. Savings aust and lottery deposits.
     Pool {},
     /// Lottery information by lottery id
-    LotteryInfo { lottery_id: Option<u64> },
+    OldLotteryInfo { lottery_id: Option<u64> },
     /// Ticket information by sequence. Returns a list of holders (addresses)
     TicketInfo { sequence: String },
     /// Prizes for a given address on a given lottery id
     OldPrizeInfos {
         start_after: Option<(String, u64)>,
-        limit: Option<u32>,
-    },
-    /// Prizes for a given lottery id
-    LotteryPrizeInfos {
-        lottery_id: u64,
-        start_after: Option<String>,
         limit: Option<u32>,
     },
     /// Depositor information by address
@@ -160,10 +157,11 @@ pub enum QueryMsg {
     Sponsor { address: String },
     /// Sponsor information by address
     Operator { address: String },
-    /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
-    /// now.
-    LotteryBalance {},
+    /// Get the amount to be redeemed for the next lottery
+    AmountRedeemableForPrizes {},
 }
+
+/// Responses
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -204,16 +202,6 @@ pub struct PoolResponse {
 }
 
 // We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct OldLotteryInfoResponse {
-    pub lottery_id: u64,
-    pub rand_round: u64,
-    pub sequence: String,
-    pub awarded: bool,
-    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
-    pub page: String,
-}
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -263,19 +251,8 @@ pub struct DepositorsStatsResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Claim {
-    pub amount: Uint256,
-    pub release_at: Expiration,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TicketInfoResponse {
     pub holders: Vec<Addr>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct OldPrizeInfosResponse {
-    pub prizes: Vec<(Addr, u64, PrizeInfo)>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -295,12 +272,31 @@ pub struct PrizeInfosResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AmountRedeemableForPrizesResponse {
-    pub value_of_user_aust_to_be_redeemed_for_lottery: Uint256,
-    pub user_aust_to_redeem: Uint256,
-    pub value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256,
-    pub sponsor_aust_to_redeem: Uint256,
-    pub aust_to_redeem: Uint256,
-    pub aust_to_redeem_value: Uint256,
+    pub amount_redeemable_for_prizes: AmountRedeemableForPrizesInfo,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldLotteryInfoResponse {
+    pub lottery_id: u64,
+    pub rand_round: u64,
+    pub sequence: String,
+    pub awarded: bool,
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
+    pub page: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldPrizeInfosResponse {
+    pub prizes: Vec<(Addr, u64, PrizeInfo)>,
+}
+
+/// Shared Types
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Claim {
+    pub amount: Uint256,
+    pub release_at: Expiration,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -343,7 +339,8 @@ impl DepositorInfo {
     }
 }
 
-pub struct ExecuteLotteryRedeemedAustInfo {
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct AmountRedeemableForPrizesInfo {
     pub value_of_user_aust_to_be_redeemed_for_lottery: Uint256,
     pub user_aust_to_redeem: Uint256,
     pub value_of_sponsor_aust_to_be_redeemed_for_lottery: Uint256,

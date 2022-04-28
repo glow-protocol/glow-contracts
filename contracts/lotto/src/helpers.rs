@@ -2,7 +2,7 @@ use std::convert::TryInto;
 use std::ops::Add;
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, StdError, StdResult, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, Deps, DepsMut, Env, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{
     AmountRedeemableForPrizesInfo, DepositorInfo, RewardEmissionsIndex, TICKET_LENGTH,
 };
@@ -10,6 +10,7 @@ use sha3::{Digest, Keccak256};
 
 use crate::error::ContractError;
 
+use crate::querier::query_prize_distribution_pending;
 use crate::state::{
     read_operator_info, store_operator_info, Config, OldDepositorInfo, OldPool, OldState,
     OperatorInfo, Pool, SponsorInfo, State, TICKETS,
@@ -459,4 +460,17 @@ pub fn decimal_from_ratio_or_one(a: Uint256, b: Uint256) -> Decimal256 {
     }
 
     Decimal256::from_ratio(a, b)
+}
+
+pub fn assert_prize_distribution_not_pending(
+    deps: Deps,
+    prize_distributor_address: Addr,
+) -> StdResult<()> {
+    if query_prize_distribution_pending(deps, prize_distributor_address)?.prize_distribution_pending
+        == true
+    {
+        return Err(StdError::generic_err("Prize distribution pending"));
+    }
+
+    Ok(())
 }

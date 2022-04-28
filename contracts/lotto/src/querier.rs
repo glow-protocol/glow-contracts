@@ -3,7 +3,11 @@ use cosmwasm_std::{
     to_binary, Addr, BalanceResponse as BankBalanceResponse, BankQuery, Deps, QuerierWrapper,
     QueryRequest, StdResult, WasmQuery,
 };
-use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
+use glow_protocol::prize_distributor::QueryMsg as PrizeDistributorQueryMsg;
+use glow_protocol::{
+    distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg},
+    prize_distributor::PrizeDistributionPendingResponse,
+};
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 
 pub fn query_exchange_rate(
@@ -33,25 +37,15 @@ pub fn query_balance(deps: Deps, account_addr: String, denom: String) -> StdResu
     Ok(balance.amount.amount.into())
 }
 
-#[allow(dead_code)]
-pub fn query_glow_emission_rate(
-    querier: &QuerierWrapper,
-    distributor: Addr,
-    lottery_balance: Uint256,
-    target_award: Uint256,
-    current_emission_rate: Decimal256,
-) -> StdResult<GlowEmissionRateResponse> {
-    // get the amount of money in the lottery pool
-
-    let glow_emission_rate: GlowEmissionRateResponse =
-        querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: distributor.to_string(),
-            msg: to_binary(&DistributorQueryMsg::GlowEmissionRate {
-                current_award: lottery_balance,
-                target_award,
-                current_emission_rate,
-            })?,
+pub fn query_prize_distribution_pending(
+    deps: Deps,
+    prize_distributor_address: Addr,
+) -> StdResult<PrizeDistributionPendingResponse> {
+    let prize_distribution_pending_response: PrizeDistributionPendingResponse =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: prize_distributor_address.to_string(),
+            msg: to_binary(&PrizeDistributorQueryMsg::PrizeDistributionPending {})?,
         }))?;
 
-    Ok(glow_emission_rate)
+    Ok(prize_distribution_pending_response)
 }

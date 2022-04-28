@@ -98,6 +98,8 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    /// Prize Distribution Pending
+    PrizeDistributionPending {},
     /// Get the lottery balance. This is the amount that would be distributed in prizes if the lottery were run right
     /// now.
     LotteryBalance {},
@@ -180,4 +182,9 @@ pub struct LotteryBalanceResponse {
 pub struct PrizeInfo {
     pub claimed: bool,
     pub matches: [u32; NUM_PRIZE_BUCKETS],
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct PrizeDistributionPendingResponse {
+    pub prize_distribution_pending: bool,
 }

@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
@@ -20,7 +22,9 @@ use cw0::{Duration, Expiration};
 
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::prize_distributor::{PrizeInfo, NUM_PRIZE_BUCKETS};
+use glow_protocol::prize_distributor::{
+    PrizeDistributionPendingResponse, PrizeInfo, NUM_PRIZE_BUCKETS,
+};
 
 use glow_protocol::prize_distributor::{
     BoostConfig, ConfigResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,
@@ -397,7 +401,6 @@ pub fn execute_claim_lottery(
 
 pub fn execute_epoch_ops(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let pool = POOL.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
     // Validate distributor contract has already been registered
@@ -573,6 +576,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             start_after,
             limit,
         } => to_binary(&query_lottery_prizes(deps, lottery_id, start_after, limit)?),
+        QueryMsg::PrizeDistributionPending {} => {
+            to_binary(&query_prize_distribution_pending(deps, env)?)
+        }
         QueryMsg::LotteryBalance {} => to_binary(&query_lottery_balance(deps, env)?),
     }
 }
@@ -728,6 +734,21 @@ pub fn query_lottery_info(
         number_winners: lottery.number_winners,
         page: lottery.page,
         total_user_shares: lottery.total_user_shares,
+    })
+}
+
+pub fn query_prize_distribution_pending(
+    deps: Deps,
+    _env: Env,
+) -> StdResult<PrizeDistributionPendingResponse> {
+    let state = STATE.load(deps.storage)?;
+
+    // Validate that the lottery is not in the process of running
+    // This helps avoid delaying the computing of the reward following lottery execution.
+    let current_lottery = read_lottery_info(deps.storage, state.current_lottery);
+
+    Ok(PrizeDistributionPendingResponse {
+        prize_distribution_pending: current_lottery.rand_round != 0,
     })
 }
 

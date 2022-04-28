@@ -4,17 +4,15 @@ use std::ops::Add;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, DepsMut, Env, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{
-    DepositorInfo, ExecuteLotteryRedeemedAustInfo,
-    RewardEmissionsIndex, NUM_PRIZE_BUCKETS, TICKET_LENGTH,
+    DepositorInfo, ExecuteLotteryRedeemedAustInfo, RewardEmissionsIndex, TICKET_LENGTH,
 };
 use sha3::{Digest, Keccak256};
 
 use crate::error::ContractError;
 
-
 use crate::state::{
-    read_operator_info, store_operator_info, Config, OldDepositorInfo, OldPool,
-    OldState, OperatorInfo, Pool, SponsorInfo, State, TICKETS,
+    read_operator_info, store_operator_info, Config, OldDepositorInfo, OldPool, OldState,
+    OperatorInfo, Pool, SponsorInfo, State, TICKETS,
 };
 
 /// Compute distributed reward and update global reward index for operators
@@ -315,15 +313,6 @@ pub fn claim_unbonded_withdrawals(
     Ok(to_send)
 }
 
-// Get max bounds
-pub fn calculate_max_bound(min_bound: &str, minimum_matches_for_winning_ticket: usize) -> String {
-    format!(
-        "{:f<length$}",
-        min_bound[..minimum_matches_for_winning_ticket].to_string(),
-        length = TICKET_LENGTH
-    )
-}
-
 pub fn pseudo_random_seq(sender_addr: String, tickets: u64, time: u64) -> String {
     let mut input = sender_addr;
     input.push_str(&time.to_string());
@@ -342,18 +331,6 @@ pub fn is_valid_sequence(sequence: &str, len: usize) -> bool {
             .all(|c| c.is_digit(10) || ('a'..='f').contains(&c))
 }
 
-pub fn count_seq_matches(a: &str, b: &str) -> u8 {
-    let mut count = 0;
-    for (i, c) in a.chars().enumerate() {
-        if c == b.chars().nth(i).unwrap() {
-            count += 1;
-        } else {
-            break;
-        }
-    }
-    count
-}
-
 #[allow(dead_code)]
 pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
     // Check for rounding error
@@ -365,22 +342,6 @@ pub fn uint256_times_decimal256_ceil(a: Uint256, b: Decimal256) -> Uint256 {
     } else {
         rounded_output
     }
-}
-
-pub fn get_minimum_matches_for_winning_ticket(
-    prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS],
-) -> StdResult<usize> {
-    for (index, fraction_of_prize) in prize_distribution.iter().enumerate() {
-        if *fraction_of_prize != Decimal256::zero() {
-            return Ok(index);
-        }
-    }
-
-    // Should never happen because one of the prize distribution values should be greater than 0,
-    // throw an error
-    Err(StdError::generic_err(
-        "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
-    ))
 }
 
 pub fn calculate_value_of_aust_to_be_redeemed_for_lottery(

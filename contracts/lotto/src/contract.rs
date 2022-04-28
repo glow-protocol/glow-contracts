@@ -14,7 +14,7 @@ use crate::state::{
     read_depositor_info, read_depositor_stats, read_depositors_info, read_depositors_stats,
     read_operator_info, read_sponsor_info, store_depositor_info, store_operator_info,
     store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL,
-    OLDSTATE, OLD_PRIZES, POOL, PRIZES, STATE, TICKETS,
+    OLDSTATE, OLD_PRIZES, POOL, STATE, TICKETS,
 };
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
@@ -1637,12 +1637,12 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         })
         .collect::<StdResult<Vec<_>>>()?;
 
-    for old_prize in old_prizes {
-        let (lottery_id, addr, prize_info) = old_prize;
-        OLD_PRIZES.remove(deps.storage, (&addr, lottery_id.clone()));
+    // for old_prize in old_prizes {
+    //     let (lottery_id, addr, prize_info) = old_prize;
+    //     OLD_PRIZES.remove(deps.storage, (&addr, lottery_id.clone()));
 
-        PRIZES.save(deps.storage, (lottery_id, &addr), &prize_info)?;
-    }
+    //     PRIZES.save(deps.storage, (lottery_id, &addr), &prize_info)?;
+    // }
 
     Ok(Response::default())
 }

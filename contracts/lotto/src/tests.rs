@@ -2,29 +2,23 @@ use crate::contract::{
     execute, instantiate, query, query_config, query_pool, query_state, query_ticket_info,
     INITIAL_DEPOSIT_AMOUNT,
 };
-use crate::helpers::{
-    base64_encoded_tickets_to_vec_string_tickets, calculate_max_bound, get_minimum_matches_for_winning_ticket,
-    uint256_times_decimal256_ceil,
-};
+use crate::helpers::{base64_encoded_tickets_to_vec_string_tickets, uint256_times_decimal256_ceil};
 use crate::mock_querier::{
     mock_dependencies, mock_env, mock_info, WasmMockQuerier, MOCK_CONTRACT_ADDR,
 };
 use crate::state::{
-    old_remove_depositor_info, read_depositor_info,
-    read_depositor_stats_at_height, read_lottery_prizes,
-    read_sponsor_info, store_depositor_info, store_depositor_stats,
-    OldDepositorInfo, PrizeInfo, PRIZES, STATE,
+    old_remove_depositor_info, read_depositor_info, read_depositor_stats_at_height,
+    read_sponsor_info, store_depositor_info, store_depositor_stats, OldDepositorInfo, PrizeInfo,
+    STATE,
 };
 use crate::test_helpers::{
-    generate_sequential_ticket_combinations,
-    vec_string_tickets_to_encoded_tickets,
+    generate_sequential_ticket_combinations, vec_string_tickets_to_encoded_tickets,
 };
 use cosmwasm_storage::bucket;
 use cw_storage_plus::U64Key;
 use glow_protocol::lotto::{
-    DepositorInfo, DepositorStatsInfo,
-    OperatorInfoResponse, RewardEmissionsIndex, NUM_PRIZE_BUCKETS,
-    TICKET_LENGTH,
+    DepositorInfo, DepositorStatsInfo, OperatorInfoResponse, RewardEmissionsIndex,
+    NUM_PRIZE_BUCKETS, TICKET_LENGTH,
 };
 use lazy_static::lazy_static;
 
@@ -45,7 +39,7 @@ use crate::error::ContractError;
 use cw0::{Duration, WEEK};
 use glow_protocol::querier::{deduct_tax, query_token_balance};
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
-use std::ops::{Sub};
+use std::ops::Sub;
 use std::str::FromStr;
 
 pub const TEST_CREATOR: &str = "creator";
@@ -5453,106 +5447,106 @@ pub fn ceil_helper_function() {
     assert_eq!(res, Uint256::from(1u128));
 }
 
-#[test]
-pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
-    let ticket = "abcdea";
+// #[test]
+// pub fn calculate_max_bound_and_minimum_matches_for_winning_ticket() {
+//     let ticket = "abcdea";
 
-    // Test with prize distribution with zeros for the two first buckets
+//     // Test with prize distribution with zeros for the two first buckets
 
-    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::percent(20),
-        Decimal256::percent(20),
-        Decimal256::percent(20),
-        Decimal256::percent(20),
-        Decimal256::percent(20),
-    ];
+//     let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::percent(20),
+//         Decimal256::percent(20),
+//         Decimal256::percent(20),
+//         Decimal256::percent(20),
+//         Decimal256::percent(20),
+//     ];
 
-    let minimum_matches_for_winning_ticket =
-        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
+//     let minimum_matches_for_winning_ticket =
+//         get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
-    assert_eq!(minimum_matches_for_winning_ticket, 2);
+//     assert_eq!(minimum_matches_for_winning_ticket, 2);
 
-    let min_bound = &ticket[..minimum_matches_for_winning_ticket];
+//     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
-    assert_eq!(min_bound, "ab");
+//     assert_eq!(min_bound, "ab");
 
-    let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
+//     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
-    assert_eq!(max_bound, "abffff");
+//     assert_eq!(max_bound, "abffff");
 
-    // Test with prize distribution with zeros for the first buckets
+//     // Test with prize distribution with zeros for the first buckets
 
-    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
-        Decimal256::zero(),
-        Decimal256::percent(1),
-        Decimal256::percent(19),
-        Decimal256::percent(20),
-        Decimal256::percent(20),
-        Decimal256::percent(20),
-        Decimal256::percent(20),
-    ];
+//     let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+//         Decimal256::zero(),
+//         Decimal256::percent(1),
+//         Decimal256::percent(19),
+//         Decimal256::percent(20),
+//         Decimal256::percent(20),
+//         Decimal256::percent(20),
+//         Decimal256::percent(20),
+//     ];
 
-    let minimum_matches_for_winning_ticket =
-        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
+//     let minimum_matches_for_winning_ticket =
+//         get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
-    assert_eq!(minimum_matches_for_winning_ticket, 1);
+//     assert_eq!(minimum_matches_for_winning_ticket, 1);
 
-    let min_bound = &ticket[..minimum_matches_for_winning_ticket];
+//     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
-    assert_eq!(min_bound, "a");
+//     assert_eq!(min_bound, "a");
 
-    let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
+//     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
-    assert_eq!(max_bound, "afffff");
+//     assert_eq!(max_bound, "afffff");
 
-    // Test with prize distribution with zeros until the last bucket
+//     // Test with prize distribution with zeros until the last bucket
 
-    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::percent(100),
-    ];
+//     let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::percent(100),
+//     ];
 
-    let minimum_matches_for_winning_ticket =
-        get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
+//     let minimum_matches_for_winning_ticket =
+//         get_minimum_matches_for_winning_ticket(prize_distribution).unwrap();
 
-    assert_eq!(minimum_matches_for_winning_ticket, 6);
+//     assert_eq!(minimum_matches_for_winning_ticket, 6);
 
-    let min_bound = &ticket[..minimum_matches_for_winning_ticket];
+//     let min_bound = &ticket[..minimum_matches_for_winning_ticket];
 
-    assert_eq!(min_bound, "abcdea");
+//     assert_eq!(min_bound, "abcdea");
 
-    let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
+//     let max_bound = calculate_max_bound(min_bound, minimum_matches_for_winning_ticket);
 
-    assert_eq!(max_bound, "abcdea");
+//     assert_eq!(max_bound, "abcdea");
 
-    // Expect an error when prize distribution is all zeros
+//     // Expect an error when prize distribution is all zeros
 
-    let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-        Decimal256::zero(),
-    ];
+//     let prize_distribution: [Decimal256; NUM_PRIZE_BUCKETS] = [
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//         Decimal256::zero(),
+//     ];
 
-    let minimum_matches_for_winning_ticket =
-        get_minimum_matches_for_winning_ticket(prize_distribution);
+//     let minimum_matches_for_winning_ticket =
+//         get_minimum_matches_for_winning_ticket(prize_distribution);
 
-    let err = Err(StdError::generic_err(
-        "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
-    ));
+//     let err = Err(StdError::generic_err(
+//         "The minimum matches for a winning ticket could not be calculated due to a malforming of the prize distribution"
+//     ));
 
-    assert_eq!(minimum_matches_for_winning_ticket, err);
-}
+//     assert_eq!(minimum_matches_for_winning_ticket, err);
+// }
 
 #[test]
 pub fn test_ticket_encoding_and_decoding() {
@@ -5596,71 +5590,71 @@ pub fn test_ticket_encoding_and_decoding() {
     }
 }
 
-#[test]
-pub fn test_query_prizes() {
-    // Add some prizes
+// #[test]
+// pub fn test_query_prizes() {
+//     // Add some prizes
 
-    let mut deps = mock_dependencies(&[]);
+//     let mut deps = mock_dependencies(&[]);
 
-    // get env
-    let mut _env = mock_env();
+//     // get env
+//     let mut _env = mock_env();
 
-    // mock instantiate the contracts
-    mock_instantiate(&mut deps);
-    mock_register_contracts(deps.as_mut());
+//     // mock instantiate the contracts
+//     mock_instantiate(&mut deps);
+//     mock_register_contracts(deps.as_mut());
 
-    // Query them
+//     // Query them
 
-    for i in 0..10 {
-        for j in 0..3 {
-            let prize = PrizeInfo {
-                claimed: false,
-                matches: [i, j, 2, 3, 1, 3, 3],
-            };
+//     for i in 0..10 {
+//         for j in 0..3 {
+//             let prize = PrizeInfo {
+//                 claimed: false,
+//                 matches: [i, j, 2, 3, 1, 3, 3],
+//             };
 
-            PRIZES
-                .save(
-                    deps.as_mut().storage,
-                    (
-                        U64Key::from(i as u64),
-                        &Addr::unchecked(format!("addr000{}", j)),
-                    ),
-                    &prize,
-                )
-                .unwrap();
-        }
-    }
+//             PRIZES
+//                 .save(
+//                     deps.as_mut().storage,
+//                     (
+//                         U64Key::from(i as u64),
+//                         &Addr::unchecked(format!("addr000{}", j)),
+//                     ),
+//                     &prize,
+//                 )
+//                 .unwrap();
+//         }
+//     }
 
-    let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, None, None).unwrap();
+//     let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, None, None).unwrap();
 
-    let expected_prizes = (0..3)
-        .map(|i| {
-            (
-                Addr::unchecked(format!("addr000{}", i)),
-                PrizeInfo {
-                    claimed: false,
-                    matches: [2, i, 2, 3, 1, 3, 3],
-                },
-            )
-        })
-        .collect::<Vec<_>>();
+//     let expected_prizes = (0..3)
+//         .map(|i| {
+//             (
+//                 Addr::unchecked(format!("addr000{}", i)),
+//                 PrizeInfo {
+//                     claimed: false,
+//                     matches: [2, i, 2, 3, 1, 3, 3],
+//                 },
+//             )
+//         })
+//         .collect::<Vec<_>>();
 
-    assert_eq!(lottery_prizes, expected_prizes);
+//     assert_eq!(lottery_prizes, expected_prizes);
 
-    println!("{:?}", lottery_prizes);
+//     println!("{:?}", lottery_prizes);
 
-    // Test start after
+//     // Test start after
 
-    let start_after = Some(Addr::unchecked("addr0002"));
-    let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, start_after, None).unwrap();
-    assert_eq!(lottery_prizes.len(), 0);
+//     let start_after = Some(Addr::unchecked("addr0002"));
+//     let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, start_after, None).unwrap();
+//     assert_eq!(lottery_prizes.len(), 0);
 
-    // Test limit
+//     // Test limit
 
-    let limit = Some(1);
-    let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, None, limit).unwrap();
-    assert_eq!(lottery_prizes.len(), 1);
-}
+//     let limit = Some(1);
+//     let lottery_prizes = read_lottery_prizes(deps.as_ref(), 2, None, limit).unwrap();
+//     assert_eq!(lottery_prizes.len(), 1);
+// }
 
 // #[test]
 // pub fn test_calculate_boost_multiplier() {

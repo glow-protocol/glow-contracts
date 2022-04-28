@@ -16,10 +16,8 @@ use glow_protocol::lotto::{
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
 
-pub const OLD_PREFIX_LOTTERY: &[u8] = b"lottery";
 pub const PREFIX_SPONSOR: &[u8] = b"sponsor";
 pub const PREFIX_OPERATOR: &[u8] = b"operator";
-pub const OLD_PREFIX_DEPOSIT: &[u8] = b"depositor";
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const OLDCONFIG: Item<OldConfig> = Item::new("config");
@@ -27,10 +25,14 @@ pub const STATE: Item<State> = Item::new("state");
 pub const OLDSTATE: Item<OldState> = Item::new("state");
 pub const POOL: Item<Pool> = Item::new("pool");
 pub const OLDPOOL: Item<OldPool> = Item::new("pool");
-pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
-pub const OLD_PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
-pub const PRIZES: Map<(U64Key, &Addr), PrizeInfo> = Map::new("prizes_v2");
 
+pub const TICKETS: Map<&[u8], Vec<Addr>> = Map::new("tickets");
+
+// Old stuff, migrated to prize distributor contract
+pub const OLD_PRIZES: Map<(&Addr, U64Key), PrizeInfo> = Map::new("prizes");
+pub const OLD_PREFIX_LOTTERY: &[u8] = b"lottery";
+
+pub const OLD_PREFIX_DEPOSIT: &[u8] = b"depositor";
 pub const DEPOSITOR_DATA: Map<&Addr, DepositorData> = Map::new("depositor_data");
 pub const DEPOSITOR_STATS: SnapshotMap<&Addr, DepositorStatsInfo> = SnapshotMap::new(
     "depositor_stats",
@@ -38,8 +40,6 @@ pub const DEPOSITOR_STATS: SnapshotMap<&Addr, DepositorStatsInfo> = SnapshotMap:
     "depositor_stats__changelog",
     cw_storage_plus::Strategy::EveryBlock,
 );
-
-pub const LOTTERIES: Map<U64Key, LotteryInfo> = Map::new("lo_v2");
 
 use crate::helpers::{
     vec_binary_tickets_to_vec_string_tickets, vec_string_tickets_to_vec_binary_tickets,
@@ -237,32 +237,6 @@ pub struct OldLotteryInfo {
 pub struct PrizeInfo {
     pub claimed: bool,
     pub matches: [u32; NUM_PRIZE_BUCKETS],
-}
-
-pub fn store_lottery_info(
-    storage: &mut dyn Storage,
-    lottery_id: u64,
-    lottery_info: &LotteryInfo,
-) -> StdResult<()> {
-    LOTTERIES.save(storage, U64Key::from(lottery_id), lottery_info)
-}
-
-pub fn read_lottery_info(storage: &dyn Storage, lottery_id: u64) -> LotteryInfo {
-    match LOTTERIES.load(storage, U64Key::from(lottery_id)) {
-        Ok(v) => v,
-        _ => LotteryInfo {
-            rand_round: 0,
-            sequence: "".to_string(),
-            awarded: false,
-            timestamp: Timestamp::from_seconds(0),
-            prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-            number_winners: [0; NUM_PRIZE_BUCKETS],
-            page: "".to_string(),
-            glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-            block_height: 0,
-            total_user_shares: Uint256::zero(),
-        },
-    }
 }
 
 pub fn old_read_lottery_info(
@@ -549,36 +523,6 @@ fn old_calc_range_start(start_after: Option<Addr>) -> Option<Vec<u8>> {
         v.push(1);
         v
     })
-}
-
-pub fn read_prize(deps: Deps, address: &Addr, lottery_id: u64) -> StdResult<PrizeInfo> {
-    let lottery_key = U64Key::from(lottery_id);
-    PRIZES.load(deps.storage, (lottery_key, address))
-}
-
-pub fn read_lottery_prizes(
-    deps: Deps,
-    lottery_id: u64,
-    start_after: Option<Addr>,
-    limit: Option<u32>,
-) -> StdResult<Vec<(Addr, PrizeInfo)>> {
-    let lottery_key = U64Key::from(lottery_id);
-
-    let start = start_after.map(|a| Bound::Exclusive(a.as_bytes().to_vec()));
-    let limit = limit.unwrap_or(DEFAULT_LIMIT) as usize;
-
-    PRIZES
-        .prefix(lottery_key)
-        .range(deps.storage, start, None, Order::Ascending)
-        .take(limit)
-        .map(|item| {
-            let (k, v) = item?;
-
-            let addr = Addr::unchecked(from_utf8(&k)?);
-
-            Ok((addr, v))
-        })
-        .collect::<StdResult<Vec<_>>>()
 }
 
 // helper to deserialize the length

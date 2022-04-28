@@ -12,7 +12,6 @@ mod helpers;
 mod integration_test;
 #[cfg(test)]
 mod mock_querier;
-mod oracle;
 mod querier;
 #[cfg(test)]
 mod tests;

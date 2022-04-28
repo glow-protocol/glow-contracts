@@ -1,12 +1,9 @@
-use crate::oracle::{OracleResponse, QueryMsg as QueryOracle};
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::Uint128;
 use cosmwasm_std::{
     to_binary, Addr, BalanceResponse as BankBalanceResponse, BankQuery, Deps, QuerierWrapper,
     QueryRequest, StdResult, WasmQuery,
 };
 use glow_protocol::distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg};
-use glow_protocol::ve_token::{QueryMsg as VEQueryMessage, StakerResponse, StateResponse};
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
 
 pub fn query_exchange_rate(
@@ -57,47 +54,4 @@ pub fn query_glow_emission_rate(
         }))?;
 
     Ok(glow_emission_rate)
-}
-
-pub fn query_address_voting_balance_at_timestamp(
-    querier: &QuerierWrapper,
-    ve_addr: &Addr,
-    timestamp: u64,
-    address: &Addr,
-) -> StdResult<Uint128> {
-    let balance: StdResult<StakerResponse> = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: ve_addr.to_string(),
-        msg: to_binary(&VEQueryMessage::Staker {
-            address: address.to_string(),
-            timestamp: Some(timestamp),
-        })?,
-    }));
-
-    Ok(balance.map_or(Uint128::zero(), |s| s.balance))
-}
-
-pub fn query_total_voting_balance_at_timestamp(
-    querier: &QuerierWrapper,
-    ve_addr: &Addr,
-    timestamp: u64,
-) -> StdResult<Uint128> {
-    let total_supply: StdResult<StateResponse> =
-        querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: ve_addr.to_string(),
-            msg: to_binary(&VEQueryMessage::State {
-                timestamp: Some(timestamp),
-            })?,
-        }));
-
-    Ok(total_supply.map_or(Uint128::zero(), |t| t.total_balance))
-}
-
-pub fn query_oracle(deps: Deps, oracle_addr: String, round: u64) -> StdResult<OracleResponse> {
-    let oracle_response: OracleResponse =
-        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: oracle_addr,
-            msg: to_binary(&QueryOracle::GetRandomness { round })?,
-        }))?;
-
-    Ok(oracle_response)
 }

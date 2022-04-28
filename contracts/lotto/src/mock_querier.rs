@@ -18,8 +18,6 @@ use std::collections::HashMap;
 
 use crate::tests::RATE;
 
-use crate::oracle::OracleResponse;
-
 pub const MOCK_CONTRACT_ADDR: &str = "cosmos2contract";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -248,16 +246,15 @@ impl WasmMockQuerier {
                         },
                     ))),
 
-                    QueryMsg::GetRandomness { round: _ } => {
-                        SystemResult::Ok(ContractResult::from(to_binary(&OracleResponse {
-                            randomness: Binary::from_base64(
-                                "e74c6cfd99371c817e8c3e0099df9074032eec15189c49e5b4740b084ba5ce2b",
-                            )
-                            .unwrap(),
-                            worker: Addr::unchecked(MOCK_CONTRACT_ADDR),
-                        })))
-                    }
-
+                    // QueryMsg::GetRandomness { round: _ } => {
+                    //     SystemResult::Ok(ContractResult::from(to_binary(&OracleResponse {
+                    //         randomness: Binary::from_base64(
+                    //             "e74c6cfd99371c817e8c3e0099df9074032eec15189c49e5b4740b084ba5ce2b",
+                    //         )
+                    //         .unwrap(),
+                    //         worker: Addr::unchecked(MOCK_CONTRACT_ADDR),
+                    //     })))
+                    // }
                     QueryMsg::Staker { address, .. } => {
                         let balances: &HashMap<String, Uint128> =
                             match self.token_querier.balances.get(contract_addr) {

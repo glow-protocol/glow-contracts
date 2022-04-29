@@ -130,15 +130,8 @@ pub enum QueryMsg {
     State { block_height: Option<u64> },
     /// Lotto pool current state. Savings aust and lottery deposits.
     Pool {},
-    /// Lottery information by lottery id
-    OldLotteryInfo { lottery_id: Option<u64> },
     /// Ticket information by sequence. Returns a list of holders (addresses)
     TicketInfo { sequence: String },
-    /// Prizes for a given address on a given lottery id
-    OldPrizeInfos {
-        start_after: Option<(String, u64)>,
-        limit: Option<u32>,
-    },
     /// Depositor information by address
     DepositorInfo { address: String },
     /// Depositor stats by address
@@ -273,22 +266,6 @@ pub struct PrizeInfosResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AmountRedeemableForPrizesResponse {
     pub amount_redeemable_for_prizes: AmountRedeemableForPrizesInfo,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct OldLotteryInfoResponse {
-    pub lottery_id: u64,
-    pub rand_round: u64,
-    pub sequence: String,
-    pub awarded: bool,
-    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
-    pub page: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct OldPrizeInfosResponse {
-    pub prizes: Vec<(Addr, u64, PrizeInfo)>,
 }
 
 /// Shared Types

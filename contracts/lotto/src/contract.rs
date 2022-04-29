@@ -28,14 +28,13 @@ use cw20::Cw20ExecuteMsg;
 use glow_protocol::prize_distributor::ExecuteMsg as PrizeDistributorExecuteMsg;
 
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
+use glow_protocol::lotto::DepositorInfo;
 use glow_protocol::lotto::{
     AmountRedeemableForPrizesResponse, BoostConfig, Claim, ConfigResponse, DepositorInfoResponse,
     DepositorStatsResponse, DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg,
-    InstantiateMsg, MigrateMsg, OldLotteryInfo, OldLotteryInfoResponse, OperatorInfoResponse,
-    PoolResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse, StateResponse,
-    TicketInfoResponse,
+    InstantiateMsg, MigrateMsg, OldLotteryInfo, OperatorInfoResponse, PoolResponse, QueryMsg,
+    RewardEmissionsIndex, SponsorInfoResponse, StateResponse, TicketInfoResponse,
 };
-use glow_protocol::lotto::{DepositorInfo, OldPrizeInfosResponse};
 use glow_protocol::querier::deduct_tax;
 use moneymarket::market::{Cw20HookMsg, ExecuteMsg as AnchorMsg};
 
@@ -1226,12 +1225,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::AmountRedeemableForPrizes {} => {
             to_binary(&query_amount_redeemable_for_prizes(deps, env)?)
         }
-        QueryMsg::OldLotteryInfo { lottery_id } => {
-            to_binary(&query_old_lottery_info(deps, env, lottery_id)?)
-        }
-        QueryMsg::OldPrizeInfos { start_after, limit } => {
-            to_binary(&query_old_prize_infos(deps, env, start_after, limit)?)
-        }
     }
 }
 
@@ -1304,45 +1297,6 @@ pub fn query_pool(deps: Deps) -> StdResult<PoolResponse> {
         total_sponsor_lottery_deposits: pool.total_sponsor_lottery_deposits,
         total_operator_shares: pool.total_operator_shares,
     })
-}
-
-pub fn query_old_lottery_info(
-    deps: Deps,
-    _env: Env,
-    lottery_id: Option<u64>,
-) -> StdResult<OldLotteryInfoResponse> {
-    let (lottery_id, lottery) = if let Some(lottery_id) = lottery_id {
-        (
-            lottery_id,
-            old_read_lottery_info(deps.storage, lottery_id)?.unwrap(),
-        )
-    } else {
-        let lottery_id = OLDSTATE.load(deps.storage)?.current_lottery;
-        (
-            lottery_id,
-            old_read_lottery_info(deps.storage, lottery_id)?.unwrap(),
-        )
-    };
-    Ok(OldLotteryInfoResponse {
-        lottery_id,
-        rand_round: lottery.rand_round,
-        sequence: lottery.sequence,
-        awarded: lottery.awarded,
-        prize_buckets: lottery.prize_buckets,
-        number_winners: lottery.number_winners,
-        page: lottery.page,
-    })
-}
-
-pub fn query_old_prize_infos(
-    deps: Deps,
-    _env: Env,
-    start_after: Option<(String, u64)>,
-    limit: Option<u32>,
-) -> StdResult<OldPrizeInfosResponse> {
-    let old_prizes = old_read_prize_infos(deps, start_after, limit)?;
-
-    Ok(OldPrizeInfosResponse { prizes: old_prizes })
 }
 
 pub fn query_depositor_info(

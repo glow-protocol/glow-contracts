@@ -207,7 +207,7 @@ pub fn execute(
             prizes,
             lotteries,
             prize_buckets,
-        } => execute_inject_starting_state(deps, env, prizes, lotteries, prize_buckets),
+        } => execute_inject_starting_state(deps, env, info, prizes, lotteries, prize_buckets),
         ExecuteMsg::ClaimLottery { lottery_ids } => {
             execute_claim_lottery(deps, env, info, lottery_ids)
         }
@@ -252,10 +252,18 @@ pub fn execute(
 fn execute_inject_starting_state(
     deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     prizes: Vec<(Addr, u64, PrizeInfo)>,
     lotteries: Vec<OldLotteryInfo>,
     prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
 ) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+
+    // Check permission
+    if info.sender != config.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
     let mut state = STATE.load(deps.storage)?;
 
     // Save prize buckets
@@ -306,7 +314,7 @@ pub fn execute_register_contracts(
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
-    // check permission
+    // Check permission
     if info.sender != config.owner {
         return Err(ContractError::Unauthorized {});
     }

@@ -2,7 +2,7 @@ use crate::contract::SEND_PRIZE_FUNDS_TO_PRIZE_DISTRIBUTOR_REPLY;
 use crate::error::ContractError;
 use crate::querier::{query_exchange_rate, query_oracle, query_tickets};
 
-use crate::state::{read_lottery_info, store_lottery_info, LotteryInfo, CONFIG, PRIZES, STATE};
+use crate::state::{read_lottery_info, store_lottery_info, CONFIG, PRIZES, STATE};
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, CosmosMsg, DepsMut, Empty, Env, MessageInfo, ReplyOn, Response,
@@ -12,10 +12,10 @@ use cw0::Expiration;
 use cw20::Cw20ExecuteMsg::Send as Cw20Send;
 use cw_storage_plus::U64Key;
 
-use glow_protocol::prize_distributor::{PrizeInfo, NUM_PRIZE_BUCKETS};
+use glow_protocol::prize_distributor::{LotteryInfo, PrizeInfo};
 use terraswap::querier::query_token_balance;
 
-use glow_protocol::lotto::ExecuteMsg as SavingsExecuteMsg;
+use glow_protocol::lotto::{ExecuteMsg as SavingsExecuteMsg, NUM_PRIZE_BUCKETS};
 
 use crate::helpers::{
     calculate_max_bound, count_seq_matches, get_minimum_matches_for_winning_ticket,

@@ -1,5 +1,5 @@
 use cosmwasm_std::{Addr, Binary, Env};
-use glow_protocol::prize_distributor::TICKET_LENGTH;
+use glow_protocol::lotto::TICKET_LENGTH;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

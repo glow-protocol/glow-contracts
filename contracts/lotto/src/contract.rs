@@ -6,17 +6,18 @@ use crate::helpers::{
     assert_prize_distribution_not_pending, calculate_value_of_aust_to_be_redeemed_for_lottery,
     claim_unbonded_withdrawals, compute_global_operator_reward, compute_global_sponsor_reward,
     compute_operator_reward, compute_sponsor_reward, decimal_from_ratio_or_one,
-    handle_depositor_operator_updates, handle_depositor_ticket_updates,
+    handle_depositor_operator_updates, handle_depositor_ticket_updates, old_calculate_winner_prize,
     old_compute_depositor_reward, old_compute_reward,
 };
 use crate::querier::{query_balance, query_exchange_rate};
 use crate::state::{
     old_read_depositors, old_read_lottery_info, old_read_prize_infos, old_remove_depositor_info,
-    read_depositor_info, read_depositor_stats, read_depositors_info, read_depositors_stats,
-    read_operator_info, read_sponsor_info, store_depositor_info, store_operator_info,
-    store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State, CONFIG, OLDCONFIG, OLDPOOL,
-    OLDSTATE, POOL, STATE, TICKETS,
+    old_remove_lottery_info, read_depositor_info, read_depositor_stats, read_depositors_info,
+    read_depositors_stats, read_operator_info, read_sponsor_info, store_depositor_info,
+    store_operator_info, store_sponsor_info, Config, LotteryInfo, OperatorInfo, Pool, SponsorInfo,
+    State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, POOL, STATE, TICKETS,
 };
+
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
@@ -24,13 +25,15 @@ use cosmwasm_std::{
 };
 use cw0::{Duration, Expiration};
 use cw20::Cw20ExecuteMsg;
+use glow_protocol::prize_distributor::ExecuteMsg as PrizeDistributorExecuteMsg;
 
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
 use glow_protocol::lotto::{
     AmountRedeemableForPrizesResponse, BoostConfig, Claim, ConfigResponse, DepositorInfoResponse,
     DepositorStatsResponse, DepositorsInfoResponse, DepositorsStatsResponse, ExecuteMsg,
-    InstantiateMsg, MigrateMsg, OldLotteryInfoResponse, OperatorInfoResponse, PoolResponse,
-    QueryMsg, RewardEmissionsIndex, SponsorInfoResponse, StateResponse, TicketInfoResponse,
+    InstantiateMsg, MigrateMsg, OldLotteryInfo, OldLotteryInfoResponse, OperatorInfoResponse,
+    PoolResponse, QueryMsg, RewardEmissionsIndex, SponsorInfoResponse, StateResponse,
+    TicketInfoResponse,
 };
 use glow_protocol::lotto::{DepositorInfo, OldPrizeInfosResponse};
 use glow_protocol::querier::deduct_tax;
@@ -1490,33 +1493,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
     let mut old_state = OLDSTATE.load(deps.storage)?;
     let old_pool = OLDPOOL.load(deps.as_ref().storage)?;
 
-    let default_lotto_winner_boost_config: BoostConfig = BoostConfig {
-        base_multiplier: Decimal256::from_ratio(40u64, 100u64),
-        max_multiplier: Decimal256::one(),
-        total_voting_power_weight: Decimal256::percent(150),
-    };
-
-    let _lotto_winner_boost_config =
-        if let Some(msg_lotto_winner_boost_config) = msg.lotto_winner_boost_config {
-            if msg_lotto_winner_boost_config.base_multiplier
-                > msg_lotto_winner_boost_config.max_multiplier
-                || msg_lotto_winner_boost_config.total_voting_power_weight == Decimal256::zero()
-            {
-                return Err(ContractError::InvalidBoostConfig {});
-            }
-            msg_lotto_winner_boost_config
-        } else {
-            default_lotto_winner_boost_config
-        };
-
-    let _lottery_interval_seconds = if let Duration::Time(time) = old_config.lottery_interval {
-        time
-    } else {
-        return Err(ContractError::Std(StdError::generic_err(
-            "Invalid lottery interval",
-        )));
-    };
-
     let new_config = Config {
         owner: old_config.owner,
         a_terra_contract: old_config.a_terra_contract,
@@ -1553,15 +1529,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
     old_compute_reward(&mut old_state, &old_pool, env.block.height);
 
-    let _next_lottery_time =
-        if let Expiration::AtTime(next_lottery_time) = old_state.next_lottery_time {
-            next_lottery_time
-        } else {
-            return Err(ContractError::Std(StdError::generic_err(
-                "invalid lottery next time",
-            )));
-        };
-
     let state = State {
         total_tickets: old_state.total_tickets,
         operator_reward_emission_index: RewardEmissionsIndex {
@@ -1591,7 +1558,63 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
     POOL.save(deps.storage, &new_pool)?;
 
-    Ok(Response::default())
+    // Read all prizes
+    // TODO: Check if this needs to be paginated
+    let mut total_unclaimed_prizes = Uint128::zero();
+    let old_prizes = old_read_prize_infos(deps.as_ref(), None, None)?;
+    for old_prize in old_prizes.clone() {
+        let old_prize_info = old_prize.2;
+
+        let old_lottery_info = old_read_lottery_info(deps.storage, old_prize.1)?.unwrap();
+
+        if !old_prize_info.claimed {
+            total_unclaimed_prizes += old_calculate_winner_prize(
+                old_lottery_info.prize_buckets,
+                old_prize_info.matches,
+                old_lottery_info.number_winners,
+            );
+        }
+    }
+
+    let mut total_pending_prize_buckets = Uint256::zero();
+    for item in old_state.prize_buckets {
+        total_pending_prize_buckets += item;
+    }
+
+    // Migrate lottery info
+
+    // TODO Handle migration to prize distributor contract
+    // Don't need to include state.current_lottery
+    // because nothing has been saved with id state.current_lottery yet
+    let mut old_lottery_infos: Vec<OldLotteryInfo> = vec![];
+    for i in 0..old_state.current_lottery {
+        let old_lottery_info = old_read_lottery_info(deps.storage, i)?.unwrap();
+
+        old_lottery_infos.push(old_lottery_info);
+
+        old_remove_lottery_info(deps.storage, i);
+    }
+
+    // Send unclaimed prizes and pending prize buckets to prize_distributor contract
+    Ok(Response::default().add_messages(vec![
+        CosmosMsg::Bank(BankMsg::Send {
+            to_address: new_config.prize_distributor_contract.to_string(),
+            amount: vec![Coin {
+                denom: new_config.stable_denom,
+                amount: total_unclaimed_prizes + Uint128::from(total_pending_prize_buckets),
+            }],
+        }),
+        // Inject starting state into prize distributor contract
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: new_config.prize_distributor_contract.to_string(),
+            funds: vec![],
+            msg: to_binary(&PrizeDistributorExecuteMsg::InjectStartingState {
+                prizes: old_prizes,
+                lotteries: old_lottery_infos,
+                prize_buckets: old_state.prize_buckets,
+            })?,
+        }),
+    ]))
 }
 
 pub fn migrate_old_depositors(
@@ -1665,38 +1688,6 @@ pub fn migrate_old_depositors(
 
     let old_depositors = old_read_depositors(deps.as_ref(), None, Some(1))?;
     if old_depositors.is_empty() {
-        // Migrate lottery info
-
-        // TODO Handle migration to prize distributor contract
-        // // Don't need to include state.current_lottery
-        // // because nothing has been saved with id state.current_lottery yet
-        // for i in 0..state.current_lottery {
-        //     let old_lottery_info = old_read_lottery_info(deps.storage, i)?;
-
-        //     if let Some(old_lottery_info) = old_lottery_info {
-        //         let new_lottery_info = LotteryInfo {
-        //             rand_round: old_lottery_info.rand_round,
-        //             sequence: old_lottery_info.sequence,
-        //             awarded: old_lottery_info.awarded,
-        //             timestamp: Timestamp::from_seconds(0),
-        //             prize_buckets: old_lottery_info.prize_buckets,
-        //             number_winners: old_lottery_info.number_winners,
-        //             page: old_lottery_info.page,
-        //             glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
-        //             block_height: old_lottery_info.timestamp,
-        //             total_user_shares: pool.total_user_shares,
-        //         };
-
-        //         store_lottery_info(deps.storage, i, &new_lottery_info)?;
-
-        //         old_remove_lottery_info(deps.storage, i);
-        //     } else {
-        //         return Err(ContractError::Std(StdError::generic_err(
-        //             "Already migrated depositors and lotteries",
-        //         )));
-        //     }
-        // }
-
         // Set paused to false and save
         config.paused = false;
         CONFIG.save(deps.storage, &config)?;

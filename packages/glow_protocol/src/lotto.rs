@@ -348,3 +348,14 @@ pub struct AmountRedeemableForPrizesInfo {
     pub aust_to_redeem: Uint256,
     pub aust_to_redeem_value: Uint256,
 }
+
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct OldLotteryInfo {
+    pub rand_round: u64,
+    pub sequence: String,
+    pub awarded: bool,
+    pub timestamp: u64,
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
+    pub page: String,
+}

@@ -4,7 +4,8 @@ use std::ops::Add;
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, BlockInfo, Deps, DepsMut, Env, StdError, StdResult, Uint128};
 use glow_protocol::lotto::{
-    AmountRedeemableForPrizesInfo, DepositorInfo, RewardEmissionsIndex, TICKET_LENGTH,
+    AmountRedeemableForPrizesInfo, DepositorInfo, RewardEmissionsIndex, NUM_PRIZE_BUCKETS,
+    TICKET_LENGTH,
 };
 use sha3::{Digest, Keccak256};
 
@@ -474,4 +475,25 @@ pub fn assert_prize_distribution_not_pending(
     }
 
     Ok(())
+}
+
+pub fn old_calculate_winner_prize(
+    lottery_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    address_rank: [u32; NUM_PRIZE_BUCKETS],
+    lottery_winners: [u32; NUM_PRIZE_BUCKETS],
+) -> Uint128 {
+    let mut to_send: Uint128 = Uint128::zero();
+    for i in 0..NUM_PRIZE_BUCKETS {
+        if lottery_winners[i] == 0 {
+            continue;
+        }
+        let prize_available: Uint256 = lottery_prize_buckets[i];
+
+        let amount: Uint128 = prize_available
+            .multiply_ratio(address_rank[i], lottery_winners[i])
+            .into();
+
+        to_send += amount;
+    }
+    to_send
 }

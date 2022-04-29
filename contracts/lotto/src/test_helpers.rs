@@ -1,11 +1,7 @@
-
-
-use crate::state::{
-    OldDepositorInfo, OldLotteryInfo, OLD_PREFIX_DEPOSIT, OLD_PREFIX_LOTTERY,
-};
+use crate::state::{OldDepositorInfo, OLD_PREFIX_DEPOSIT, OLD_PREFIX_LOTTERY};
 
 use cosmwasm_storage::bucket;
-use glow_protocol::lotto::{NUM_PRIZE_BUCKETS};
+use glow_protocol::lotto::{OldLotteryInfo, NUM_PRIZE_BUCKETS};
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, StdResult, Storage};

@@ -2,7 +2,7 @@ use std::ops::Add;
 
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use glow_protocol::lotto::AmountRedeemableForPrizesInfo;
+use glow_protocol::lotto::{AmountRedeemableForPrizesInfo, OldLotteryInfo, NUM_PRIZE_BUCKETS};
 
 use crate::error::ContractError;
 use crate::helpers::calculate_winner_prize;
@@ -12,7 +12,10 @@ use crate::prize_strategy::{
 use crate::querier::{
     query_balance, query_exchange_rate, query_redeemable_funds_info, read_depositor_stats_at_height,
 };
-use crate::state::{read_lottery_info, read_lottery_prizes, Config, State, CONFIG, PRIZES, STATE};
+use crate::state::{
+    read_lottery_info, read_lottery_prizes, store_lottery_info, Config, State, CONFIG, PRIZES,
+    STATE,
+};
 use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
@@ -22,9 +25,7 @@ use cw0::{Duration, Expiration};
 
 use cw_storage_plus::U64Key;
 use glow_protocol::distributor::ExecuteMsg as FaucetExecuteMsg;
-use glow_protocol::prize_distributor::{
-    PrizeDistributionPendingResponse, PrizeInfo, NUM_PRIZE_BUCKETS,
-};
+use glow_protocol::prize_distributor::{LotteryInfo, PrizeDistributionPendingResponse, PrizeInfo};
 
 use glow_protocol::prize_distributor::{
     BoostConfig, ConfigResponse, ExecuteMsg, InstantiateMsg, LotteryBalanceResponse,
@@ -202,6 +203,11 @@ pub fn execute(
             ve_contract,
             savings_contract,
         ),
+        ExecuteMsg::InjectStartingState {
+            prizes,
+            lotteries,
+            prize_buckets,
+        } => execute_inject_starting_state(deps, env, prizes, lotteries, prize_buckets),
         ExecuteMsg::ClaimLottery { lottery_ids } => {
             execute_claim_lottery(deps, env, info, lottery_ids)
         }
@@ -242,6 +248,52 @@ pub fn execute(
         ),
     }
 }
+
+fn execute_inject_starting_state(
+    deps: DepsMut,
+    env: Env,
+    prizes: Vec<(Addr, u64, PrizeInfo)>,
+    lotteries: Vec<OldLotteryInfo>,
+    prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+) -> Result<Response, ContractError> {
+    let mut state = STATE.load(deps.storage)?;
+
+    // Save prize buckets
+    state.prize_buckets = prize_buckets;
+    STATE.save(deps.storage, &state)?;
+
+    // Save prizes
+    for (depositor, lottery_id, prize_info) in prizes {
+        PRIZES.save(
+            deps.storage,
+            (U64Key::from(lottery_id), &depositor),
+            &prize_info,
+        )?;
+    }
+
+    // Save lotteries
+    for (lottery_id, old_lottery_info) in lotteries.into_iter().enumerate() {
+        let new_lottery_info = LotteryInfo {
+            rand_round: old_lottery_info.rand_round,
+            sequence: old_lottery_info.sequence,
+            awarded: old_lottery_info.awarded,
+            timestamp: env.block.time,
+            prize_buckets: old_lottery_info.prize_buckets,
+            number_winners: old_lottery_info.number_winners,
+            page: old_lottery_info.page,
+            glow_prize_buckets: [Uint256::zero(); NUM_PRIZE_BUCKETS],
+            block_height: old_lottery_info.timestamp,
+            // TODO Revisit
+            total_user_shares: Uint256::one(),
+        };
+
+        store_lottery_info(deps.storage, lottery_id as u64, &new_lottery_info)?;
+    }
+
+    Ok(Response::default())
+}
+
+// pub fn execute_inject_starting_state(deps: DepsMut, env: Env, prizes: Vec<(), lotteries, prize_buckets),
 
 pub fn execute_register_contracts(
     deps: DepsMut,

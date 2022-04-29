@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Addr, BlockInfo, Coin, ContractInfo,
-    ContractResult, Decimal, Env, MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest,
-    SystemError, SystemResult, Timestamp, Uint128, WasmQuery,
+    from_binary, from_slice, to_binary, Addr, BlockInfo, Coin, ContractInfo, ContractResult,
+    Decimal, Env, MessageInfo, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
+    SystemResult, Timestamp, Uint128, WasmQuery,
 };
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
@@ -167,13 +167,13 @@ impl ExchangeRateQuerier {
 }
 
 #[derive(Clone, Default)]
-#[allow(dead_code)] // TODO: use this fn in tests
+#[allow(dead_code)]
 pub struct EmissionRateQuerier {
     emission_rate: Decimal256,
 }
 
 impl EmissionRateQuerier {
-    #[allow(dead_code)] // TODO: use this fn in tests
+    #[allow(dead_code)]
     pub fn new(emission_rate: Decimal256) -> Self {
         EmissionRateQuerier { emission_rate }
     }

@@ -1,7 +1,10 @@
 use std::convert::TryInto;
 use std::str::from_utf8;
 
-use glow_protocol::prize_distributor::PrizeInfo;
+use glow_protocol::{
+    lotto::NUM_PRIZE_BUCKETS,
+    prize_distributor::{LotteryInfo, PrizeInfo},
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -11,8 +14,6 @@ use cosmwasm_std::{Addr, Deps, Order, StdError, StdResult, Storage, Timestamp};
 use cw0::{Duration, Expiration};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
 use glow_protocol::prize_distributor::BoostConfig;
-
-use glow_protocol::prize_distributor::NUM_PRIZE_BUCKETS;
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const STATE: Item<State> = Item::new("state");
@@ -62,20 +63,6 @@ pub struct State {
     pub next_lottery_exec_time: Expiration,
     pub next_epoch: Expiration,
     pub last_lottery_execution_aust_exchange_rate: Decimal256,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct LotteryInfo {
-    pub rand_round: u64,
-    pub sequence: String,
-    pub awarded: bool,
-    pub timestamp: Timestamp,
-    pub block_height: u64,
-    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
-    pub page: String,
-    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub total_user_shares: Uint256,
 }
 
 pub fn store_lottery_info(

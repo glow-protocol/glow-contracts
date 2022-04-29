@@ -5,8 +5,7 @@ use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{Addr, Timestamp, Uint128};
 use cw0::{Duration, Expiration};
 
-pub const TICKET_LENGTH: usize = 6;
-pub const NUM_PRIZE_BUCKETS: usize = TICKET_LENGTH + 1;
+use crate::lotto::{OldLotteryInfo, NUM_PRIZE_BUCKETS};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct BoostConfig {
@@ -48,6 +47,11 @@ pub enum ExecuteMsg {
         ve_contract: String,
         /// Savings contract for redeeming prize funds
         savings_contract: String,
+    },
+    InjectStartingState {
+        prizes: Vec<(Addr, u64, PrizeInfo)>,
+        lotteries: Vec<OldLotteryInfo>,
+        prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     },
     /// Update contract configuration - restricted to owner
     UpdateConfig {
@@ -187,4 +191,18 @@ pub struct PrizeInfo {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PrizeDistributionPendingResponse {
     pub prize_distribution_pending: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct LotteryInfo {
+    pub rand_round: u64,
+    pub sequence: String,
+    pub awarded: bool,
+    pub timestamp: Timestamp,
+    pub block_height: u64,
+    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
+    pub page: String,
+    pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
+    pub total_user_shares: Uint256,
 }

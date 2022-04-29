@@ -12,7 +12,7 @@ use cw0::{Duration, Expiration};
 use cw_storage_plus::{Bound, Item, Map, PrimaryKey, SnapshotMap, U64Key};
 use glow_protocol::lotto::{
     Claim, DepositorData, DepositorInfo, DepositorInfoResponse, DepositorStatsInfo,
-    DepositorStatsResponse, RewardEmissionsIndex,
+    DepositorStatsResponse, OldLotteryInfo, RewardEmissionsIndex,
 };
 
 use glow_protocol::lotto::NUM_PRIZE_BUCKETS;
@@ -223,17 +223,6 @@ pub struct LotteryInfo {
     pub page: String,
     pub glow_prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
     pub total_user_shares: Uint256,
-}
-
-#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct OldLotteryInfo {
-    pub rand_round: u64,
-    pub sequence: String,
-    pub awarded: bool,
-    pub timestamp: u64,
-    pub prize_buckets: [Uint256; NUM_PRIZE_BUCKETS],
-    pub number_winners: [u32; NUM_PRIZE_BUCKETS],
-    pub page: String,
 }
 
 pub fn old_read_lottery_info(

@@ -469,7 +469,6 @@ pub fn assert_prize_distribution_not_pending(
 ) -> StdResult<()> {
     if query_prize_distribution_pending(deps, prize_distributor_contract)?
         .prize_distribution_pending
-        == true
     {
         return Err(StdError::generic_err("Prize distribution pending"));
     }

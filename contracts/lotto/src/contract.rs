@@ -14,8 +14,8 @@ use crate::state::{
     old_read_depositors, old_read_lottery_info, old_read_prize_infos, old_remove_depositor_info,
     old_remove_lottery_info, read_depositor_info, read_depositor_stats, read_depositors_info,
     read_depositors_stats, read_operator_info, read_sponsor_info, store_depositor_info,
-    store_operator_info, store_sponsor_info, Config, LotteryInfo, OperatorInfo, Pool, SponsorInfo,
-    State, CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, POOL, STATE, TICKETS,
+    store_operator_info, store_sponsor_info, Config, OperatorInfo, Pool, SponsorInfo, State,
+    CONFIG, OLDCONFIG, OLDPOOL, OLDSTATE, POOL, STATE, TICKETS,
 };
 
 use cosmwasm_bignumber::{Decimal256, Uint256};
@@ -23,7 +23,7 @@ use cosmwasm_std::{
     attr, coin, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
     Response, StdError, StdResult, Uint128, WasmMsg,
 };
-use cw0::{Duration, Expiration};
+use cw0::Duration;
 use cw20::Cw20ExecuteMsg;
 use glow_protocol::prize_distributor::ExecuteMsg as PrizeDistributorExecuteMsg;
 

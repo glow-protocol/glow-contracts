@@ -1,11 +1,10 @@
-use cosmwasm_bignumber::{Decimal256, Uint256};
+use cosmwasm_bignumber::{Uint256};
 use cosmwasm_std::{
-    to_binary, Addr, BalanceResponse as BankBalanceResponse, BankQuery, Deps, QuerierWrapper,
+    to_binary, Addr, BalanceResponse as BankBalanceResponse, BankQuery, Deps,
     QueryRequest, StdResult, WasmQuery,
 };
 use glow_protocol::prize_distributor::QueryMsg as PrizeDistributorQueryMsg;
 use glow_protocol::{
-    distributor::{GlowEmissionRateResponse, QueryMsg as DistributorQueryMsg},
     prize_distributor::PrizeDistributionPendingResponse,
 };
 use moneymarket::market::{EpochStateResponse, QueryMsg as AnchorMsg};
